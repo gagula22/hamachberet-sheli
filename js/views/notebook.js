@@ -17,7 +17,13 @@
   function getChildren(parentId) {
     return getTopics()
       .filter(t => (t.parentId || null) === (parentId || null))
-      .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+      .sort((a, b) => {
+        // After drag & drop, order is a small integer (0,1,2…); before that it's a timestamp.
+        // Both are numeric — smaller = higher up in the list.
+        const aO = a.order !== undefined ? a.order : (a.createdAt || 0);
+        const bO = b.order !== undefined ? b.order : (b.createdAt || 0);
+        return aO - bO;
+      });
   }
   function hasChildren(id) { return getChildren(id).length > 0; }
   function getDescendantIds(id) {
@@ -79,7 +85,8 @@
       body: '',
       parentId: parentId || null,
       createdAt: Date.now(),
-      updatedAt: Date.now()
+      updatedAt: Date.now(),
+      order: Date.now()
     };
     list.push(t);
     Store.set('topics', list);
@@ -306,6 +313,9 @@
       const targetIdx = filtered.findIndex(x => x.id === t.id);
       if (targetIdx === -1) return;
       filtered.splice(insertBefore ? targetIdx : targetIdx + 1, 0, draggedTopic);
+
+      // Reassign order by array position so sort stays stable after Firebase sync
+      filtered.forEach((topic, i) => { topic.order = i; });
 
       Store.set('topics', filtered);
       if (draggedTopic.parentId) expanded.add(draggedTopic.parentId);
