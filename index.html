@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>המחברת שלי</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700&family=Frank+Ruhl+Libre:wght@400;500;600;700&family=Assistant:wght@400;500;600;700&family=Rubik:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/tokens.css" />
+  <link rel="stylesheet" href="css/layout.css" />
+  <link rel="stylesheet" href="css/components.css" />
+  <!-- Firebase SDK (loaded only when connected; harmless if offline) -->
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23FADADD'/%3E%3Ctext x='50%25' y='58%25' text-anchor='middle' font-size='34' font-family='serif' fill='%233B3A3A'%3E%D7%9E%3C/text%3E%3C/svg%3E" />
+</head>
+<body>
+  <button id="menuToggle" class="menu-toggle" aria-label="תפריט">☰</button>
+
+  <aside id="sidebar" class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">מ</div>
+      <div>
+        <div class="brand-title">המחברת שלי</div>
+        <div class="brand-sub">הכול במקום אחד</div>
+      </div>
+    </div>
+    <nav id="nav" class="nav"></nav>
+    <div class="sidebar-footer">
+      <div class="quote" id="dailyQuote"></div>
+    </div>
+    <div id="sidebarUserBar" style="display:none;align-items:center;gap:10px;padding:10px 12px;background:rgba(255,255,255,.55);border-radius:12px;margin-top:8px"></div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div>
+        <div class="crumbs" id="crumbs">לוח בקרה</div>
+        <h1 class="page-title" id="pageTitle">ברוך הבא</h1>
+      </div>
+      <div class="topbar-right">
+        <input id="globalSearch" class="search" placeholder="חיפוש בהערות, משימות…" />
+        <div class="date-chip" id="todayChip"></div>
+      </div>
+    </header>
+    <section id="view" class="view"></section>
+  </main>
+
+  <script src="js/firebase-config.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/firebase-sync.js"></script>
+  <script src="js/components/sidebar.js"></script>
+  <script src="js/components/editable.js"></script>
+  <script src="js/views/dashboard.js"></script>
+  <script src="js/views/notebook.js"></script>
+  <script src="js/views/daily.js"></script>
+  <script src="js/views/weekly.js"></script>
+  <script src="js/views/monthly.js"></script>
+  <script src="js/views/calendar.js"></script>
+  <script src="js/views/notes.js"></script>
+  <script src="js/views/todos.js"></script>
+  <script src="js/views/habits.js"></script>
+  <script src="js/views/mood.js"></script>
+  <script src="js/views/water.js"></script>
+  <script src="js/views/budget.js"></script>
+  <script src="js/views/goals.js"></script>
+  <script src="js/views/stickers.js"></script>
+  <script>
+    (async function () {
+      if (window.FirebaseSync) {
+        try { await FirebaseSync.setup(); } catch (e) { console.warn('Firebase setup error:', e); }
+      }
+      App.start();
+    })();
+  </script>
+</body>
+</html>

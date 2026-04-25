@@ -1,0 +1,60 @@
+:root {
+  --blush: #FADADD;
+  --blush-deep: #F3B7BD;
+  --sage: #CDE7C1;
+  --sage-deep: #A8D39A;
+  --sky: #CFE4F7;
+  --sky-deep: #A9CEEE;
+  --butter: #FFF3C4;
+  --butter-deep: #F5DF8C;
+  --lavender: #E6DDF4;
+  --lavender-deep: #C9B8E3;
+  --peach: #FFDAB9;
+  --mint: #C7F0E1;
+
+  --cream: #FAF6F0;
+  --paper: #FFFFFF;
+  --line: #EEE6DC;
+  --ink: #3B3A3A;
+  --ink-soft: #6B6968;
+  --ink-mute: #9A9794;
+
+  --shadow-sm: 0 1px 3px rgba(60,50,40,.06);
+  --shadow: 0 4px 18px rgba(60,50,40,.08);
+  --shadow-lg: 0 12px 40px rgba(60,50,40,.12);
+
+  --r-sm: 10px;
+  --r-md: 16px;
+  --r-lg: 24px;
+
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-8: 48px;
+
+  --font-body: 'Heebo', system-ui, -apple-system, 'Segoe UI', 'Arial Hebrew', sans-serif;
+  --font-head: 'Frank Ruhl Libre', 'David', Georgia, serif;
+
+  --sidebar-w: 260px;
+  --topbar-h: 88px;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: var(--font-body);
+  background: var(--cream);
+  color: var(--ink);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+h1,h2,h3,h4 { font-family: var(--font-head); font-weight: 600; color: var(--ink); margin: 0; letter-spacing: 0; }
+button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+input, textarea, select { font-family: inherit; color: inherit; }
+a { color: inherit; text-decoration: none; }
+
+/* Numbers and Latin should stay LTR inside RTL context */
+.ltr, time, .num { direction: ltr; unicode-bidi: isolate; }

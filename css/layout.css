@@ -1,0 +1,148 @@
+body {
+  display: grid;
+  grid-template-columns: var(--sidebar-w) 1fr;
+  min-height: 100vh;
+}
+
+/* In RTL, the sidebar visually appears on the right, which is what we want */
+html[dir="rtl"] body { grid-template-columns: 1fr var(--sidebar-w); }
+html[dir="rtl"] .sidebar { order: 2; border-right: none; border-left: 1px solid var(--line); }
+html[dir="rtl"] .main { order: 1; }
+
+.sidebar {
+  background: linear-gradient(180deg, #FFF7F3 0%, #F6EDFF 100%);
+  border-right: 1px solid var(--line);
+  padding: var(--sp-5) var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-2) var(--sp-4);
+}
+.brand-mark {
+  width: 42px; height: 42px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--blush), var(--lavender));
+  display: grid; place-items: center;
+  font-family: var(--font-head); font-weight: 700; font-size: 22px;
+  color: #fff;
+  box-shadow: var(--shadow-sm);
+}
+.brand-title { font-family: var(--font-head); font-size: 18px; font-weight: 600; }
+.brand-sub { font-size: 11px; color: var(--ink-soft); letter-spacing: 0.04em; }
+
+.nav { display: flex; flex-direction: column; gap: 2px; }
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  font-size: 14px;
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: all 180ms ease-out;
+  text-align: start;
+  width: 100%;
+}
+.nav-item:hover { background: rgba(255,255,255,.6); color: var(--ink); }
+.nav-item.active { background: #fff; color: var(--ink); box-shadow: var(--shadow-sm); font-weight: 500; }
+.nav-item .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+.sidebar-footer {
+  margin-top: auto;
+  padding: var(--sp-4);
+  background: rgba(255,255,255,.5);
+  border-radius: var(--r-md);
+  font-family: var(--font-head);
+  font-style: italic;
+  font-size: 14px;
+  color: var(--ink-soft);
+  line-height: 1.6;
+}
+
+.main { display: flex; flex-direction: column; min-width: 0; }
+
+.topbar {
+  min-height: var(--topbar-h);
+  padding: var(--sp-5) var(--sp-6);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: var(--sp-4);
+  border-bottom: 1px solid var(--line);
+  background: var(--cream);
+  position: sticky; top: 0; z-index: 10;
+}
+.crumbs { font-size: 12px; color: var(--ink-mute); letter-spacing: 0.04em; }
+.page-title { font-size: 32px; margin-top: 4px; }
+
+.topbar-right { display: flex; align-items: center; gap: var(--sp-3); }
+.search {
+  padding: 10px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: #fff;
+  font-size: 13px;
+  width: 240px;
+  outline: none;
+  transition: border-color 180ms;
+  text-align: start;
+}
+.search:focus { border-color: var(--lavender-deep); }
+.date-chip {
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: var(--blush);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.view {
+  padding: var(--sp-6);
+  flex: 1;
+  animation: viewIn 260ms ease-out;
+}
+@keyframes viewIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+.menu-toggle {
+  display: none;
+  position: fixed; top: 14px;
+  inset-inline-start: 14px;
+  width: 40px; height: 40px;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: var(--shadow);
+  font-size: 18px;
+  z-index: 30;
+}
+
+@media (max-width: 900px) {
+  body, html[dir="rtl"] body { grid-template-columns: 1fr; }
+  .sidebar {
+    position: fixed; top: 0; bottom: 0; inset-inline-start: 0;
+    width: 280px;
+    transform: translateX(100%);
+    transition: transform 240ms ease-out;
+    z-index: 20;
+  }
+  html[dir="ltr"] .sidebar { transform: translateX(-100%); }
+  body.nav-open .sidebar { transform: none; }
+  .menu-toggle { display: grid; place-items: center; }
+  .topbar { padding-inline-start: 64px; }
+  .search { width: 160px; }
+  .view { padding: var(--sp-4); }
+}
