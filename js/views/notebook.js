@@ -387,6 +387,11 @@
 
     function exec(cmd, val) {
       editor.focus();
+      if (savedRange) {
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(savedRange);
+      }
       document.execCommand(cmd, false, val);
       save();
     }
@@ -395,13 +400,35 @@
       return App.el('button', { class: 'nb-tool', title, onClick, ...extra }, label);
     }
 
+    // Save selection before toolbar steals focus
+    let savedRange = null;
+    editor.addEventListener('mouseup', () => {
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount > 0 && !sel.getRangeAt(0).collapsed)
+        savedRange = sel.getRangeAt(0).cloneRange();
+    });
+    editor.addEventListener('keyup', () => {
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount > 0 && !sel.getRangeAt(0).collapsed)
+        savedRange = sel.getRangeAt(0).cloneRange();
+    });
+
     function applyToSelection(styleFn) {
       editor.focus();
       const sel = window.getSelection();
-      if (!sel || !sel.rangeCount) return;
-      const range = sel.getRangeAt(0);
-      if (range.collapsed) return;
-      if (!editor.contains(range.commonAncestorContainer)) return;
+      // Try live selection first, fall back to saved range
+      let range = null;
+      if (sel && sel.rangeCount > 0 && !sel.getRangeAt(0).collapsed &&
+          editor.contains(sel.getRangeAt(0).commonAncestorContainer)) {
+        range = sel.getRangeAt(0);
+      } else if (savedRange && !savedRange.collapsed &&
+                 editor.contains(savedRange.commonAncestorContainer)) {
+        sel.removeAllRanges();
+        sel.addRange(savedRange);
+        range = savedRange;
+      }
+      if (!range) return;
+
       const span = document.createElement('span');
       styleFn(span.style);
       try {
@@ -412,6 +439,7 @@
         const r = document.createRange();
         r.selectNodeContents(span);
         sel.addRange(r);
+        savedRange = r.cloneRange();
         save();
       } catch (e) { console.warn(e); }
     }

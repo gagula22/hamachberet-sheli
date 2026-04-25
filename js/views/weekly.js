@@ -1,10 +1,11 @@
 (function () {
   const DAY_NAMES = ['ראשון','שני','שלישי','רביעי','חמישי','שישי','שבת'];
+  let weekOffset = 0;
 
   function weekDates() {
     const d = new Date();
     const sun = new Date(d);
-    sun.setDate(d.getDate() - d.getDay());
+    sun.setDate(d.getDate() - d.getDay() + weekOffset * 7);
     return Array.from({length: 7}, (_, i) => {
       const x = new Date(sun);
       x.setDate(sun.getDate() + i);
@@ -16,6 +17,19 @@
     const dates = weekDates();
     const todayKey = Store.todayKey();
     const tasks = Store.get('tasks') || [];
+    const isCurrentWeek = weekOffset === 0;
+
+    const startLabel = dates[0].toLocaleDateString('he-IL', { day: 'numeric', month: 'long' });
+    const endLabel   = dates[6].toLocaleDateString('he-IL', { day: 'numeric', month: 'long', year: 'numeric' });
+
+    const navBar = App.el('div', { class: 'row row-between', style: { marginBottom: '8px' } }, [
+      App.el('button', { class: 'btn btn-sm', onClick: () => { weekOffset--; rerender(); } }, '→ שבוע קודם'),
+      App.el('div', { class: 'row', style: { gap: '8px' } }, [
+        App.el('span', { class: 'chip' + (isCurrentWeek ? ' sage' : ' lavender') }, `${endLabel} – ${startLabel}`),
+        !isCurrentWeek ? App.el('button', { class: 'btn btn-sm', onClick: () => { weekOffset = 0; rerender(); } }, 'השבוע') : null
+      ]),
+      App.el('button', { class: 'btn btn-sm', onClick: () => { weekOffset++; rerender(); } }, 'שבוע הבא ←')
+    ]);
 
     const columns = dates.map(d => {
       const key = Store.dateKey(d);
@@ -35,7 +49,7 @@
             const list = Store.get('tasks') || [];
             list.push({ id: Store.uid(), text, date: key, done: false });
             Store.set('tasks', list);
-            App.render();
+            rerender();
           }
         }, '+ משימה')
       ]);
@@ -48,7 +62,7 @@
         const id = e.dataTransfer.getData('text/plain');
         const list = (Store.get('tasks') || []).map(t => t.id === id ? { ...t, date: key } : t);
         Store.set('tasks', list);
-        App.render();
+        rerender();
       });
 
       return col;
@@ -56,6 +70,7 @@
 
     root.append(
       App.el('div', { class: 'stack stack-lg' }, [
+        navBar,
         App.el('div', { class: 'card' }, [
           App.el('div', { class: 'row row-between' }, [
             App.el('h2', {}, 'השבוע שלי'),
@@ -70,8 +85,7 @@
   function taskPill(t) {
     const textSpan = App.el('span', { style: { flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' } }, t.text);
     const delBtn = App.el('span', {
-      class: 'pill-del',
-      title: 'מחיקה',
+      class: 'pill-del', title: 'מחיקה',
       onClick: (e) => {
         e.stopPropagation();
         Store.set('tasks', (Store.get('tasks') || []).filter(x => x.id !== t.id));
@@ -101,19 +115,16 @@
       }
     }, [textSpan, delBtn]);
 
-    if (t.done) {
-      textSpan.style.textDecoration = 'line-through';
-      el.style.opacity = '.6';
-    }
-    el.addEventListener('dragstart', (e) => {
-      e.dataTransfer.setData('text/plain', t.id);
-      el.classList.add('dragging');
-    });
+    if (t.done) { textSpan.style.textDecoration = 'line-through'; el.style.opacity = '.6'; }
+    el.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/plain', t.id); el.classList.add('dragging'); });
     el.addEventListener('dragend', () => el.classList.remove('dragging'));
     return el;
   }
 
-  function rerender() { App.render(); }
+  function rerender() {
+    const root = document.querySelector('.cal-sub');
+    if (root) { root.innerHTML = ''; render(root); }
+  }
 
   App.register('weekly', render);
 })();

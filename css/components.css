@@ -244,6 +244,7 @@
 .cal-cell:hover { background: var(--cream); }
 .cal-cell.today { background: var(--blush); border-color: var(--blush-deep); }
 .cal-cell.empty { background: transparent; border: none; cursor: default; }
+.cal-cell .day-name-mini { font-size: 9px; color: var(--ink-mute); letter-spacing: 0.03em; line-height: 1; }
 .cal-cell .day-num { font-family: var(--font-head); font-size: 15px; }
 .cal-cell .dots { display: flex; gap: 2px; margin-top: auto; flex-wrap: wrap; }
 .cal-cell .dot-m { width: 5px; height: 5px; border-radius: 50%; background: var(--lavender-deep); }
