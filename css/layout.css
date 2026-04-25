@@ -4,9 +4,6 @@ body {
   min-height: 100vh;
 }
 
-.sidebar { grid-column: 2; }
-.main    { grid-column: 1; }
-
 .sidebar {
   background: linear-gradient(180deg, #FFF7F3 0%, #F6EDFF 100%);
   border-left: 1px solid var(--line);

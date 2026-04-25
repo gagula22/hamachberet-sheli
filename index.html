@@ -19,6 +19,20 @@
 <body>
   <button id="menuToggle" class="menu-toggle" aria-label="תפריט">☰</button>
 
+  <main class="main">
+    <header class="topbar">
+      <div>
+        <div class="crumbs" id="crumbs">לוח בקרה</div>
+        <h1 class="page-title" id="pageTitle">ברוך הבא</h1>
+      </div>
+      <div class="topbar-right">
+        <input id="globalSearch" class="search" placeholder="חיפוש בהערות, משימות…" />
+        <div class="date-chip" id="todayChip"></div>
+      </div>
+    </header>
+    <section id="view" class="view"></section>
+  </main>
+
   <aside id="sidebar" class="sidebar">
     <div class="brand">
       <div class="brand-mark">מ</div>
@@ -33,20 +47,6 @@
     </div>
     <div id="sidebarUserBar" style="display:none;align-items:center;gap:10px;padding:10px 12px;background:rgba(255,255,255,.55);border-radius:12px;margin-top:8px"></div>
   </aside>
-
-  <main class="main">
-    <header class="topbar">
-      <div>
-        <div class="crumbs" id="crumbs">לוח בקרה</div>
-        <h1 class="page-title" id="pageTitle">ברוך הבא</h1>
-      </div>
-      <div class="topbar-right">
-        <input id="globalSearch" class="search" placeholder="חיפוש בהערות, משימות…" />
-        <div class="date-chip" id="todayChip"></div>
-      </div>
-    </header>
-    <section id="view" class="view"></section>
-  </main>
 
   <script src="js/firebase-config.js?v=2"></script>
   <script src="js/store.js?v=2"></script>
