@@ -508,7 +508,7 @@
 
     const startPage = ctx.offset + 1;
     const meta = App.el('div', { class: 'row row-between', style: { marginTop: '8px', flexWrap: 'wrap' } }, [
-      App.el('span', { class: 'chip lavender' }, 'עודכן: ' + new Date(topic.updatedAt || Date.now()).toLocaleDateString('he-IL')),
+      App.el('span', { class: 'chip lavender' }, 'עודכן: ' + new Date(topic.updatedAt || Date.now()).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })),
       App.el('span', { class: 'chip sky' }, ctx.rootName ? `מתחיל בעמוד ${startPage} · "${ctx.rootName}"` : `עמוד ${startPage}`),
       App.el('span', { class: 'chip' }, 'אוטו-שמירה בכל הקלדה')
     ]);
