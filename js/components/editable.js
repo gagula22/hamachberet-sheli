@@ -35,13 +35,13 @@
     const reader = new FileReader();
     reader.onload = async () => {
       const compressed = await compressImage(String(reader.result));
-      insertImage(compressed, editor);
+      insertImage(compressed, editor, save);
       save && save();
     };
     reader.readAsDataURL(file);
   }
 
-  function insertImage(dataUrl, editor) {
+  function insertImage(dataUrl, editor, save) {
     editor.focus();
     const fig = document.createElement('figure');
     fig.className = 'nb-img';
@@ -50,6 +50,18 @@
     img.src = dataUrl;
     img.alt = '';
     fig.appendChild(img);
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'nb-img-del';
+    delBtn.title = 'מחק תמונה';
+    delBtn.textContent = '✕';
+    delBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      fig.remove();
+      save && save();
+    });
+    fig.appendChild(delBtn);
 
     const sel = window.getSelection();
     if (sel && sel.rangeCount && editor.contains(sel.anchorNode)) {
@@ -83,7 +95,7 @@
             const reader = new FileReader();
             reader.onload = async () => {
               const compressed = await compressImage(String(reader.result));
-              insertImage(compressed, editor);
+              insertImage(compressed, editor, save);
               save && save();
             };
             reader.readAsDataURL(file);
@@ -93,9 +105,19 @@
       if (handled) e.preventDefault();
     });
 
-    // Click on figure cycles alignment: none → start → end → center → none
-    const ALIGN = ['', 'align-start', 'align-end', 'align-center'];
+    // Delete button — event delegation (handles both new and loaded-from-storage figures)
     editor.addEventListener('click', (e) => {
+      const delBtn = e.target.closest('.nb-img-del');
+      if (delBtn && editor.contains(delBtn)) {
+        e.preventDefault();
+        e.stopPropagation();
+        const fig = delBtn.closest('figure.nb-img');
+        if (fig) { fig.remove(); save && save(); }
+        return;
+      }
+
+      // Click on figure cycles alignment: none → start → end → center → none
+      const ALIGN = ['', 'align-start', 'align-end', 'align-center'];
       const fig = e.target.closest && e.target.closest('figure.nb-img');
       if (!fig || !editor.contains(fig)) return;
       e.preventDefault();

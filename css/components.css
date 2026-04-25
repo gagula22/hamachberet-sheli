@@ -504,6 +504,27 @@ figure.nb-img {
   clear: none;
 }
 figure.nb-img:hover { border-color: var(--lavender-deep); }
+figure.nb-img:hover .nb-img-del { opacity: 1; pointer-events: auto; }
+.nb-img-del {
+  position: absolute;
+  top: 6px;
+  inset-inline-end: 6px;
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  background: rgba(0,0,0,.55);
+  color: #fff;
+  border: none;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 150ms, background 150ms;
+  z-index: 5;
+}
+.nb-img-del:hover { background: rgba(200,30,30,.85); }
 figure.nb-img img {
   display: block;
   width: 100%;
