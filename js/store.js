@@ -91,6 +91,40 @@
       state = structuredClone(DEFAULTS);
       saveNow();
       emit();
+    },
+
+    exportJSON() {
+      const json = JSON.stringify(state, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `notebook-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    },
+
+    importJSON(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          try {
+            const parsed = JSON.parse(reader.result);
+            state = Object.assign(structuredClone(DEFAULTS), parsed);
+            saveNow();
+            emit();
+            // Push every key to Firebase if connected
+            if (window.FirebaseSync && FirebaseSync.enabled) {
+              Object.keys(state).forEach(k => FirebaseSync.push(k, state[k]));
+            }
+            resolve();
+          } catch (e) {
+            reject(e);
+          }
+        };
+        reader.onerror = reject;
+        reader.readAsText(file);
+      });
     }
   };
 
