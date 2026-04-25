@@ -15,7 +15,9 @@
   function getTopics() { return Store.get('topics') || []; }
   function getById(id) { return getTopics().find(t => t.id === id); }
   function getChildren(parentId) {
-    return getTopics().filter(t => (t.parentId || null) === (parentId || null));
+    return getTopics()
+      .filter(t => (t.parentId || null) === (parentId || null))
+      .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
   }
   function hasChildren(id) { return getChildren(id).length > 0; }
   function getDescendantIds(id) {
@@ -76,6 +78,7 @@
       icon: TOPIC_ICONS[list.length % TOPIC_ICONS.length],
       body: '',
       parentId: parentId || null,
+      createdAt: Date.now(),
       updatedAt: Date.now()
     };
     list.push(t);
