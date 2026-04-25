@@ -286,6 +286,15 @@
 }
 .note-body p, .note-body div { margin: 0; padding: 0; line-height: 28px; }
 .note-body h1, .note-body h2, .note-body h3 { line-height: 28px; margin: 0; }
+.note-body figure.nb-img {
+  display: block;
+  margin: 4px 0;
+  vertical-align: unset;
+  float: none !important;
+  clear: both;
+  line-height: 0;
+}
+.note-body figure.nb-img + * { line-height: 28px; }
 @media (max-width: 800px) { .notes-layout { grid-template-columns: 1fr; } }
 
 /* --- Notebook (topics + rich editor) --- */
