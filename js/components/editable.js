@@ -62,6 +62,7 @@
       save && save();
     });
     fig.appendChild(delBtn);
+    snapFigToGrid(fig);
 
     const sel = window.getSelection();
     if (sel && sel.rangeCount && editor.contains(sel.anchorNode)) {
@@ -81,6 +82,25 @@
     }
   }
 
+  function snapFigToGrid(fig) {
+    // Snap figure height to 28px ruled-paper grid (only inside .note-body)
+    if (!fig.closest('.note-body')) return;
+    const LINE = 28;
+    const snap = () => {
+      fig.style.paddingBottom = '0';
+      const h = fig.offsetHeight;
+      if (!h) return;
+      const rem = h % LINE;
+      fig.style.paddingBottom = rem ? (LINE - rem) + 'px' : '0';
+    };
+    const img = fig.querySelector('img');
+    if (img) {
+      if (img.complete && img.naturalHeight > 0) snap();
+      else img.addEventListener('load', snap);
+    }
+    if (window.ResizeObserver) new ResizeObserver(snap).observe(fig);
+  }
+
   function addDeleteButtonToFig(fig, save) {
     if (fig.querySelector('.nb-img-del')) return; // already has one
     const delBtn = document.createElement('button');
@@ -94,6 +114,7 @@
       save && save();
     });
     fig.appendChild(delBtn);
+    snapFigToGrid(fig);
   }
 
   function attachImageBehaviors(editor, save) {

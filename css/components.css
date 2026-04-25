@@ -288,7 +288,8 @@
 .note-body h1, .note-body h2, .note-body h3 { line-height: 28px; margin: 0; }
 .note-body figure.nb-img {
   display: block;
-  margin: 4px 0;
+  margin: 0;
+  padding: 4px 0 0;
   vertical-align: unset;
   float: none !important;
   clear: both;
