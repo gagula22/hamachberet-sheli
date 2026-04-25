@@ -53,10 +53,17 @@
   const Store = {
     get(key) { return key ? state[key] : state; },
 
-    // Internal: update localStorage only, no cloud push (used by FirebaseSync.pullFromCloud)
+    // Internal: update localStorage only, no cloud push (used on first load)
     _local(key, value) {
       state[key] = value;
       scheduleSave();
+    },
+
+    // Internal: update from cloud — saves + triggers UI refresh, no push back
+    _fromCloud(key, value) {
+      state[key] = value;
+      scheduleSave();
+      emit();
     },
 
     set(key, value) {

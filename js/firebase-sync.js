@@ -15,7 +15,7 @@
 
   function isConfigured() {
     if (!window.FIREBASE_CONFIG || !window.FIREBASE_CONFIG.apiKey) return false;
-    if (location.protocol === 'file:') return false; // Firebase needs http/https
+    if (location.protocol === 'file:') return false;
     return true;
   }
 
@@ -25,7 +25,6 @@
       if (!firebase.apps.length) firebase.initializeApp(window.FIREBASE_CONFIG);
       db   = firebase.firestore();
       auth = firebase.auth();
-      // Enable offline persistence so the app works if connection drops
       db.enablePersistence({ synchronizeTabs: true }).catch(() => {});
       return true;
     } catch (e) {
@@ -89,7 +88,6 @@
       }
     });
 
-    // onAuthStateChanged will call resolve once login succeeds
     const unsub = auth.onAuthStateChanged(user => {
       if (user) { unsub(); ov.remove(); resolve(user); }
     });
@@ -102,46 +100,6 @@
         else showLoginUI(resolve);
       });
     });
-  }
-
-  // ── Cloud pull ────────────────────────────────────────────────────────────
-
-  async function pullFromCloud() {
-    try {
-      // Pull main data (notes, habits, mood, etc.)
-      const mainSnap = await db.doc(`users/${userId}/data/main`).get();
-      let cloudHasMainData = mainSnap.exists;
-
-      if (cloudHasMainData) {
-        const data = mainSnap.data();
-        MAIN_KEYS.forEach(key => {
-          if (data[key] !== undefined) Store._local(key, data[key]);
-        });
-      }
-
-      // Pull topics (stored individually)
-      const topicsSnap = await db.collection(`users/${userId}/topics`).get();
-      const cloudTopics = [];
-      topicsSnap.forEach(doc => cloudTopics.push(doc.data()));
-
-      if (cloudTopics.length > 0) {
-        knownTopicIds = new Set(cloudTopics.map(t => t.id));
-        Store._local('topics', cloudTopics);
-      }
-
-      // First-time setup: push local data up to the cloud
-      if (!cloudHasMainData) {
-        const batch = {};
-        MAIN_KEYS.forEach(key => { batch[key] = Store.get(key); });
-        await db.doc(`users/${userId}/data/main`).set(batch);
-      }
-      if (cloudTopics.length === 0) {
-        const localTopics = Store.get('topics') || [];
-        if (localTopics.length) await syncTopics(localTopics);
-      }
-    } catch (e) {
-      console.warn('Cloud pull failed:', e);
-    }
   }
 
   // ── Cloud push ────────────────────────────────────────────────────────────
@@ -157,7 +115,6 @@
         snap.forEach(d => knownTopicIds.add(d.id));
       }
 
-      // Firestore batch: upsert current + delete removed (max 500 ops, fine for personal use)
       const batch = db.batch();
       topics.forEach(t => batch.set(col.doc(t.id), t));
       for (const id of knownTopicIds) {
@@ -193,6 +150,76 @@
     }
   }
 
+  // ── Real-time listeners ───────────────────────────────────────────────────
+
+  function listenToCloud() {
+    return new Promise(resolve => {
+      let mainReady = false;
+      let topicsReady = false;
+      let mainFirst = true;
+      let topicsFirst = true;
+
+      function checkDone() {
+        if (mainReady && topicsReady) resolve();
+      }
+
+      // Real-time listener on main document
+      db.doc(`users/${userId}/data/main`).onSnapshot(snap => {
+        if (mainFirst) {
+          mainFirst = false;
+          if (snap.exists) {
+            // Pull cloud data into local store (initial load)
+            const data = snap.data();
+            MAIN_KEYS.forEach(k => { if (data[k] !== undefined) Store._local(k, data[k]); });
+          } else {
+            // First-ever login: push local data up to the cloud
+            const batch = {};
+            MAIN_KEYS.forEach(k => { batch[k] = Store.get(k); });
+            db.doc(`users/${userId}/data/main`).set(batch).catch(() => {});
+          }
+          mainReady = true;
+          checkDone();
+        } else if (snap.exists) {
+          // Real-time update from another device/tab → update UI immediately
+          const data = snap.data();
+          MAIN_KEYS.forEach(k => { if (data[k] !== undefined) Store._fromCloud(k, data[k]); });
+        }
+      }, err => {
+        console.warn('Main listener error:', err);
+        mainReady = true;
+        checkDone();
+      });
+
+      // Real-time listener on topics collection
+      db.collection(`users/${userId}/topics`).onSnapshot(snap => {
+        const topics = [];
+        snap.forEach(d => topics.push(d.data()));
+
+        if (topicsFirst) {
+          topicsFirst = false;
+          if (topics.length > 0) {
+            knownTopicIds = new Set(topics.map(t => t.id));
+            Store._local('topics', topics);
+          } else {
+            // First-ever login: push local topics up
+            const local = Store.get('topics') || [];
+            if (local.length) syncTopics(local).catch(() => {});
+          }
+          topicsReady = true;
+          checkDone();
+        } else {
+          // Real-time update from another device/tab
+          knownTopicIds = new Set(topics.map(t => t.id));
+          Store._fromCloud('topics', topics);
+        }
+      }, err => {
+        console.warn('Topics listener error:', err);
+        topicsReady = true;
+        checkDone();
+      });
+    });
+  }
+
   // ── User bar in sidebar ───────────────────────────────────────────────────
 
   function renderUserBar(user) {
@@ -208,7 +235,7 @@
         <div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
           ${user.displayName || user.email || 'משתמש'}
         </div>
-        <div style="font-size:11px;color:var(--ink-mute)">☁️ מסונכרן לענן</div>
+        <div style="font-size:11px;color:var(--ink-mute)">☁️ מסונכרן בזמן אמת</div>
       </div>
       <button id="fb-signout" title="התנתקות"
         style="font-size:20px;cursor:pointer;background:none;border:none;color:var(--ink-mute);padding:4px;line-height:1">⏏</button>`;
@@ -230,7 +257,6 @@
       userId = user.uid;
       this.enabled = true;
 
-      // Show loading screen while pulling cloud data
       const loader = document.createElement('div');
       loader.style.cssText =
         'position:fixed;inset:0;z-index:9998;background:rgba(255,255,255,.9);' +
@@ -239,10 +265,10 @@
       loader.innerHTML = '<div style="font-size:40px">☁️</div><div>טוען נתונים מהענן…</div>';
       document.body.appendChild(loader);
 
-      await pullFromCloud();
+      // Start real-time listeners; wait for initial snapshot to load
+      await listenToCloud();
       loader.remove();
 
-      // Render user info in sidebar (after app mounts)
       setTimeout(() => renderUserBar(user), 600);
       return true;
     },
