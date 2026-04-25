@@ -307,17 +307,19 @@
       const draggedTopic = topics.find(x => x.id === draggedId);
       if (!draggedTopic) return;
 
-      draggedTopic.parentId = t.parentId || null;
+      const newParentId = t.parentId || null;
+      draggedTopic.parentId = newParentId;
 
-      const filtered = topics.filter(x => x.id !== draggedId);
-      const targetIdx = filtered.findIndex(x => x.id === t.id);
+      // Reorder ONLY within the target sibling group — leave other groups untouched
+      const siblings = topics
+        .filter(x => x.id !== draggedId && (x.parentId || null) === newParentId)
+        .sort((a, b) => (a.order ?? a.createdAt ?? 0) - (b.order ?? b.createdAt ?? 0));
+      const targetIdx = siblings.findIndex(x => x.id === t.id);
       if (targetIdx === -1) return;
-      filtered.splice(insertBefore ? targetIdx : targetIdx + 1, 0, draggedTopic);
+      siblings.splice(insertBefore ? targetIdx : targetIdx + 1, 0, draggedTopic);
+      siblings.forEach((topic, i) => { topic.order = i * 10; });
 
-      // Reassign order by array position so sort stays stable after Firebase sync
-      filtered.forEach((topic, i) => { topic.order = i; });
-
-      Store.set('topics', filtered);
+      Store.set('topics', topics);
       if (draggedTopic.parentId) expanded.add(draggedTopic.parentId);
       rerender();
     });
