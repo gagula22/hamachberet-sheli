@@ -81,7 +81,24 @@
     }
   }
 
+  function addDeleteButtonToFig(fig, save) {
+    if (fig.querySelector('.nb-img-del')) return; // already has one
+    const delBtn = document.createElement('button');
+    delBtn.className = 'nb-img-del';
+    delBtn.title = 'מחק תמונה';
+    delBtn.textContent = '✕';
+    delBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      fig.remove();
+      save && save();
+    });
+    fig.appendChild(delBtn);
+  }
+
   function attachImageBehaviors(editor, save) {
+    // Add delete button to any existing figures (loaded from storage)
+    editor.querySelectorAll('figure.nb-img').forEach(fig => addDeleteButtonToFig(fig, save));
     // Paste images from clipboard
     editor.addEventListener('paste', (e) => {
       const items = (e.clipboardData || window.clipboardData)?.items || [];
