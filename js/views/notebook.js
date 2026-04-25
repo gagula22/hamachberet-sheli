@@ -686,7 +686,7 @@
     const fmtLabel = format === 'pdf' ? 'PDF' : 'Word (.doc)';
     let choice = 'current';
 
-    const rootTopics = getTopics().filter(t => !t.parentId);
+    const rootTopics = getChildren(null);
     const others = rootTopics.filter(t => t.id !== currentTopic.id);
 
     function makeOpt(value, labelText) {
@@ -728,7 +728,7 @@
       optsChildren.push(makeOpt('other', 'מחברת אחרת מהרשימה'));
       optsChildren.push(otherSel);
     }
-    optsChildren.push(makeOpt('all', 'כל המחברות לפי סדר היווצרותן'));
+    optsChildren.push(makeOpt('all', 'כל המחברות לפי סדר הופעתן'));
 
     const modal = App.el('div', { class: 'export-modal' }, [
       App.el('div', { class: 'export-modal-title' }, `יצוא ל-${fmtLabel}`),
@@ -771,7 +771,7 @@
   }
 
   function exportAllTopics(format) {
-    const roots = getTopics().filter(t => !t.parentId);
+    const roots = getChildren(null);
     let html = '';
     function addTopic(topicId, depth) {
       const t = getById(topicId);
