@@ -66,13 +66,18 @@
         if (raw) {
           const parsed = JSON.parse(raw);
           state = Object.assign(structuredClone(DEFAULTS), parsed);
-          idbSet(KEY, state).catch(() => {});  // save to IDB for next time
+          // Save to IDB, then clear localStorage to free space
+          idbSet(KEY, state).then(() => {
+            try { localStorage.removeItem(KEY); } catch {}
+          }).catch(() => {});
           emit();
         }
       } catch {}
       return;
     }
+    // IDB has data — use it and clear the old localStorage copy
     state = Object.assign(structuredClone(DEFAULTS), saved);
+    try { localStorage.removeItem(KEY); } catch {}
     emit();
   }).catch(() => { /* IDB unavailable — localStorage already loaded */ });
 
