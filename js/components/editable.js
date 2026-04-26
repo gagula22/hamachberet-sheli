@@ -192,21 +192,8 @@
         e.stopPropagation();
         const fig = delBtn.closest('figure.nb-img');
         if (fig) { fig.remove(); save && save(); }
-        return;
       }
-
-      // Click on figure cycles alignment: none → start → end → center → none
-      const ALIGN = ['', 'align-start', 'align-end', 'align-center'];
-      const fig = e.target.closest && e.target.closest('figure.nb-img');
-      if (!fig || !editor.contains(fig)) return;
-      e.preventDefault();
-      const cur = ALIGN.findIndex(c => c && fig.classList.contains(c));
-      const nextIdx = cur === -1 ? 1 : (cur + 1) % ALIGN.length;
-      ALIGN.forEach(c => c && fig.classList.remove(c));
-      if (ALIGN[nextIdx]) fig.classList.add(ALIGN[nextIdx]);
-      save && save();
-      const labels = { '': 'ללא יישור', 'align-start': 'צמוד לימין', 'align-end': 'צמוד לשמאל', 'align-center': 'במרכז' };
-      if (window.App) App.toast(labels[ALIGN[nextIdx]] || 'ללא יישור');
+      // Images are always centered — no alignment cycling
     });
 
     // Persist size after the user finishes resizing (mouse up)

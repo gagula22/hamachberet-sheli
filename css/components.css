@@ -499,8 +499,8 @@ body.nb-resizing * { cursor: col-resize !important; user-select: none !important
   font-style: italic;
 }
 figure.nb-img {
-  display: inline-block;
-  margin: 8px 4px;
+  display: block;
+  margin: 12px auto;
   padding: 0;
   resize: both;
   overflow: hidden;
@@ -512,10 +512,10 @@ figure.nb-img {
   border: 2px solid transparent;
   box-shadow: var(--shadow-sm);
   vertical-align: middle;
-  cursor: pointer;
+  cursor: default;
   position: relative;
   background: #fff;
-  clear: none;
+  clear: both;
 }
 figure.nb-img:hover { border-color: var(--lavender-deep); }
 figure.nb-img:hover .nb-img-del { opacity: 1; pointer-events: auto; }
@@ -557,27 +557,7 @@ figure.nb-img::after {
   pointer-events: none;
   opacity: 0.6;
 }
-figure.nb-img.align-start {
-  float: right;
-  float: inline-start;
-  margin-inline-end: 14px;
-  margin-inline-start: 0;
-}
-figure.nb-img.align-end {
-  float: left;
-  float: inline-end;
-  margin-inline-start: 14px;
-  margin-inline-end: 0;
-}
-figure.nb-img.align-center {
-  display: block;
-  float: none;
-  margin: 12px auto;
-}
-html[dir="rtl"] figure.nb-img.align-start { float: right; }
-html[dir="rtl"] figure.nb-img.align-end { float: left; }
-html[dir="ltr"] figure.nb-img.align-start { float: left; }
-html[dir="ltr"] figure.nb-img.align-end { float: right; }
+/* Images are always centered — no float/alignment classes */
 .nb-editor h1, .nb-editor h2, .nb-editor h3 {
   font-family: var(--font-head);
   margin: 12px 0 8px;
