@@ -19,15 +19,68 @@
     settings: { userName: '', theme: 'cream' }
   };
 
-  let state = load();
+  // ── IndexedDB (primary storage — no 5MB limit) ───────────────────────────
+  const IDB_NAME = 'notebook-store';
+  const IDB_VER  = 1;
+  const IDB_OBJ  = 'kv';
+  let _idb = null;
+
+  function openIDB() {
+    if (_idb) return Promise.resolve(_idb);
+    return new Promise((resolve, reject) => {
+      try {
+        const req = indexedDB.open(IDB_NAME, IDB_VER);
+        req.onupgradeneeded = e => e.target.result.createObjectStore(IDB_OBJ);
+        req.onsuccess = e => { _idb = e.target.result; resolve(_idb); };
+        req.onerror   = () => reject(req.error);
+      } catch (e) { reject(e); }
+    });
+  }
+
+  function idbGet(key) {
+    return openIDB().then(db => new Promise((res, rej) => {
+      const req = db.transaction(IDB_OBJ, 'readonly').objectStore(IDB_OBJ).get(key);
+      req.onsuccess = () => res(req.result);
+      req.onerror   = () => rej(req.error);
+    }));
+  }
+
+  function idbSet(key, value) {
+    return openIDB().then(db => new Promise((res, rej) => {
+      const req = db.transaction(IDB_OBJ, 'readwrite').objectStore(IDB_OBJ).put(value, key);
+      req.onsuccess = () => res();
+      req.onerror   = () => rej(req.error);
+    }));
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
+  let state = loadSync();   // immediate load from localStorage (fast first paint)
   const listeners = new Set();
 
-  function load() {
+  // After first paint, load from IndexedDB which may have larger / newer data
+  idbGet(KEY).then(saved => {
+    if (!saved) {
+      // Nothing in IDB yet — migrate from localStorage if available
+      try {
+        const raw = localStorage.getItem(KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          state = Object.assign(structuredClone(DEFAULTS), parsed);
+          idbSet(KEY, state).catch(() => {});  // save to IDB for next time
+          emit();
+        }
+      } catch {}
+      return;
+    }
+    state = Object.assign(structuredClone(DEFAULTS), saved);
+    emit();
+  }).catch(() => { /* IDB unavailable — localStorage already loaded */ });
+
+  function loadSync() {
     try {
       const raw = localStorage.getItem(KEY);
       if (!raw) return structuredClone(DEFAULTS);
-      const parsed = JSON.parse(raw);
-      return Object.assign(structuredClone(DEFAULTS), parsed);
+      return Object.assign(structuredClone(DEFAULTS), JSON.parse(raw));
     } catch {
       return structuredClone(DEFAULTS);
     }
@@ -35,12 +88,17 @@
 
   let saveTimer;
   function saveNow() {
-    try { localStorage.setItem(KEY, JSON.stringify(state)); }
-    catch (e) {
-      if (window.App) App.toast('אין מספיק מקום לשמירה — נסה למחוק תמונות');
-      console.warn('Storage error:', e);
-    }
+    // Primary: IndexedDB — no quota issues
+    idbSet(KEY, state).catch(() => {
+      // Fallback: localStorage
+      try { localStorage.setItem(KEY, JSON.stringify(state)); }
+      catch (e) {
+        if (window.App) App.toast('שגיאת שמירה — בדוק שיש מקום פנוי בדיסק');
+        console.warn('Storage error:', e);
+      }
+    });
   }
+
   function scheduleSave() {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(saveNow, 250);
@@ -53,13 +111,11 @@
   const Store = {
     get(key) { return key ? state[key] : state; },
 
-    // Internal: update localStorage only, no cloud push (used on first load)
     _local(key, value) {
       state[key] = value;
       scheduleSave();
     },
 
-    // Internal: update from cloud — saves + triggers UI refresh, no push back
     _fromCloud(key, value) {
       state[key] = value;
       scheduleSave();
@@ -113,7 +169,6 @@
             state = Object.assign(structuredClone(DEFAULTS), parsed);
             saveNow();
             emit();
-            // Push every key to Firebase if connected
             if (window.FirebaseSync && FirebaseSync.enabled) {
               Object.keys(state).forEach(k => FirebaseSync.push(k, state[k]));
             }
