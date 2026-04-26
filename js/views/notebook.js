@@ -802,11 +802,20 @@
         ta.setAttribute('value', noteText); // fallback for some renderers
       }
     });
-    // Fix: center figures/images in exported document
+    // Center figures/images — use <p align="center"> wrapper for Word compatibility
+    // (Word ignores margin:auto; align="center" is the only reliable method)
     cloned.querySelectorAll('figure.nb-img').forEach(fig => {
-      fig.style.display = 'block';
-      fig.style.margin  = '16px auto';
-      fig.style.textAlign = 'center';
+      const img = fig.querySelector('img');
+      if (!img) return;
+      // Set explicit width on img so Word respects it
+      if (fig.style.width) img.style.maxWidth = fig.style.width;
+      img.style.display = 'block';
+      // Replace figure with <p align="center"><img ...></p>
+      const p = document.createElement('p');
+      p.setAttribute('align', 'center');
+      p.style.margin = '12px 0';
+      p.appendChild(img.cloneNode(true));
+      fig.replaceWith(p);
     });
     // Remove UI-only elements (page spacers, delete buttons, resize handles)
     cloned.querySelectorAll('.nb-page-spacer, .nb-img-del').forEach(el => el.remove());
@@ -822,7 +831,8 @@
       .nb-mood-btn{width:36px;height:36px;border-radius:50%;background:#f5f0ea;font-size:20px;border:1px solid #ddd;cursor:default;}
       .nb-mood-btn.selected{background:#fadadd;border-color:#e5a8b0;box-shadow:0 2px 6px rgba(0,0,0,.12);}
       .nb-mood-note{width:100%;border:1px solid #ddd;border-radius:8px;padding:8px 12px;font-family:Arial,sans-serif;resize:none;box-sizing:border-box;min-height:60px;}
-      figure{display:block;margin:16px auto;text-align:center;} figure img{max-width:100%;height:auto;display:block;margin:0 auto;}`;
+      p[align="center"]{text-align:center;margin:12px 0;}
+      p[align="center"] img{max-width:100%;height:auto;display:inline-block;}`;
 
     if (format === 'pdf') {
       const win = window.open('', '_blank');
