@@ -879,14 +879,31 @@
         return;
       }
 
-      // Build hidden container for html2pdf rendering
+      // Build a render container for html2pdf.
+      // IMPORTANT: must be in the viewport (not left:-9999px) otherwise
+      // html2canvas produces a blank white page.
+      // We use opacity:0 + pointer-events:none so it is invisible but renderable.
       const container = document.createElement('div');
       container.setAttribute('dir', 'rtl');
-      container.style.cssText = 'position:absolute;left:-9999px;top:0;width:780px;font-family:Arial,sans-serif;color:#3b3a3a;padding:30px;box-sizing:border-box;direction:rtl;';
+      container.style.cssText = [
+        'position:fixed', 'top:0', 'left:0',
+        'width:794px',                 // A4 at 96dpi
+        'opacity:0',                   // invisible but still painted by the browser
+        'pointer-events:none',
+        'z-index:-1',
+        'background:#ffffff',          // explicit white — required for html2canvas
+        'font-family:Arial,sans-serif',
+        'color:#3b3a3a',
+        'padding:30px',
+        'box-sizing:border-box',
+        'direction:rtl'
+      ].join(';');
+
+      // Inject styles as a <style> block inside the container
       const styleEl = document.createElement('style');
       styleEl.textContent = baseStyles;
       const h1El = document.createElement('h1');
-      h1El.style.cssText = 'font-size:28px;margin-bottom:24px;';
+      h1El.style.cssText = 'font-size:28px;margin-bottom:24px;font-family:Arial,sans-serif;';
       h1El.textContent = title;
       const contentEl = document.createElement('div');
       contentEl.innerHTML = body;
@@ -894,25 +911,34 @@
       document.body.appendChild(container);
 
       App.toast('מייצא PDF… אנא המתן');
-      html2pdf()
-        .from(container)
-        .set({
-          margin: [15, 15, 15, 15],
-          filename: title + '.pdf',
-          image: { type: 'jpeg', quality: 0.92 },
-          html2canvas: { scale: 2, useCORS: true, logging: false, allowTaint: true },
-          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-        })
-        .save()
-        .then(() => {
-          document.body.removeChild(container);
-          App.toast('✓ קובץ PDF הורד בהצלחה');
-        })
-        .catch(() => {
-          if (document.body.contains(container)) document.body.removeChild(container);
-          // Graceful fallback to print dialog
-          doFallbackPrint();
-        });
+
+      // Double rAF: ensure the browser has painted the container before html2canvas reads it
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        html2pdf()
+          .from(container)
+          .set({
+            margin: [15, 15, 15, 15],
+            filename: title + '.pdf',
+            image: { type: 'jpeg', quality: 0.92 },
+            html2canvas: {
+              scale: 2,
+              useCORS: true,
+              allowTaint: true,
+              logging: false,
+              backgroundColor: '#ffffff'   // prevents transparent → blank pages
+            },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+          })
+          .save()
+          .then(() => {
+            document.body.removeChild(container);
+            App.toast('✓ קובץ PDF הורד בהצלחה');
+          })
+          .catch(() => {
+            if (document.body.contains(container)) document.body.removeChild(container);
+            doFallbackPrint();
+          });
+      }));
       return;
     }
 
