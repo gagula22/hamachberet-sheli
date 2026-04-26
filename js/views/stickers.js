@@ -42,7 +42,7 @@
     const preview  = App.el('div', {
       style: { display: 'none', marginTop: '16px', border: '1px solid var(--line)',
                borderRadius: 'var(--r-md)', padding: '20px', background: '#fff',
-               maxHeight: '380px', overflowY: 'auto', direction: 'rtl', lineHeight: '1.7' }
+               maxHeight: '380px', overflowY: 'auto', unicodeBidi: 'plaintext', lineHeight: '1.7' }
     });
     const exportBtn = App.el('button', {
       class: 'btn',
@@ -53,7 +53,7 @@
         const pid = 'tools-pdf-' + Date.now();
         const div = document.createElement('div');
         div.id = pid;
-        div.setAttribute('dir', 'rtl');
+        div.setAttribute('dir', 'auto');
         div.style.display = 'none';
         div.innerHTML = previewHtml;
 
@@ -61,9 +61,10 @@
         st.textContent = `
           @media print {
             body > *:not(#${pid}) { display:none !important; }
-            #${pid} { display:block !important; direction:rtl;
-                      font-family:Arial,sans-serif; color:#000; line-height:1.7; }
+            #${pid} { display:block !important; direction:auto;
+                      font-family:Arial,"Times New Roman",serif; color:#000; line-height:1.7; }
             #${pid} img { max-width:100%; }
+            #${pid} p, #${pid} li, #${pid} td, #${pid} th { unicode-bidi:plaintext; }
             @page { margin:15mm; size:A4; }
           }`;
         document.head.appendChild(st);
@@ -169,9 +170,10 @@
           ` xmlns:w='urn:schemas-microsoft-com:office:word'`,
           ` xmlns='http://www.w3.org/TR/REC-html40'>`,
           `<head><meta charset='utf-8'><title>${file.name}</title>`,
-          `<style>body{font-family:Arial,sans-serif;direction:rtl;padding:40px;max-width:820px;margin:0 auto;}</style>`,
-          `</head><body dir="rtl">`,
-          `<h1 style="font-size:24px;margin-bottom:20px;">${file.name.replace(/\.pdf$/i, '')}</h1>`,
+          `<style>body{font-family:Arial,"Times New Roman",serif;padding:40px;max-width:820px;margin:0 auto;}`,
+          `p,h1,h2,h3,li{unicode-bidi:plaintext;direction:auto;}</style>`,
+          `</head><body dir="auto">`,
+          `<h1 style="font-size:24px;margin-bottom:20px;unicode-bidi:plaintext;direction:auto;">${file.name.replace(/\.pdf$/i, '')}</h1>`,
           html,
           `</body></html>`
         ].join('');
