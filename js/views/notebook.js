@@ -791,10 +791,16 @@
     const title = topic.name || 'מחברת';
 
     // ── Step 1: stamp each figure's rendered pixel-width onto data-ew
-    //    (must happen before cloneNode, which produces a detached DOM without layout)
+    //    getBoundingClientRect() only works for live (in-DOM) editors.
+    //    For detached editors (exportById / exportAll), fall back to
+    //    the inline style width, then the CSS default (300px).
+    //    Width is capped at 480px so it always fits inside an A4 Word page.
+    const MAX_IMG_W = 480;
     editor.querySelectorAll('figure.nb-img').forEach(fig => {
-      const w = fig.getBoundingClientRect().width;
-      fig.dataset.ew = w > 0 ? String(Math.round(w)) : '';
+      const liveW = fig.getBoundingClientRect().width;          // >0 only when in DOM
+      const styleW = parseInt(fig.style.width) || 0;            // user-resized
+      const w = liveW > 0 ? liveW : styleW > 0 ? styleW : 300; // 300 = CSS default
+      fig.dataset.ew = String(Math.round(Math.min(w, MAX_IMG_W)));
     });
 
     const cloned = editor.cloneNode(true);
@@ -816,18 +822,24 @@
       }
     });
 
-    // ── Step 3: replace every figure with <p align="center"><img width="Npx"></p>
-    //    Explicit pixel width is the only reliable way to center images in Word.
+    // ── Step 3: replace every figure with <p align="center"><img width="N"></p>
+    //    Rules for Word-compatible image centering:
+    //      • explicit integer width (no "px" in attribute) for Word to size it correctly
+    //      • NO max-width / width:% — Word ignores or misinterprets them
+    //      • display:inline (NOT block) so text-align:center on the paragraph works
+    //      • width capped at MAX_IMG_W so it never exceeds the A4 content area
     cloned.querySelectorAll('figure.nb-img').forEach(fig => {
       const img = fig.querySelector('img');
       if (!img) return;
-      const w = parseInt(fig.dataset.ew) || 400;   // fallback 400px
+      const w = parseInt(fig.dataset.ew) || 300;   // fallback = CSS default 300px
       const clonedImg = img.cloneNode(true);
-      // Set explicit pixel width (not %) so Word knows the size
+      // Word reads the width= attribute as points/pixels — integer only, no "px"
       clonedImg.setAttribute('width', w);
-      clonedImg.style.cssText = `width:${w}px;max-width:100%;height:auto;display:inline;`;
+      clonedImg.setAttribute('height', 'auto');
+      // Keep inline style minimal: no max-width (confuses Word), no display:block
+      clonedImg.style.cssText = `width:${w}px;height:auto;display:inline;`;
       const p = document.createElement('p');
-      p.setAttribute('align', 'center');             // Word attribute centering
+      p.setAttribute('align', 'center');
       p.style.cssText = 'text-align:center;margin:12px 0;';
       p.appendChild(clonedImg);
       fig.replaceWith(p);
@@ -840,8 +852,8 @@
     const baseStyles = `
       body{font-family:Arial,sans-serif;direction:rtl;padding:40px;max-width:820px;margin:0 auto;color:#3b3a3a;}
       h1{font-size:28px;margin-bottom:24px;}
-      img{max-width:100%;height:auto;}
       p[align="center"]{text-align:center;margin:12px 0;}
+      p[align="center"] img{display:inline;height:auto;}
       .nb-mood-embed{border:2px solid #f0c4cc;border-radius:12px;padding:16px;margin:16px 0;background:#fffaf8;}
       .nb-mood-embed-header{font-weight:600;font-size:12px;color:#888;letter-spacing:.05em;margin-bottom:10px;}
       .nb-mood-embed-row{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:12px;}
