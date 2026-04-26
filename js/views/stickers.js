@@ -577,7 +577,7 @@
 
     return App.el('div', { class: 'card' }, [
       App.el('div', { class: 'row row-between', style: { marginBottom: '16px' } }, [
-        App.el('h2', {}, '🌐  PDF  →  עברית'),
+        App.el('h2', {}, 'תרגום קבצי PDF מאנגלית לעברית'),
         App.el('span', { class: 'chip sage' }, 'AI מקומי · ללא עלות לתמיד')
       ]),
       infoBanner,
