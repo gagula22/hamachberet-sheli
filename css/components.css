@@ -399,8 +399,8 @@ body.nb-resizing * { cursor: col-resize !important; user-select: none !important
   flex-wrap: wrap;
   position: fixed;
   top: var(--topbar-h);
-  left: 0;
-  right: var(--sidebar-w);
+  left: var(--sidebar-w); /* sidebar is on the LEFT in RTL layout */
+  right: 0;
   z-index: 9;
   box-shadow: 0 4px 12px rgba(60,50,40,.08);
 }
@@ -410,7 +410,7 @@ body.nb-resizing * { cursor: col-resize !important; user-select: none !important
   flex-shrink: 0;
 }
 @media (max-width: 900px) {
-  .nb-toolbar { right: 0; } /* no sidebar on mobile */
+  .nb-toolbar { left: 0; } /* no sidebar on mobile */
 }
 .nb-tool {
   width: 34px; height: 34px;

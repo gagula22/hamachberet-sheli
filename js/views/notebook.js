@@ -823,28 +823,30 @@
         ta.setAttribute('value', noteText); // fallback for some renderers
       }
     });
-    // Center figures/images — use <p align="center"> wrapper for Word compatibility
-    // (Word ignores margin:auto; align="center" is the only reliable method)
+    // Replace figure.nb-img → <p align="center"><img></p>
+    // IMPORTANT: img must stay inline (no display:block) so that text-align:center works in Word
     cloned.querySelectorAll('figure.nb-img').forEach(fig => {
       const img = fig.querySelector('img');
       if (!img) return;
-      // Set explicit width on img so Word respects it
-      if (fig.style.width) img.style.maxWidth = fig.style.width;
-      img.style.display = 'block';
-      // Replace figure with <p align="center"><img ...></p>
+      const clonedImg = img.cloneNode(true);
+      // Carry over explicit user-set width; keep height auto; do NOT set display:block
+      if (fig.style.width) clonedImg.style.width = fig.style.width;
+      clonedImg.style.maxWidth = '100%';
+      clonedImg.style.height = 'auto';
+      clonedImg.style.display = ''; // reset any block — must be inline for centering
       const p = document.createElement('p');
-      p.setAttribute('align', 'center');
-      p.style.margin = '12px 0';
-      p.appendChild(img.cloneNode(true));
+      p.setAttribute('align', 'center');       // Word compatibility
+      p.style.cssText = 'text-align:center;margin:12px 0;';
+      p.appendChild(clonedImg);
       fig.replaceWith(p);
     });
-    // Remove UI-only elements (page spacers, delete buttons, resize handles)
+    // Remove UI-only elements (page spacers, delete buttons)
     cloned.querySelectorAll('.nb-page-spacer, .nb-img-del').forEach(el => el.remove());
     const body = cloned.innerHTML;
     const baseStyles = `
       body{font-family:Arial,sans-serif;direction:rtl;padding:40px;max-width:820px;margin:0 auto;color:#3b3a3a;}
       h1{font-size:28px;margin-bottom:24px;}
-      img{max-width:100%;height:auto;display:block;margin:0 auto;}
+      img{max-width:100%;height:auto;}
       .nb-mood-embed{border:2px solid #f0c4cc;border-radius:12px;padding:16px;margin:16px 0;background:#fffaf8;}
       .nb-mood-embed-header{font-weight:600;font-size:12px;color:#888;letter-spacing:.05em;margin-bottom:10px;display:flex;gap:6px;align-items:center;}
       .nb-mood-embed-row{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:12px;}
@@ -853,14 +855,47 @@
       .nb-mood-btn.selected{background:#fadadd;border-color:#e5a8b0;box-shadow:0 2px 6px rgba(0,0,0,.12);}
       .nb-mood-note{width:100%;border:1px solid #ddd;border-radius:8px;padding:8px 12px;font-family:Arial,sans-serif;resize:none;box-sizing:border-box;min-height:60px;}
       p[align="center"]{text-align:center;margin:12px 0;}
-      p[align="center"] img{max-width:100%;height:auto;display:inline-block;}`;
+      p[align="center"] img{max-width:100%;height:auto;}`;
 
     if (format === 'pdf') {
-      const win = window.open('', '_blank');
-      if (!win) { App.toast('אפשר חלונות קופצים עבור יצוא PDF'); return; }
-      win.document.write(`<!doctype html><html dir="rtl" lang="he"><head><meta charset="utf-8"><title>${title}</title><style>${baseStyles}</style></head><body><h1>${title}</h1>${body}</body></html>`);
-      win.document.close();
-      setTimeout(() => win.print(), 400);
+      // Use html2pdf.js (CDN) for real file download — no print dialog
+      if (typeof html2pdf === 'undefined') {
+        App.toast('ספריית PDF לא נטענה — בדוק חיבור אינטרנט');
+        return;
+      }
+      // Build a hidden DOM container to render from
+      const container = document.createElement('div');
+      container.setAttribute('dir', 'rtl');
+      container.style.cssText = [
+        'position:absolute', 'left:-9999px', 'top:0',
+        'width:794px', 'font-family:Arial,sans-serif',
+        'color:#3b3a3a', 'padding:40px', 'box-sizing:border-box',
+        'direction:rtl', 'text-align:right'
+      ].join(';');
+      const styleEl = document.createElement('style');
+      styleEl.textContent = baseStyles;
+      const h1El = document.createElement('h1');
+      h1El.style.cssText = 'font-size:28px;margin-bottom:24px;';
+      h1El.textContent = title;
+      const contentEl = document.createElement('div');
+      contentEl.innerHTML = body;
+      container.append(styleEl, h1El, contentEl);
+      document.body.appendChild(container);
+
+      App.toast('מייצא PDF… אנא המתן');
+      html2pdf().from(container).set({
+        margin: [10, 10, 10, 10],
+        filename: title + '.pdf',
+        image: { type: 'jpeg', quality: 0.95 },
+        html2canvas: { scale: 2, useCORS: true, logging: false },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      }).save().then(() => {
+        document.body.removeChild(container);
+        App.toast('קובץ PDF נוצר בהצלחה!');
+      }).catch(() => {
+        if (document.body.contains(container)) document.body.removeChild(container);
+        App.toast('שגיאה ביצירת ה-PDF');
+      });
       return;
     }
 
