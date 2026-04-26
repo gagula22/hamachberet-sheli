@@ -543,29 +543,9 @@
       App.el('span', { class: 'chip' }, 'אוטו-שמירה בכל הקלדה')
     ]);
 
-    // Spacer reserves space for the fixed toolbar so content isn't hidden behind it
-    const spacer = App.el('div', { class: 'nb-toolbar-spacer' });
-    // Measure toolbar height after render and keep spacer in sync
-    requestAnimationFrame(() => {
-      const h = toolbar.getBoundingClientRect().height;
-      if (h > 0) {
-        document.documentElement.style.setProperty('--nb-toolbar-h', h + 'px');
-        spacer.style.height = h + 'px';
-      }
-      if (window.ResizeObserver) {
-        new ResizeObserver(() => {
-          const h2 = toolbar.getBoundingClientRect().height;
-          if (h2 > 0) {
-            document.documentElement.style.setProperty('--nb-toolbar-h', h2 + 'px');
-            spacer.style.height = h2 + 'px';
-          }
-        }).observe(toolbar);
-      }
-    });
-
+    // Toolbar is position:sticky — no spacer needed (stays in flow)
     return App.el('div', { class: 'nb-editor-col' }, [
       toolbar,
-      spacer,
       App.el('div', { class: 'card stack' }, [breadcrumb, titleInput, stage, meta])
     ]);
   }

@@ -299,14 +299,14 @@
 @media (max-width: 800px) { .notes-layout { grid-template-columns: 1fr; } }
 
 /* --- Notebook (topics + rich editor) --- */
-.nb-editor-col { display: block; }
+.nb-editor-col { display: block; min-height: 100%; }
 .nb-editor-col > .nb-toolbar { margin-bottom: 8px; }
 
 .nb-layout {
   display: grid;
   grid-template-columns: var(--nb-sidebar-w, 280px) 14px 1fr;
   gap: 0;
-  min-height: 70vh;
+  min-height: calc(100vh - var(--topbar-h));
   align-items: start;
 }
 .nb-editor-col { align-self: stretch; }
@@ -397,21 +397,14 @@ body.nb-resizing * { cursor: col-resize !important; user-select: none !important
   background: #f8f7f6;
   border-bottom: 1px solid var(--line);
   flex-wrap: wrap;
-  position: fixed;
+  /* sticky inside .nb-editor-col — confined to the page column, not full viewport */
+  position: sticky;
   top: var(--topbar-h);
-  left: var(--sidebar-w); /* sidebar is on the LEFT in RTL layout */
-  right: 0;
   z-index: 9;
   box-shadow: 0 4px 12px rgba(60,50,40,.08);
 }
-/* Spacer so content doesn't hide behind fixed toolbar */
-.nb-toolbar-spacer {
-  height: var(--nb-toolbar-h, 52px);
-  flex-shrink: 0;
-}
-@media (max-width: 900px) {
-  .nb-toolbar { left: 0; } /* no sidebar on mobile */
-}
+/* Spacer not needed with sticky (element stays in flow) */
+.nb-toolbar-spacer { display: none; }
 .nb-tool {
   width: 34px; height: 34px;
   border-radius: 8px;
