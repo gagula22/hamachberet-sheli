@@ -863,104 +863,57 @@
       .nb-mood-note{width:100%;border:1px solid #ddd;border-radius:8px;padding:8px 12px;font-family:Arial,sans-serif;resize:none;box-sizing:border-box;min-height:60px;}`;
 
     // ── PDF export ────────────────────────────────────────────────────────────
+    // Strategy: inject a hidden print-only layer into the current page.
+    // @media print CSS hides everything except this layer, so window.print()
+    // shows ONLY the notebook content. The user clicks "Save as PDF" (one click
+    // in Chrome/Edge since Save-as-PDF is the default destination on most systems).
+    // This is the only approach that reliably handles Hebrew RTL + images.
     if (format === 'pdf') {
-      const doFallbackPrint = () => {
-        App.toast('בחלון שייפתח: קובץ → שמור כ-PDF');
-        const win = window.open('', '_blank');
-        if (!win) { App.toast('אפשר חלונות קופצים בדפדפן'); return; }
-        win.document.write(`<!doctype html><html dir="rtl" lang="he"><head><meta charset="utf-8"><title>${title}</title><style>${baseStyles} @page{margin:20mm;} @media print{body{padding:0}}</style></head><body><h1>${title}</h1>${body}</body></html>`);
-        win.document.close();
-        setTimeout(() => { win.focus(); win.print(); }, 600);
-      };
+      // 1. Build the print content element
+      const printId = 'nb-pdf-content-' + Date.now();
+      const printDiv = document.createElement('div');
+      printDiv.id = printId;
+      printDiv.setAttribute('dir', 'rtl');
+      printDiv.style.display = 'none'; // hidden on screen; shown only via @media print
+      printDiv.innerHTML = `<h1 style="font-size:24pt;margin-bottom:18pt;font-family:Arial,sans-serif;">${title}</h1>${body}`;
 
-      if (typeof html2pdf === 'undefined') {
-        // Library not loaded yet — try fallback
-        doFallbackPrint();
-        return;
-      }
+      // 2. Print-only stylesheet: hide everything else, show only our div
+      const printStyle = document.createElement('style');
+      printStyle.id = printId + '-style';
+      printStyle.textContent = `
+        @media print {
+          body > *:not(#${printId}) { display: none !important; visibility: hidden !important; }
+          #${printId} {
+            display: block !important;
+            visibility: visible !important;
+            position: static !important;
+            font-family: Arial, sans-serif;
+            color: #000;
+            direction: rtl;
+            line-height: 1.7;
+          }
+          #${printId} h1,#${printId} h2,#${printId} h3 { margin-bottom: 8pt; }
+          #${printId} p { margin: 6pt 0; }
+          #${printId} p[align="center"] { text-align: center; }
+          #${printId} img { max-width: 100%; height: auto; }
+          #${printId} .nb-mood-embed { border: 1pt solid #f0c4cc; border-radius: 6pt; padding: 10pt; margin: 10pt 0; background: #fffaf8; }
+          #${printId} .nb-mood-btn { width: 28pt; height: 28pt; border-radius: 50%; font-size: 16pt; display: inline-flex; align-items: center; justify-content: center; }
+          #${printId} .nb-mood-btn.selected { background: #fadadd; border: 1pt solid #e5a8b0; }
+          #${printId} .nb-mood-note { border: 1pt solid #ddd; border-radius: 5pt; padding: 6pt; width: 100%; min-height: 40pt; font-family: Arial; }
+          #${printId} .nb-page-spacer, #${printId} .nb-img-del { display: none !important; }
+          @page { margin: 15mm; size: A4; }
+        }`;
 
-      // html2canvas REQUIRES the element to be fully visible (opacity:1, in viewport).
-      // We use a dark overlay behind it so the user sees a "generating" screen,
-      // and the content container on top at full opacity so html2canvas can capture it.
-      const overlay = document.createElement('div');
-      overlay.style.cssText = [
-        'position:fixed', 'inset:0',
-        'background:rgba(0,0,0,.75)',
-        'z-index:9998',
-        'display:flex', 'align-items:center', 'justify-content:center',
-        'font-family:Arial,sans-serif', 'color:#fff', 'font-size:18px',
-        'direction:rtl'
-      ].join(';');
-      overlay.textContent = 'מייצא PDF… אנא המתן';
+      document.head.appendChild(printStyle);
+      document.body.appendChild(printDiv);
 
-      const container = document.createElement('div');
-      container.setAttribute('dir', 'rtl');
-      container.style.cssText = [
-        'position:fixed', 'top:0', 'left:0',
-        'width:794px',           // A4 at 96 dpi
-        'min-height:100vh',
-        'background:#ffffff',
-        'font-family:Arial,sans-serif',
-        'color:#3b3a3a',
-        'padding:40px',
-        'box-sizing:border-box',
-        'direction:rtl',
-        'z-index:9999'           // above overlay — visible to html2canvas
-      ].join(';');
-
-      // Apply base styles inline on the container itself (not via <style> tag)
-      // so html2canvas getComputedStyle picks them up reliably.
-      const h1El = document.createElement('h1');
-      h1El.style.cssText = 'font-size:28px;margin-bottom:24px;font-family:Arial,sans-serif;color:#3b3a3a;';
-      h1El.textContent = title;
-      const contentEl = document.createElement('div');
-      contentEl.style.cssText = 'font-family:Arial,sans-serif;color:#3b3a3a;line-height:1.6;';
-      contentEl.innerHTML = body;
-
-      // Inline mood-embed styles so they survive without a <style> tag
-      contentEl.querySelectorAll('.nb-mood-embed').forEach(el => {
-        el.style.cssText = 'border:2px solid #f0c4cc;border-radius:12px;padding:16px;margin:16px 0;background:#fffaf8;';
-      });
-      contentEl.querySelectorAll('.nb-mood-btn.selected').forEach(el => {
-        el.style.cssText = 'width:36px;height:36px;border-radius:50%;background:#fadadd;border:1px solid #e5a8b0;font-size:20px;';
-      });
-      contentEl.querySelectorAll('.nb-mood-btn:not(.selected)').forEach(el => {
-        el.style.cssText = 'width:36px;height:36px;border-radius:50%;background:#f5f0ea;border:1px solid #ddd;font-size:20px;';
-      });
-      contentEl.querySelectorAll('p[align="center"]').forEach(el => {
-        el.style.cssText = 'text-align:center;margin:12px 0;';
-      });
-
-      container.append(h1El, contentEl);
-      document.body.append(overlay, container);
-
-      // rAF × 2: let the browser paint before html2canvas reads pixels
-      requestAnimationFrame(() => requestAnimationFrame(() => {
-        html2pdf()
-          .from(container)
-          .set({
-            margin: [15, 15, 15, 15],
-            filename: title + '.pdf',
-            image: { type: 'jpeg', quality: 0.92 },
-            html2canvas: {
-              scale: 2,
-              useCORS: true,
-              allowTaint: true,
-              logging: false,
-              backgroundColor: '#ffffff'
-            },
-            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-          })
-          .save()
-          .then(() => {
-            overlay.remove(); container.remove();
-            App.toast('✓ קובץ PDF הורד בהצלחה');
-          })
-          .catch(() => {
-            overlay.remove(); container.remove();
-            doFallbackPrint();
-          });
-      }));
+      // 3. Show instruction toast, then print
+      App.toast('בחלון ההדפסה — בחר "שמור כ-PDF" כיעד');
+      setTimeout(() => {
+        window.print();
+        // Clean up after print dialog closes (slight delay to not interrupt rendering)
+        setTimeout(() => { printStyle.remove(); printDiv.remove(); }, 1000);
+      }, 300);
       return;
     }
 
