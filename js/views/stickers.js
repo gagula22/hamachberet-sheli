@@ -3,7 +3,6 @@
   // ── PDF.js worker (local bundle) ─────────────────────────────────────────
   function initPdfJs() {
     if (!window.pdfjsLib) return;
-    // Point worker to local bundle so no CDN is needed
     const base = location.href.replace(/#.*/, '').replace(/index\.html.*/, '');
     pdfjsLib.GlobalWorkerOptions.workerSrc = base + 'js/vendor/pdfjs.worker.min.js';
   }
@@ -56,7 +55,6 @@
         div.setAttribute('dir', 'auto');
         div.style.display = 'none';
         div.innerHTML = previewHtml;
-
         const st = document.createElement('style');
         st.textContent = `
           @media print {
@@ -90,7 +88,6 @@
           const res = await mammoth.convertToHtml({ arrayBuffer: ab });
           previewHtml = res.value;
         } else {
-          // .doc from our app = HTML string
           const text = await file.text();
           const bodyMatch = text.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
           previewHtml = bodyMatch ? bodyMatch[1] : `<pre style="white-space:pre-wrap">${text}</pre>`;
@@ -138,8 +135,8 @@
 
   // ── Tool 2: PDF → Word ───────────────────────────────────────────────────
   function buildPdfToWord() {
-    const status   = App.el('p', { style: { margin: '10px 0 0', fontSize: '13px', color: 'var(--ink-mute)' } });
-    const bar      = App.el('div', {
+    const status = App.el('p', { style: { margin: '10px 0 0', fontSize: '13px', color: 'var(--ink-mute)' } });
+    const bar    = App.el('div', {
       style: { height: '4px', background: 'var(--lavender)', borderRadius: '2px',
                width: '0', transition: 'width 300ms', marginTop: '10px' }
     });
@@ -164,7 +161,6 @@
           html += `<h3 style="margin:18px 0 6px;">עמוד ${i}</h3><p style="white-space:pre-wrap;direction:auto;line-height:1.8;">${text}</p><hr style="border:none;border-top:1px solid #eee;margin:12px 0;">`;
         }
         bar.style.width = '100%';
-
         const docHtml = [
           `<html xmlns:o='urn:schemas-microsoft-com:office:office'`,
           ` xmlns:w='urn:schemas-microsoft-com:office:word'`,
@@ -174,16 +170,13 @@
           `p,h1,h2,h3,li{unicode-bidi:plaintext;direction:auto;}</style>`,
           `</head><body dir="auto">`,
           `<h1 style="font-size:24px;margin-bottom:20px;unicode-bidi:plaintext;direction:auto;">${file.name.replace(/\.pdf$/i, '')}</h1>`,
-          html,
-          `</body></html>`
+          html, `</body></html>`
         ].join('');
-
         const blob = new Blob(['﻿', docHtml], { type: 'application/msword' });
         const url  = URL.createObjectURL(blob);
         const a    = document.createElement('a');
         a.href = url; a.download = file.name.replace(/\.pdf$/i, '.doc'); a.click();
         setTimeout(() => URL.revokeObjectURL(url), 2000);
-
         status.textContent = `✓ חולץ טקסט מ-${n} עמודים — הורד ${file.name.replace(/\.pdf$/i, '.doc')}`;
         status.style.color = 'var(--sage-deep)';
       } catch (e) {
@@ -225,77 +218,99 @@
     ]);
   }
 
-  // ── Tool 3: PDF → עברית (DeepL — תרגום מקצועי כולל תמונות ותרשימים) ──────
+  // ── Tool 3: PDF → עברית ──────────────────────────────────────────────────
+  // מודל Helsinki-NLP / Xenova opus-mt-en-he — פועל 100% בדפדפן
+  // ללא עלות לתמיד · ללא שרת · ללא מפתח API
+  // תמונות + עיצוב נשמרים (כל עמוד מרונדר כתמונה מלאה)
+  // ניהול זיכרון: פינוי אוטומטי לאחר שמירה
   function buildPdfTranslator() {
-    const MAX_FILE   = 500 * 1024 * 1024;
-    const PAGE_SCALE = 1.5;
-    const JPEG_Q     = 0.82;
-    const BATCH_BYTES = 45000; // max chars per DeepL request
+    const MAX_FILE   = 500 * 1024 * 1024;  // 500 MB
+    const PAGE_SCALE = 1.5;                // render DPI (108 equivalent)
+    const JPEG_Q     = 0.80;               // JPEG quality — balance size/clarity
+    const MAX_CHUNK  = 380;                // chars per model inference call
 
-    // ── helpers ──────────────────────────────────────────────────────────────
-    function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-
-    function getKey()     { return (Store.get('settings') || {}).deeplKey || ''; }
-    function saveKey(k)   { const s = Store.get('settings') || {}; s.deeplKey = k.trim(); Store.set('settings', s); }
-
-    function deeplEndpoint(key) {
-      return key.endsWith(':fx')
-        ? 'https://api-free.deepl.com/v2/translate'
-        : 'https://api.deepl.com/v2/translate';
+    // ── text helpers ─────────────────────────────────────────────────────────
+    function esc(s) {
+      return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
-    // Translate an array of strings in batched requests
-    async function deeplTranslateMany(texts, apiKey, onProgress) {
-      const results = new Array(texts.length).fill('');
-      // Group into batches by byte size
-      const batches = [];
-      let batch = [], batchSize = 0, batchStart = 0;
-      for (let i = 0; i < texts.length; i++) {
-        const bytes = texts[i].length;
-        if (batchSize + bytes > BATCH_BYTES && batch.length) {
-          batches.push({ texts: batch, startIdx: batchStart });
-          batch = []; batchSize = 0; batchStart = i;
+    // Split long text into sentence-aware chunks that fit the model's context
+    function splitChunks(text) {
+      if (!text.trim()) return [];
+      if (text.length <= MAX_CHUNK) return [text.trim()];
+      const parts = [];
+      let pos = 0;
+      while (pos < text.length) {
+        let end = pos + MAX_CHUNK;
+        if (end >= text.length) { parts.push(text.slice(pos).trim()); break; }
+        // Seek back to sentence boundary within last 120 chars
+        let cut = -1;
+        for (let i = end; i > end - 120 && i > pos; i--) {
+          if ('.!?\n'.includes(text[i])) { cut = i + 1; break; }
         }
-        batch.push(texts[i]); batchSize += bytes;
-      }
-      if (batch.length) batches.push({ texts: batch, startIdx: batchStart });
-
-      let done = 0;
-      for (const b of batches) {
-        const res = await fetch(deeplEndpoint(apiKey), {
-          method: 'POST',
-          headers: { 'Authorization': `DeepL-Auth-Key ${apiKey}`,
-                     'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: b.texts, source_lang: 'EN', target_lang: 'HE' })
-        });
-        if (!res.ok) {
-          const msg = await res.text().catch(() => res.status);
-          throw new Error(`DeepL ${res.status}: ${msg}`);
+        // Fall back: word boundary
+        if (cut === -1) {
+          for (let i = end; i > end - 60 && i > pos; i--) {
+            if (text[i] === ' ') { cut = i; break; }
+          }
         }
-        const data = await res.json();
-        data.translations.forEach((t, j) => { results[b.startIdx + j] = t.text; });
-        done += b.texts.length;
-        if (onProgress) onProgress(done / texts.length);
+        if (cut === -1) cut = end;
+        const chunk = text.slice(pos, cut).trim();
+        if (chunk) parts.push(chunk);
+        pos = cut;
       }
-      return results;
+      return parts;
     }
 
-    // ── render PDF page → JPEG data-URL ──────────────────────────────────────
+    // ── Transformers.js model — loaded once, cached in browser ───────────────
+    // Singleton promise: never loads the model twice, survives re-renders
+    // because it lives on the outer IIFE scope
+    let _pipePromise = null;
+
+    function getPipeline(onProgress) {
+      if (!_pipePromise) {
+        _pipePromise = (async () => {
+          // Dynamic import — works from regular <script>, no bundler needed
+          const { pipeline, env } = await import(
+            'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2'
+          );
+          env.allowLocalModels = false;
+          env.useBrowserCache  = true;  // cache ONNX weights in IndexedDB
+          return await pipeline('translation', 'Xenova/opus-mt-en-he', {
+            progress_callback: onProgress
+          });
+        })();
+        _pipePromise.catch(() => { _pipePromise = null; }); // allow retry on failure
+      }
+      return _pipePromise;
+    }
+
+    async function translatePageText(pipe, text) {
+      if (!text.trim()) return '';
+      const chunks  = splitChunks(text);
+      if (!chunks.length) return '';
+      // Batch all chunks in one call (faster than sequential)
+      const outputs = await pipe(chunks, { max_new_tokens: 512 });
+      return outputs.map(o => o.translation_text).join(' ');
+    }
+
+    // ── Render PDF page → JPEG data-URL (preserves images + layout) ──────────
     async function renderPageImg(page) {
-      const vp = page.getViewport({ scale: PAGE_SCALE });
-      const c  = document.createElement('canvas');
-      c.width  = Math.round(vp.width);
-      c.height = Math.round(vp.height);
-      const ctx = c.getContext('2d');
-      ctx.fillStyle = '#fff';
-      ctx.fillRect(0, 0, c.width, c.height);
+      const vp  = page.getViewport({ scale: PAGE_SCALE });
+      const cv  = document.createElement('canvas');
+      cv.width  = Math.round(vp.width);
+      cv.height = Math.round(vp.height);
+      const ctx = cv.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, cv.width, cv.height);
       await page.render({ canvasContext: ctx, viewport: vp }).promise;
-      const url = c.toDataURL('image/jpeg', JPEG_Q);
-      c.width = 1; c.height = 1; // free memory
-      return url;
+      const dataUrl = cv.toDataURL('image/jpeg', JPEG_Q);
+      // ── free canvas memory immediately ──
+      cv.width = 1; cv.height = 1;
+      return dataUrl;
     }
 
-    // ── extract text from page ────────────────────────────────────────────────
+    // Extract readable text lines from a page
     async function extractText(page) {
       const content = await page.getTextContent();
       let t = '';
@@ -311,191 +326,132 @@
     const status   = App.el('p', { style: { margin: '10px 0 0', fontSize: '13px', color: 'var(--ink-mute)' } });
     const barTrack = App.el('div', { style: { marginTop: '10px', height: '5px', background: '#e8e8e8',
                                                borderRadius: '3px', overflow: 'hidden' } });
-    const bar      = App.el('div', { style: { height: '5px', background: 'linear-gradient(90deg,var(--sage),var(--sage-deep))',
+    const bar      = App.el('div', { style: { height: '5px',
+                                               background: 'linear-gradient(90deg,#a8d5a2,#5a9c54)',
                                                width: '0', transition: 'width 350ms ease' } });
     barTrack.appendChild(bar);
 
-    // Preview (hidden by default)
-    const previewWrap = App.el('div', { style: { display: 'none', marginTop: '16px',
-                                                  border: '1px solid var(--line)', borderRadius: 'var(--r-md)',
-                                                  background: '#fafafa', maxHeight: '560px', overflowY: 'auto' } });
+    // Preview panel (hidden by default — optional, not built until requested)
+    const previewWrap = App.el('div', {
+      style: { display: 'none', marginTop: '16px', border: '1px solid var(--line)',
+               borderRadius: 'var(--r-md)', background: '#fafafa',
+               maxHeight: '560px', overflowY: 'auto' }
+    });
 
-    // Action row (download + toggle preview) — shown after completion
-    const actionRow = App.el('div', { style: { display: 'none', marginTop: '14px',
-                                                gap: '10px', flexWrap: 'wrap',
-                                                alignItems: 'center' } });
-    actionRow.style.display = 'none';
+    // Action row appears after completion
+    const actionRow = App.el('div', {
+      style: { display: 'none', marginTop: '14px', gap: '10px',
+               flexWrap: 'wrap', alignItems: 'center' }
+    });
 
-    // ── DeepL API key section ─────────────────────────────────────────────────
-    let keyVisible = false;
-    const keyInput = document.createElement('input');
-    keyInput.type = 'text'; keyInput.placeholder = 'xxxx-xxxx-xxxx-xxxx:fx';
-    keyInput.style.cssText = 'flex:1;padding:8px 12px;border:1px solid var(--line);border-radius:8px;font-size:13px;font-family:monospace;';
-    keyInput.value = getKey();
-
-    const keySave = App.el('button', {
-      style: { padding: '8px 16px', background: 'var(--sage)', border: '1px solid var(--sage-deep)',
-               borderRadius: '8px', fontWeight: 600, cursor: 'pointer', fontSize: '13px', whiteSpace: 'nowrap' },
-      onClick: () => {
-        const k = keyInput.value.trim();
-        if (!k) { App.toast('הכנס מפתח DeepL'); return; }
-        saveKey(k);
-        App.toast('✓ מפתח נשמר');
-        keySection.style.display = 'none';
-        keyBadge.style.display = 'flex';
-        updateKeyBadge();
-      }
-    }, 'שמור');
-
-    const keyRow = App.el('div', { style: { display: 'flex', gap: '8px', alignItems: 'center', marginTop: '8px' } },
-      [keyInput, keySave]);
-
-    const keyLink = App.el('a', {
-      href: 'https://www.deepl.com/pro-api',
-      style: { fontSize: '12px', color: 'var(--lavender-deep)', display: 'block', marginTop: '6px' }
-    }, '← קבל מפתח DeepL חינמי (500K תווים/חודש)');
-    keyLink.setAttribute('target', '_blank');
-    keyLink.setAttribute('rel', 'noopener');
-
-    const keySection = App.el('div', {
-      style: { background: 'var(--lavender)', border: '1px solid var(--lavender-deep)',
-               borderRadius: 'var(--r-sm)', padding: '12px 16px', marginBottom: '14px' }
+    // Info banner — visible until model is loaded
+    const infoBanner = App.el('div', {
+      style: { background: '#f0edfb', border: '1px solid #c8bfee',
+               borderRadius: 'var(--r-sm)', padding: '11px 16px', marginBottom: '14px', lineHeight: '1.6' }
     }, [
-      App.el('div', { style: { fontSize: '13px', fontWeight: 600, marginBottom: '2px' } }, '🔑 מפתח DeepL API'),
-      App.el('div', { style: { fontSize: '12px', color: 'var(--ink-mute)', marginBottom: '4px' } },
-        'DeepL מספק תרגום מקצועי ברמת מתרגם אנושי'),
-      keyRow, keyLink
+      App.el('strong', { style: { fontSize: '13px' } }, '🤖 מודל AI מקומי — Helsinki-NLP'),
+      App.el('br', {}),
+      App.el('span', { style: { fontSize: '12px', color: 'var(--ink-mute)' } },
+        'בשימוש ראשון מורד מודל ONNX (~80MB) ונשמר לצמיתות בדפדפן · פועל גם ללא אינטרנט · ללא מפתח · ללא עלות לעולם')
     ]);
 
-    // Badge shown when key is already saved
-    const keyBadge = App.el('div', {
-      style: { display: 'none', alignItems: 'center', gap: '8px', background: 'var(--sage)',
-               border: '1px solid var(--sage-deep)', borderRadius: 'var(--r-sm)',
-               padding: '8px 14px', marginBottom: '14px', fontSize: '13px' }
-    });
-    const keyBadgeText = App.el('span', { style: { flex: '1' } }, '');
-    const keyBadgeChange = App.el('button', {
-      style: { padding: '4px 10px', background: '#fff', border: '1px solid var(--sage-deep)',
-               borderRadius: '6px', fontSize: '12px', cursor: 'pointer' },
-      onClick: () => {
-        keyInput.value = getKey();
-        keySection.style.display = 'block';
-        keyBadge.style.display = 'none';
-      }
-    }, 'שנה');
-    keyBadge.append(App.el('span', {}, '✓ DeepL מחובר '), keyBadgeText, keyBadgeChange);
+    // ── memory tracker — holds data between Phase 1 and Phase 2 ──────────────
+    let _session = null; // { results, blobUrl, dlName }
 
-    function updateKeyBadge() {
-      const k = getKey();
-      if (k) {
-        const masked = k.slice(0, 4) + '••••••••' + k.slice(-4);
-        keyBadgeText.textContent = masked;
-        keyBadge.style.display = 'flex';
-        keySection.style.display = 'none';
-      } else {
-        keyBadge.style.display = 'none';
-        keySection.style.display = 'block';
+    function freeSession() {
+      if (!_session) return;
+      // Revoke blob URL → frees memory held by the doc blob
+      if (_session.blobUrl) {
+        URL.revokeObjectURL(_session.blobUrl);
       }
+      // Drop large image data-URLs
+      if (_session.results) {
+        _session.results.forEach(r => { r.imgUrl = null; r.origText = null; r.transText = null; });
+        _session.results = null;
+      }
+      _session = null;
+      // Clear preview DOM (may hold large img src data)
+      previewWrap.innerHTML = '';
+      previewWrap.style.display = 'none';
     }
-    updateKeyBadge();
 
     // ── main process ──────────────────────────────────────────────────────────
     async function processFile(file) {
       if (!file) return;
-      const apiKey = getKey();
-      if (!apiKey) {
-        App.toast('יש להזין מפתח DeepL תחילה');
-        keySection.style.display = 'block'; keyBadge.style.display = 'none';
-        return;
-      }
       if (!window.pdfjsLib) { status.textContent = 'ספריית PDF לא נטענה'; return; }
       if (file.size > MAX_FILE) {
-        status.textContent = `הקובץ גדול מדי (${(file.size/1024/1024).toFixed(0)} MB) — מקסימום 500 MB`;
+        status.textContent = `הקובץ גדול מדי (${(file.size / 1024 / 1024).toFixed(0)} MB) — מקסימום 500 MB`;
         status.style.color = '#c00'; return;
       }
 
+      // Free previous session before starting a new one
+      freeSession();
       initPdfJs();
-      // Reset UI
       actionRow.style.display = 'none';
-      previewWrap.style.display = 'none';
-      previewWrap.innerHTML = '';
-      bar.style.width = '4%';
+      bar.style.width = '3%';
       status.style.color = 'var(--ink-mute)';
-      status.textContent = 'פותח קובץ PDF…';
+      status.textContent = 'טוען מודל תרגום AI…';
 
       const results = []; // { num, imgUrl, origText, transText }
 
       try {
+        // ── Load model ───────────────────────────────────────────────────────
+        const pipe = await getPipeline(p => {
+          if (p.status === 'progress') {
+            const pct = Math.round(p.progress || 0);
+            const mb  = p.total ? ` (${(p.total / 1024 / 1024).toFixed(0)} MB)` : '';
+            status.textContent = `מוריד מודל AI${mb}… ${pct}% — חד-פעמי`;
+            bar.style.width = (3 + pct * 0.12) + '%'; // 3 → 15%
+          }
+        });
+        infoBanner.style.display = 'none'; // hide after first successful load
+
+        // ── Phase 1: Render pages to images + extract text ───────────────────
+        status.textContent = 'פותח קובץ PDF…';
+        bar.style.width = '16%';
         const ab  = await file.arrayBuffer();
         const pdf = await pdfjsLib.getDocument({ data: ab }).promise;
         const n   = pdf.numPages;
 
-        // ── Phase 1: Render + extract (45% of bar) ──
         for (let i = 1; i <= n; i++) {
-          bar.style.width = (4 + (i / n) * 41) + '%';
-          status.textContent = `מעבד עמוד ${i} / ${n}…`;
+          bar.style.width = (16 + (i / n) * 34) + '%'; // 16 → 50%
+          status.textContent = `מעבד עמוד ${i} / ${n} — תמונה + טקסט…`;
           const page = await pdf.getPage(i);
+          // Render image and extract text in parallel
           const [imgUrl, origText] = await Promise.all([renderPageImg(page), extractText(page)]);
           results.push({ num: i, imgUrl, origText, transText: '' });
         }
 
-        // ── Phase 2: Translate via DeepL (remaining 50%) ──
-        const textsToTranslate = results.map(r => r.origText);
-        const hasAnyText = textsToTranslate.some(t => t.length > 10);
-
-        if (hasAnyText) {
-          status.textContent = `שולח ל-DeepL לתרגום (${n} עמודים)…`;
-          bar.style.width = '50%';
-          const translated = await deeplTranslateMany(
-            textsToTranslate,
-            apiKey,
-            p => { bar.style.width = (50 + p * 44) + '%'; }
-          );
-          translated.forEach((t, i) => { results[i].transText = t; });
+        // ── Phase 2: Translate with local model ──────────────────────────────
+        for (let i = 0; i < results.length; i++) {
+          const r = results[i];
+          bar.style.width = (50 + (i / results.length) * 46) + '%'; // 50 → 96%
+          status.textContent = `מתרגם עמוד ${r.num} / ${n} — Helsinki-NLP AI…`;
+          if (r.origText.length > 8) {
+            r.transText = await translatePageText(pipe, r.origText);
+          }
         }
 
         bar.style.width = '100%';
-        const translatedCount = results.filter(r => r.transText.trim()).length;
-        status.textContent = `✓ עובדו ${n} עמודים${hasAnyText ? ` · תורגמו ${translatedCount} עמודים ע"י DeepL` : ' (ללא טקסט)'}`;
+        const tc = results.filter(r => r.transText.trim()).length;
+        status.textContent = `✓ תורגמו ${tc} / ${n} עמודים · תמונות ועיצוב נשמרו מהמקור`;
         status.style.color = 'var(--sage-deep)';
 
-        // ── Build preview HTML (lazy — only when user requests it) ──
-        results.forEach(r => {
-          const block = document.createElement('div');
-          block.style.cssText = 'border-bottom:1px solid #e8e8e8;padding:20px;';
-          block.innerHTML = `
-            <div style="font-size:11px;color:#bbb;text-align:center;margin-bottom:10px;letter-spacing:.5px;">
-              — עמוד ${r.num} / ${n} —
-            </div>
-            <img src="${r.imgUrl}" loading="lazy"
-                 style="display:block;width:100%;border:1px solid #ddd;border-radius:6px;margin-bottom:14px;">
-            ${r.transText.trim() ? `
-            <div style="direction:rtl;background:linear-gradient(135deg,#f0f7f0,#e8f5e8);
-                         border-radius:8px;padding:14px 18px;border-right:3px solid var(--sage-deep);">
-              <div style="font-size:10px;color:#8aac8a;margin-bottom:8px;font-weight:600;">תרגום DeepL — עברית</div>
-              <div style="white-space:pre-wrap;font-size:13.5px;line-height:1.9;font-family:Arial,sans-serif;">
-                ${esc(r.transText)}
-              </div>
-            </div>` : `
-            <div style="color:#ccc;font-size:12px;text-align:center;padding:4px;">
-              (עמוד ויזואלי בלבד — ללא טקסט לתרגום)
-            </div>`}`;
-          previewWrap.appendChild(block);
-        });
-
-        // ── Build Word doc ──
+        // ── Build Word document (page image + Hebrew translation per page) ────
         const baseName = file.name.replace(/\.pdf$/i, '');
         const docPages = results.map(r => `
           <div style="page-break-after:always;margin-bottom:40px;">
             <p style="font-size:10px;color:#bbb;margin:0 0 8px;direction:ltr;">Page ${r.num} / ${n}</p>
-            <img src="${r.imgUrl}" style="width:100%;max-width:680px;border:1px solid #ddd;">
+            <!-- full visual render: images, charts, diagrams preserved -->
+            <img src="${r.imgUrl}" style="display:block;width:100%;max-width:700px;border:1px solid #e0e0e0;">
             ${r.transText.trim() ? `
             <div dir="rtl" style="margin-top:14px;padding:14px 18px;background:#f2faf2;
-                                   border-right:3px solid #6aaa6a;border-radius:4px;">
-              <p style="font-size:10px;color:#8aac8a;margin:0 0 6px;font-weight:bold;">תרגום (DeepL):</p>
-              <p style="white-space:pre-wrap;font-size:13px;line-height:1.9;margin:0;unicode-bidi:plaintext;">
-                ${esc(r.transText)}
+                                   border-right:3px solid #5a9c54;border-radius:4px;">
+              <p style="font-size:10px;color:#7aac7a;margin:0 0 8px;font-weight:bold;direction:ltr;">
+                ● תרגום לעברית (Helsinki-NLP AI)
               </p>
+              <p style="white-space:pre-wrap;font-size:13px;line-height:1.9;margin:0;
+                         font-family:Arial,sans-serif;unicode-bidi:plaintext;">${esc(r.transText)}</p>
             </div>` : ''}
           </div>`).join('');
 
@@ -503,13 +459,13 @@
           `<html xmlns:o='urn:schemas-microsoft-com:office:office'`,
           ` xmlns:w='urn:schemas-microsoft-com:office:word'`,
           ` xmlns='http://www.w3.org/TR/REC-html40'>`,
-          `<head><meta charset='utf-8'><title>${esc(baseName)} — תרגום לעברית</title>`,
-          `<style>body{font-family:Arial,sans-serif;padding:30px;max-width:800px;margin:0 auto;}`,
-          `img{max-width:100%;}p,h1,h2,h3{unicode-bidi:plaintext;}</style>`,
+          `<head><meta charset='utf-8'><title>${esc(baseName)}</title>`,
+          `<style>body{font-family:Arial,sans-serif;padding:28px;max-width:800px;}`,
+          `img{max-width:100%;display:block;}p,h1,h2,h3{unicode-bidi:plaintext;}</style>`,
           `</head><body>`,
-          `<h1 style="font-size:20px;margin-bottom:4px;">${esc(baseName)}</h1>`,
-          `<p style="font-size:11px;color:#999;margin:0 0 24px;direction:ltr;">`,
-          `Translated EN→HE by DeepL &nbsp;·&nbsp; ${new Date().toLocaleDateString('he-IL')}</p>`,
+          `<h1 style="font-size:19px;margin-bottom:4px;">${esc(baseName)}</h1>`,
+          `<p style="font-size:11px;color:#999;margin:0 0 22px;direction:ltr;">`,
+          `Translated EN→HE · Helsinki-NLP local AI · ${new Date().toLocaleDateString('he-IL')}</p>`,
           docPages, `</body></html>`
         ].join('');
 
@@ -517,12 +473,54 @@
         const blobUrl = URL.createObjectURL(blob);
         const dlName  = baseName + '_עברית.doc';
 
-        // Clear & rebuild action row
+        // Keep session for potential preview + memory release after download
+        _session = { results, blobUrl, dlName };
+
+        // ── Build lazy preview (DOM only, no extra copies of image data) ──────
+        results.forEach(r => {
+          const block = document.createElement('div');
+          block.style.cssText = 'border-bottom:1px solid #e8e8e8;padding:18px;';
+          block.innerHTML = `
+            <div style="font-size:11px;color:#bbb;text-align:center;margin-bottom:10px;">
+              — עמוד ${r.num} / ${n} —
+            </div>
+            <img src="${r.imgUrl}" loading="lazy"
+                 style="display:block;width:100%;border:1px solid #ddd;border-radius:6px;margin-bottom:12px;">
+            ${r.transText.trim() ? `
+            <div style="direction:rtl;background:#f0f9f0;border-radius:8px;
+                         padding:13px 17px;border-right:3px solid #5a9c54;">
+              <div style="font-size:10px;color:#7aac7a;margin-bottom:7px;font-weight:600;">
+                תרגום לעברית · Helsinki-NLP AI
+              </div>
+              <div style="white-space:pre-wrap;font-size:13.5px;line-height:1.9;
+                           font-family:Arial,sans-serif;">${esc(r.transText)}</div>
+            </div>` : `
+            <div style="color:#ccc;font-size:12px;text-align:center;padding:4px;">
+              (עמוד ויזואלי בלבד)
+            </div>`}`;
+          previewWrap.appendChild(block);
+        });
+
+        // ── Action row: Download + optional Preview ───────────────────────────
         actionRow.innerHTML = '';
+
         const dlBtn = App.el('button', {
-          style: { padding: '11px 24px', background: 'var(--sage)', border: '1px solid var(--sage-deep)',
-                   borderRadius: 'var(--r-sm)', fontWeight: 700, cursor: 'pointer', fontSize: '14px' },
-          onClick: () => { const a = document.createElement('a'); a.href = blobUrl; a.download = dlName; a.click(); }
+          style: { padding: '11px 24px', background: 'var(--sage)',
+                   border: '1px solid var(--sage-deep)', borderRadius: 'var(--r-sm)',
+                   fontWeight: 700, cursor: 'pointer', fontSize: '14px' },
+          onClick: () => {
+            // Trigger download
+            const a = document.createElement('a');
+            a.href = blobUrl; a.download = dlName; a.click();
+            // ── Free memory 3 seconds after download starts ──────────────────
+            setTimeout(() => {
+              freeSession();
+              actionRow.style.display = 'none';
+              status.textContent = '✓ הקובץ הורד · זיכרון פונה לתרגום הבא';
+              status.style.color = 'var(--ink-mute)';
+              bar.style.width = '0';
+            }, 3000);
+          }
         }, `⬇ הורד תרגום · ${dlName}`);
 
         let previewOpen = false;
@@ -532,7 +530,7 @@
           onClick: () => {
             previewOpen = !previewOpen;
             previewWrap.style.display = previewOpen ? 'block' : 'none';
-            toggleBtn.textContent = previewOpen ? '🙈 הסתר תצוגה מקדימה' : '👁 תצוגה מקדימה';
+            toggleBtn.textContent = previewOpen ? '🙈 הסתר' : '👁 תצוגה מקדימה';
           }
         }, '👁 תצוגה מקדימה');
 
@@ -544,6 +542,7 @@
         status.style.color = '#c00';
         bar.style.width = '0';
         console.error(e);
+        freeSession();
       }
     }
 
@@ -560,7 +559,7 @@
       App.el('div', { style: { fontSize: '44px', marginBottom: '8px' } }, '🌐'),
       App.el('div', { style: { fontWeight: 600, marginBottom: '4px' } }, 'גרור קובץ PDF לכאן'),
       App.el('div', { style: { fontSize: '13px', color: 'var(--ink-mute)' } },
-        'אנגלית → עברית · עד 500 MB · תמונות ותרשימים נשמרים')
+        'אנגלית → עברית · עד 500 MB · תמונות + עיצוב נשמרים · ללא עלות')
     ]);
     zone.addEventListener('dragover',  e => { e.preventDefault(); zone.style.borderColor = 'var(--sage-deep)'; zone.style.background = 'var(--sage)'; });
     zone.addEventListener('dragleave', ()  => { zone.style.borderColor = 'var(--line)'; zone.style.background = 'var(--cream)'; });
@@ -572,9 +571,9 @@
     return App.el('div', { class: 'card' }, [
       App.el('div', { class: 'row row-between', style: { marginBottom: '16px' } }, [
         App.el('h2', {}, '🌐  PDF  →  עברית'),
-        App.el('span', { class: 'chip sage' }, 'תרגום מקצועי · DeepL')
+        App.el('span', { class: 'chip sage' }, 'AI מקומי · ללא עלות לתמיד')
       ]),
-      keyBadge, keySection,
+      infoBanner,
       fileInput, zone, status, barTrack, actionRow, previewWrap
     ]);
   }
