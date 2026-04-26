@@ -907,13 +907,41 @@
       document.head.appendChild(printStyle);
       document.body.appendChild(printDiv);
 
-      // 3. Show instruction toast, then print
-      App.toast('בחלון ההדפסה — בחר "שמור כ-PDF" כיעד');
-      setTimeout(() => {
-        window.print();
-        // Clean up after print dialog closes (slight delay to not interrupt rendering)
-        setTimeout(() => { printStyle.remove(); printDiv.remove(); }, 1000);
-      }, 300);
+      // 3. Show instruction modal BEFORE opening print dialog
+      const modal = document.createElement('div');
+      modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:center;justify-content:center;';
+      modal.innerHTML = `
+        <div style="background:#fff;border-radius:18px;padding:32px 36px;max-width:420px;width:90%;direction:rtl;font-family:Arial,sans-serif;box-shadow:0 20px 60px rgba(0,0,0,.3);">
+          <div style="font-size:36px;text-align:center;margin-bottom:12px;">📄</div>
+          <h2 style="margin:0 0 16px;font-size:20px;text-align:center;color:#3b3a3a;">ייצוא ל-PDF</h2>
+          <p style="margin:0 0 14px;color:#555;font-size:14px;line-height:1.6;">בחלון ההדפסה שייפתח, עשה את הצעדים הבאים:</p>
+          <ol style="margin:0 0 20px;padding-right:20px;color:#333;font-size:14px;line-height:2;">
+            <li>לחץ על <strong>"יעד"</strong> (Destination)</li>
+            <li>בחר <strong>"שמור כ-PDF"</strong> או <strong>"Microsoft Print to PDF"</strong></li>
+            <li>לחץ <strong>"שמור"</strong></li>
+          </ol>
+          <div style="background:#f0f7ff;border-radius:10px;padding:10px 14px;margin-bottom:20px;font-size:13px;color:#444;display:flex;gap:10px;align-items:center;">
+            <span style="font-size:20px;">💡</span>
+            <span>בכרום ובאדג׳ ניתן גם ללחוץ <strong>Ctrl+Shift+P</strong> ישירות מהאתר</span>
+          </div>
+          <button id="nb-pdf-go" style="width:100%;padding:13px;background:linear-gradient(135deg,#FADADD,#E6DDF4);border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;font-family:Arial;color:#3b3a3a;">
+            הבנתי — פתח חלון הדפסה ▶
+          </button>
+        </div>`;
+      document.body.appendChild(modal);
+
+      document.getElementById('nb-pdf-go').addEventListener('click', () => {
+        modal.remove();
+        setTimeout(() => {
+          window.print();
+          setTimeout(() => { printStyle.remove(); printDiv.remove(); }, 1500);
+        }, 150);
+      });
+
+      // Also close modal on backdrop click
+      modal.addEventListener('click', e => {
+        if (e.target === modal) modal.remove();
+      });
       return;
     }
 
