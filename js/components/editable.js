@@ -63,6 +63,7 @@
     });
     fig.appendChild(delBtn);
     snapFigToGrid(fig);
+    snapFigToPage(fig, editor);
 
     const sel = window.getSelection();
     if (sel && sel.rangeCount && editor.contains(sel.anchorNode)) {
@@ -80,6 +81,45 @@
       editor.appendChild(fig);
       editor.appendChild(document.createTextNode(' '));
     }
+  }
+
+  // After inserting a figure, ensure it doesn't straddle a page boundary.
+  // If the figure crosses a 1100px page separator, insert a spacer before it
+  // to push it fully onto the next page. Also re-checks after resize.
+  function snapFigToPage(fig, editor) {
+    const PAGE_H = 1100;
+    const MIN_MARGIN = 40; // px — don't push if only a tiny overflow
+
+    const doSnap = () => {
+      // Remove any existing spacer we inserted for this figure
+      const prev = fig.previousElementSibling;
+      if (prev && prev.classList.contains('nb-page-spacer')) prev.remove();
+
+      const editorTop = editor.getBoundingClientRect().top + window.scrollY
+                      - editor.scrollTop;
+      const figTop    = fig.getBoundingClientRect().top + window.scrollY - editorTop;
+      const figH      = fig.getBoundingClientRect().height;
+      const figBottom = figTop + figH;
+
+      const pageIndex    = Math.floor(figTop / PAGE_H);
+      const pageBottom   = (pageIndex + 1) * PAGE_H;
+
+      // Figure crosses the page boundary AND it fits on the next page
+      if (figBottom > pageBottom - MIN_MARGIN && figH < PAGE_H) {
+        const pushPx = pageBottom - figTop + 8; // 8px buffer after separator
+        const spacer = document.createElement('div');
+        spacer.className = 'nb-page-spacer';
+        spacer.style.cssText = `display:block;height:${pushPx}px;line-height:0;`;
+        fig.before(spacer);
+      }
+    };
+
+    const img = fig.querySelector('img');
+    if (img) {
+      if (img.complete && img.naturalHeight > 0) requestAnimationFrame(doSnap);
+      else img.addEventListener('load', () => requestAnimationFrame(doSnap));
+    }
+    if (window.ResizeObserver) new ResizeObserver(() => requestAnimationFrame(doSnap)).observe(fig);
   }
 
   function snapFigToGrid(fig) {
@@ -101,7 +141,7 @@
     if (window.ResizeObserver) new ResizeObserver(snap).observe(fig);
   }
 
-  function addDeleteButtonToFig(fig, save) {
+  function addDeleteButtonToFig(fig, save, editor) {
     if (fig.querySelector('.nb-img-del')) return; // already has one
     const delBtn = document.createElement('button');
     delBtn.className = 'nb-img-del';
@@ -115,11 +155,12 @@
     });
     fig.appendChild(delBtn);
     snapFigToGrid(fig);
+    if (editor) snapFigToPage(fig, editor);
   }
 
   function attachImageBehaviors(editor, save) {
-    // Add delete button to any existing figures (loaded from storage)
-    editor.querySelectorAll('figure.nb-img').forEach(fig => addDeleteButtonToFig(fig, save));
+    // Add delete button + page-snap to any existing figures (loaded from storage)
+    editor.querySelectorAll('figure.nb-img').forEach(fig => addDeleteButtonToFig(fig, save, editor));
     // Paste images from clipboard
     editor.addEventListener('paste', (e) => {
       const items = (e.clipboardData || window.clipboardData)?.items || [];

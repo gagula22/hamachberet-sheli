@@ -794,22 +794,35 @@
       block.querySelectorAll('.nb-mood-btn').forEach(b =>
         b.classList.toggle('selected', b.dataset.level === level)
       );
+      // Fix: textarea value is a JS property, not a DOM attribute — use textContent
       const ta = block.querySelector('.nb-mood-note');
-      if (ta) { ta.setAttribute('value', block.dataset.note || ''); }
+      if (ta) {
+        const noteText = block.dataset.note || '';
+        ta.textContent = noteText;          // makes it render in exported HTML
+        ta.setAttribute('value', noteText); // fallback for some renderers
+      }
     });
+    // Fix: center figures/images in exported document
+    cloned.querySelectorAll('figure.nb-img').forEach(fig => {
+      fig.style.display = 'block';
+      fig.style.margin  = '16px auto';
+      fig.style.textAlign = 'center';
+    });
+    // Remove UI-only elements (page spacers, delete buttons, resize handles)
+    cloned.querySelectorAll('.nb-page-spacer, .nb-img-del').forEach(el => el.remove());
     const body = cloned.innerHTML;
     const baseStyles = `
       body{font-family:Arial,sans-serif;direction:rtl;padding:40px;max-width:820px;margin:0 auto;color:#3b3a3a;}
       h1{font-size:28px;margin-bottom:24px;}
-      img{max-width:100%;height:auto;}
+      img{max-width:100%;height:auto;display:block;margin:0 auto;}
       .nb-mood-embed{border:2px solid #f0c4cc;border-radius:12px;padding:16px;margin:16px 0;background:#fffaf8;}
       .nb-mood-embed-header{font-weight:600;font-size:12px;color:#888;letter-spacing:.05em;margin-bottom:10px;display:flex;gap:6px;align-items:center;}
       .nb-mood-embed-row{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:12px;}
       .nb-mood-embed-q{font-size:15px;font-weight:500;}
       .nb-mood-btn{width:36px;height:36px;border-radius:50%;background:#f5f0ea;font-size:20px;border:1px solid #ddd;cursor:default;}
       .nb-mood-btn.selected{background:#fadadd;border-color:#e5a8b0;box-shadow:0 2px 6px rgba(0,0,0,.12);}
-      .nb-mood-note{width:100%;border:1px solid #ddd;border-radius:8px;padding:8px 12px;font-family:Arial,sans-serif;resize:none;box-sizing:border-box;}
-      figure{margin:12px 0;} figure img{max-width:100%;}`;
+      .nb-mood-note{width:100%;border:1px solid #ddd;border-radius:8px;padding:8px 12px;font-family:Arial,sans-serif;resize:none;box-sizing:border-box;min-height:60px;}
+      figure{display:block;margin:16px auto;text-align:center;} figure img{max-width:100%;height:auto;display:block;margin:0 auto;}`;
 
     if (format === 'pdf') {
       const win = window.open('', '_blank');
