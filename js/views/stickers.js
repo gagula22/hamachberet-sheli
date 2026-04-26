@@ -219,8 +219,8 @@
   }
 
   // ── Tool 3: PDF → עברית ──────────────────────────────────────────────────
-  // מודל Helsinki-NLP / Xenova opus-mt-en-he — פועל 100% בדפדפן
-  // ללא עלות לתמיד · ללא שרת · ללא מפתח API
+  // מודל NLLB-200 (Meta AI) — פועל 100% בדפדפן, ללא עלות לתמיד
+  // ללא שרת · ללא מפתח API · תומך 200 שפות
   // תמונות + עיצוב נשמרים (כל עמוד מרונדר כתמונה מלאה)
   // ניהול זיכרון: פינוי אוטומטי לאחר שמירה
   function buildPdfTranslator() {
@@ -276,7 +276,10 @@
           );
           env.allowLocalModels = false;
           env.useBrowserCache  = true;  // cache ONNX weights in IndexedDB
-          return await pipeline('translation', 'Xenova/opus-mt-en-he', {
+          // NLLB-200 distilled 600M — verified public ONNX model, supports 200 languages
+          // quantized=true → uses int8 ONNX (~150MB instead of ~600MB)
+          return await pipeline('translation', 'Xenova/nllb-200-distilled-600M', {
+            quantized: true,
             progress_callback: onProgress
           });
         })();
@@ -289,8 +292,12 @@
       if (!text.trim()) return '';
       const chunks  = splitChunks(text);
       if (!chunks.length) return '';
-      // Batch all chunks in one call (faster than sequential)
-      const outputs = await pipe(chunks, { max_new_tokens: 512 });
+      // NLLB requires explicit source/target language codes
+      const outputs = await pipe(chunks, {
+        src_lang: 'eng_Latn',   // English (Latin script)
+        tgt_lang: 'heb_Hebr',   // Hebrew (Hebrew script)
+        max_new_tokens: 512
+      });
       return outputs.map(o => o.translation_text).join(' ');
     }
 
@@ -349,10 +356,10 @@
       style: { background: '#f0edfb', border: '1px solid #c8bfee',
                borderRadius: 'var(--r-sm)', padding: '11px 16px', marginBottom: '14px', lineHeight: '1.6' }
     }, [
-      App.el('strong', { style: { fontSize: '13px' } }, '🤖 מודל AI מקומי — Helsinki-NLP'),
+      App.el('strong', { style: { fontSize: '13px' } }, '🤖 מודל AI מקומי — Meta NLLB-200 (תומך 200 שפות)'),
       App.el('br', {}),
       App.el('span', { style: { fontSize: '12px', color: 'var(--ink-mute)' } },
-        'בשימוש ראשון מורד מודל ONNX (~80MB) ונשמר לצמיתות בדפדפן · פועל גם ללא אינטרנט · ללא מפתח · ללא עלות לעולם')
+        'בשימוש ראשון מורד מודל ONNX מכווץ (~150MB) ונשמר לצמיתות בדפדפן · פועל גם ללא אינטרנט · ללא מפתח · ללא עלות לעולם')
     ]);
 
     // ── memory tracker — holds data between Phase 1 and Phase 2 ──────────────
@@ -426,7 +433,7 @@
         for (let i = 0; i < results.length; i++) {
           const r = results[i];
           bar.style.width = (50 + (i / results.length) * 46) + '%'; // 50 → 96%
-          status.textContent = `מתרגם עמוד ${r.num} / ${n} — Helsinki-NLP AI…`;
+          status.textContent = `מתרגם עמוד ${r.num} / ${n} — Meta NLLB-200 AI…`;
           if (r.origText.length > 8) {
             r.transText = await translatePageText(pipe, r.origText);
           }
@@ -448,7 +455,7 @@
             <div dir="rtl" style="margin-top:14px;padding:14px 18px;background:#f2faf2;
                                    border-right:3px solid #5a9c54;border-radius:4px;">
               <p style="font-size:10px;color:#7aac7a;margin:0 0 8px;font-weight:bold;direction:ltr;">
-                ● תרגום לעברית (Helsinki-NLP AI)
+                ● תרגום לעברית (Meta NLLB-200 AI)
               </p>
               <p style="white-space:pre-wrap;font-size:13px;line-height:1.9;margin:0;
                          font-family:Arial,sans-serif;unicode-bidi:plaintext;">${esc(r.transText)}</p>
@@ -465,7 +472,7 @@
           `</head><body>`,
           `<h1 style="font-size:19px;margin-bottom:4px;">${esc(baseName)}</h1>`,
           `<p style="font-size:11px;color:#999;margin:0 0 22px;direction:ltr;">`,
-          `Translated EN→HE · Helsinki-NLP local AI · ${new Date().toLocaleDateString('he-IL')}</p>`,
+          `Translated EN→HE · Meta NLLB-200 local AI · ${new Date().toLocaleDateString('he-IL')}</p>`,
           docPages, `</body></html>`
         ].join('');
 
@@ -490,7 +497,7 @@
             <div style="direction:rtl;background:#f0f9f0;border-radius:8px;
                          padding:13px 17px;border-right:3px solid #5a9c54;">
               <div style="font-size:10px;color:#7aac7a;margin-bottom:7px;font-weight:600;">
-                תרגום לעברית · Helsinki-NLP AI
+                תרגום לעברית · Meta NLLB-200 AI
               </div>
               <div style="white-space:pre-wrap;font-size:13.5px;line-height:1.9;
                            font-family:Arial,sans-serif;">${esc(r.transText)}</div>
