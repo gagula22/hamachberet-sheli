@@ -36,6 +36,13 @@
       this.render();
     },
 
+    syncTopbarHeight() {
+      const topbar = document.querySelector('.topbar');
+      if (!topbar) return;
+      const h = Math.ceil(topbar.getBoundingClientRect().height);
+      if (h > 0) document.documentElement.style.setProperty('--topbar-h', h + 'px');
+    },
+
     bindChrome() {
       Sidebar.render(SECTIONS);
       const quote = QUOTES[Math.floor(Math.random() * QUOTES.length)];
@@ -127,4 +134,14 @@
   };
 
   window.App = App;
+
+  // Keep --topbar-h accurate so .nb-toolbar sticky offset stays correct
+  document.addEventListener('DOMContentLoaded', () => {
+    App.syncTopbarHeight();
+    window.addEventListener('resize', () => App.syncTopbarHeight());
+    if (window.ResizeObserver) {
+      const topbar = document.querySelector('.topbar');
+      if (topbar) new ResizeObserver(() => App.syncTopbarHeight()).observe(topbar);
+    }
+  });
 })();
