@@ -10,7 +10,7 @@
     { id: 'water',     title: 'שתייה ושינה',     icon: '💧', color: 'sky',      desc: 'שתייה ומנוחה' },
     { id: 'budget',    title: 'תקציב',           icon: '💰', color: 'butter',   desc: 'עקוב אחרי הכסף' },
     { id: 'goals',     title: 'מטרות',           icon: '🎯', color: 'blush',    desc: 'לחלום, להגשים' },
-    { id: 'stickers',  title: 'מדבקות',          icon: '✨', color: 'lavender', desc: 'קישוטים לעמודים שלך' }
+    { id: 'stickers',  title: 'כלים',             icon: '🛠️', color: 'lavender', desc: 'כלים שימושיים' }
   ];
 
   const LEGACY_REDIRECTS = { daily: 'calendar/daily', weekly: 'calendar/weekly', monthly: 'calendar/monthly' };
