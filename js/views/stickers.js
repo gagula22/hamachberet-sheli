@@ -225,11 +225,260 @@
     ]);
   }
 
+  // ── Tool 3: PDF → עברית (תרגום מאנגלית) ─────────────────────────────────
+  function buildPdfTranslator() {
+    const MAX_FILE   = 500 * 1024 * 1024; // 500 MB
+    const CHUNK_SIZE = 1800;              // chars per API request (safe URL length)
+    const DELAY_MS   = 120;              // ms between API calls (rate-limit courtesy)
+
+    const status  = App.el('p', { style: { margin: '10px 0 0', fontSize: '13px', color: 'var(--ink-mute)' } });
+    const bar     = App.el('div', {
+      style: { height: '4px', background: 'var(--sage)', borderRadius: '2px',
+               width: '0', transition: 'width 300ms', marginTop: '10px' }
+    });
+    const preview = App.el('div', {
+      style: { display: 'none', marginTop: '16px', border: '1px solid var(--line)',
+               borderRadius: 'var(--r-md)', padding: '20px', background: '#fff',
+               maxHeight: '420px', overflowY: 'auto', lineHeight: '1.7', fontSize: '13px' }
+    });
+    let downloadBtn = null;
+
+    // ── helpers ──────────────────────────────────────────────────────────────
+    function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+    // Split text into ≤CHUNK_SIZE segments, breaking at sentence ends if possible
+    function splitChunks(text) {
+      const chunks = [];
+      let pos = 0;
+      while (pos < text.length) {
+        let end = pos + CHUNK_SIZE;
+        if (end >= text.length) { chunks.push(text.slice(pos)); break; }
+        // Try to break at a sentence boundary within the last 400 chars
+        let cut = -1;
+        for (let i = end; i > end - 400 && i > pos; i--) {
+          if ('.!?\n'.includes(text[i])) { cut = i + 1; break; }
+        }
+        if (cut === -1) {
+          // Fall back to word boundary
+          for (let i = end; i > end - 200 && i > pos; i--) {
+            if (text[i] === ' ') { cut = i + 1; break; }
+          }
+        }
+        if (cut === -1) cut = end;
+        chunks.push(text.slice(pos, cut));
+        pos = cut;
+      }
+      return chunks;
+    }
+
+    async function translateChunk(text) {
+      if (!text.trim()) return text;
+      const url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=he&dt=t&q=' +
+                  encodeURIComponent(text);
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      // data[0] = array of [translatedSegment, originalSegment, ...]
+      return data[0].map(seg => seg[0]).join('');
+    }
+
+    async function translateFull(text) {
+      const chunks = splitChunks(text);
+      const parts  = [];
+      for (let i = 0; i < chunks.length; i++) {
+        parts.push(await translateChunk(chunks[i]));
+        if (i < chunks.length - 1) await sleep(DELAY_MS);
+      }
+      return parts.join('');
+    }
+
+    // ── file processing ───────────────────────────────────────────────────────
+    let _cancelled = false;
+
+    async function processFile(file) {
+      if (!file) return;
+      if (!window.pdfjsLib) { status.textContent = 'ספריית PDF לא נטענה'; return; }
+      if (file.size > MAX_FILE) {
+        status.textContent = `הקובץ גדול מדי (${(file.size/1024/1024).toFixed(0)} MB) — מקסימום 500 MB`;
+        status.style.color = '#c00'; return;
+      }
+
+      _cancelled = false;
+      initPdfJs();
+      preview.style.display = 'none';
+      preview.innerHTML = '';
+      if (downloadBtn) { downloadBtn.remove(); downloadBtn = null; }
+      bar.style.width = '5%';
+      status.style.color = 'var(--ink-mute)';
+      status.textContent = 'קורא קובץ PDF…';
+
+      let allTranslatedHtml = '';
+
+      try {
+        const ab  = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: ab }).promise;
+        const n   = pdf.numPages;
+
+        // ── Phase 1: extract text ──
+        const pages = [];
+        for (let i = 1; i <= n; i++) {
+          if (_cancelled) return;
+          bar.style.width = (5 + (i / n) * 25) + '%';
+          status.textContent = `קורא עמוד ${i} / ${n}…`;
+          const pg      = await pdf.getPage(i);
+          const content = await pg.getTextContent();
+          // Reconstruct lines: items with hasEOL=true end a visual line
+          let pageText = '';
+          for (const item of content.items) {
+            pageText += item.str;
+            if (item.hasEOL) pageText += '\n';
+            else if (item.str && !item.str.endsWith(' ')) pageText += ' ';
+          }
+          pages.push({ num: i, text: pageText.trim() });
+        }
+
+        const textPages = pages.filter(p => p.text.length > 10);
+        if (textPages.length === 0) {
+          status.textContent = '⚠️ לא נמצא טקסט ב-PDF — ייתכן שמדובר ב-PDF מסרוק (תמונות בלבד)';
+          status.style.color = '#c00'; bar.style.width = '0'; return;
+        }
+
+        // ── Phase 2: translate page by page ──
+        for (let i = 0; i < textPages.length; i++) {
+          if (_cancelled) return;
+          const { num, text } = textPages[i];
+          const progress = 30 + (i / textPages.length) * 65;
+          bar.style.width = progress + '%';
+          status.textContent = `מתרגם עמוד ${num} / ${n}…`;
+
+          let translated;
+          try {
+            translated = await translateFull(text);
+          } catch (e) {
+            translated = `[שגיאת תרגום: ${e.message}]`;
+          }
+
+          // Render page in preview (two-column: EN left, HE right)
+          const origEsc = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+          const tranEsc = translated.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+          const pageHtml = `
+            <div style="margin-bottom:28px;border-bottom:1px solid #eee;padding-bottom:20px;">
+              <div style="font-size:11px;color:#aaa;margin-bottom:8px;text-align:center;">— עמוד ${num} —</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                <div style="direction:ltr;background:#f8f8f8;border-radius:8px;padding:10px 12px;">
+                  <div style="font-size:10px;color:#bbb;margin-bottom:4px;letter-spacing:.5px;">ENGLISH</div>
+                  <div style="white-space:pre-wrap;font-size:12.5px;line-height:1.75;">${origEsc}</div>
+                </div>
+                <div style="direction:rtl;background:#f0f7f0;border-radius:8px;padding:10px 12px;">
+                  <div style="font-size:10px;color:#bbb;margin-bottom:4px;letter-spacing:.5px;">עברית</div>
+                  <div style="white-space:pre-wrap;font-size:12.5px;line-height:1.75;">${tranEsc}</div>
+                </div>
+              </div>
+            </div>`;
+          preview.innerHTML += pageHtml;
+          preview.style.display = 'block';
+          allTranslatedHtml += pageHtml;
+        }
+
+        bar.style.width = '100%';
+        status.textContent = `✓ תורגמו ${textPages.length} עמודים`;
+        status.style.color = 'var(--sage-deep)';
+
+        // ── Build downloadable Word doc (Hebrew only) ──
+        const hebrewOnlyHtml = textPages.map((p, i) => {
+          const t = allTranslatedHtml; // we'll rebuild from pages below
+          return '';
+        }).join('');
+
+        // Rebuild clean Hebrew doc from translated pages (re-translate not needed — data is in DOM)
+        // Extract translated text from preview HTML via DOMParser
+        const dp   = new DOMParser();
+        const docP = dp.parseFromString(allTranslatedHtml, 'text/html');
+        const heNodes = docP.querySelectorAll('[style*="direction:rtl"] > div:last-child');
+        let heOnlyBody = '';
+        let pageIdx = 0;
+        docP.querySelectorAll('[style*="margin-bottom:28px"]').forEach((block, idx) => {
+          const heDiv = block.querySelector('[style*="direction:rtl"] > div:last-child');
+          const heText = heDiv ? heDiv.textContent : '';
+          heOnlyBody += `<h3 style="font-size:13px;color:#999;margin:20px 0 6px;direction:ltr;">Page ${textPages[idx] ? textPages[idx].num : idx+1}</h3>` +
+                        `<p style="direction:rtl;unicode-bidi:plaintext;white-space:pre-wrap;line-height:1.9;font-size:14px;margin:0 0 18px;">${heText.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p>`;
+        });
+
+        const baseName = file.name.replace(/\.pdf$/i, '');
+        const docHtml  = [
+          `<html xmlns:o='urn:schemas-microsoft-com:office:office'`,
+          ` xmlns:w='urn:schemas-microsoft-com:office:word'`,
+          ` xmlns='http://www.w3.org/TR/REC-html40'>`,
+          `<head><meta charset='utf-8'><title>${baseName} — תרגום</title>`,
+          `<style>body{font-family:Arial,sans-serif;padding:40px;max-width:820px;margin:0 auto;}`,
+          `p,h1,h2,h3{unicode-bidi:plaintext;}</style>`,
+          `</head><body dir="rtl">`,
+          `<h1 style="font-size:22px;margin-bottom:4px;">${baseName}</h1>`,
+          `<p style="font-size:12px;color:#999;margin:0 0 28px;direction:ltr;">Translated from English • ${new Date().toLocaleDateString('he-IL')}</p>`,
+          heOnlyBody,
+          `</body></html>`
+        ].join('');
+
+        const blob     = new Blob(['﻿', docHtml], { type: 'application/msword' });
+        const blobUrl  = URL.createObjectURL(blob);
+        const dlName   = baseName + '_עברית.doc';
+
+        downloadBtn = App.el('button', {
+          class: 'btn',
+          style: { marginTop: '14px', background: 'var(--sage)', border: '1px solid var(--sage-deep)',
+                   borderRadius: 'var(--r-sm)', padding: '10px 22px', fontWeight: 600, cursor: 'pointer' },
+          onClick: () => {
+            const a = document.createElement('a');
+            a.href = blobUrl; a.download = dlName; a.click();
+          }
+        }, `⬇ הורד תרגום · ${dlName}`);
+        preview.after(downloadBtn);
+
+      } catch (e) {
+        status.textContent = 'שגיאה: ' + e.message;
+        status.style.color = '#c00';
+        bar.style.width = '0';
+      }
+    }
+
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file'; fileInput.accept = '.pdf'; fileInput.style.display = 'none';
+    fileInput.addEventListener('change', () => processFile(fileInput.files[0]));
+
+    const zone = App.el('div', {
+      style: { border: '2px dashed var(--line)', borderRadius: 'var(--r-md)',
+               padding: '36px 20px', textAlign: 'center', cursor: 'pointer',
+               transition: 'all 180ms', background: 'var(--cream)' },
+      onClick: () => fileInput.click()
+    }, [
+      App.el('div', { style: { fontSize: '44px', marginBottom: '8px' } }, '🌐'),
+      App.el('div', { style: { fontWeight: 600, marginBottom: '4px' } }, 'גרור קובץ PDF לכאן'),
+      App.el('div', { style: { fontSize: '13px', color: 'var(--ink-mute)' } }, 'או לחץ לבחירה · עד 500 MB')
+    ]);
+    zone.addEventListener('dragover',  e => { e.preventDefault(); zone.style.borderColor = 'var(--sage-deep)'; zone.style.background = 'var(--sage)'; });
+    zone.addEventListener('dragleave', ()  => { zone.style.borderColor = 'var(--line)'; zone.style.background = 'var(--cream)'; });
+    zone.addEventListener('drop', e => {
+      e.preventDefault(); zone.style.borderColor = 'var(--line)'; zone.style.background = 'var(--cream)';
+      processFile(e.dataTransfer.files[0]);
+    });
+
+    return App.el('div', { class: 'card' }, [
+      App.el('div', { class: 'row row-between', style: { marginBottom: '16px' } }, [
+        App.el('h2', {}, '🌐  PDF  →  עברית'),
+        App.el('span', { class: 'chip sage' }, 'תרגום מאנגלית לעברית')
+      ]),
+      fileInput, zone, status, bar, preview,
+      App.el('p', { style: { fontSize: '12px', color: 'var(--ink-mute)', margin: '10px 0 0', lineHeight: '1.6' } },
+        '⚠️ הכלי מתרגם טקסט בלבד · PDF מסרוק (תמונות) אינו נתמך · מופעל על ידי Google Translate')
+    ]);
+  }
+
   // ── Main render ──────────────────────────────────────────────────────────
   function render(root) {
     root.append(App.el('div', { class: 'stack stack-lg' }, [
       buildWordToPdf(),
-      buildPdfToWord()
+      buildPdfToWord(),
+      buildPdfTranslator()
     ]));
   }
 
