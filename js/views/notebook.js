@@ -879,40 +879,62 @@
         return;
       }
 
-      // Build a render container for html2pdf.
-      // IMPORTANT: must be in the viewport (not left:-9999px) otherwise
-      // html2canvas produces a blank white page.
-      // We use opacity:0 + pointer-events:none so it is invisible but renderable.
+      // html2canvas REQUIRES the element to be fully visible (opacity:1, in viewport).
+      // We use a dark overlay behind it so the user sees a "generating" screen,
+      // and the content container on top at full opacity so html2canvas can capture it.
+      const overlay = document.createElement('div');
+      overlay.style.cssText = [
+        'position:fixed', 'inset:0',
+        'background:rgba(0,0,0,.75)',
+        'z-index:9998',
+        'display:flex', 'align-items:center', 'justify-content:center',
+        'font-family:Arial,sans-serif', 'color:#fff', 'font-size:18px',
+        'direction:rtl'
+      ].join(';');
+      overlay.textContent = 'מייצא PDF… אנא המתן';
+
       const container = document.createElement('div');
       container.setAttribute('dir', 'rtl');
       container.style.cssText = [
         'position:fixed', 'top:0', 'left:0',
-        'width:794px',                 // A4 at 96dpi
-        'opacity:0',                   // invisible but still painted by the browser
-        'pointer-events:none',
-        'z-index:-1',
-        'background:#ffffff',          // explicit white — required for html2canvas
+        'width:794px',           // A4 at 96 dpi
+        'min-height:100vh',
+        'background:#ffffff',
         'font-family:Arial,sans-serif',
         'color:#3b3a3a',
-        'padding:30px',
+        'padding:40px',
         'box-sizing:border-box',
-        'direction:rtl'
+        'direction:rtl',
+        'z-index:9999'           // above overlay — visible to html2canvas
       ].join(';');
 
-      // Inject styles as a <style> block inside the container
-      const styleEl = document.createElement('style');
-      styleEl.textContent = baseStyles;
+      // Apply base styles inline on the container itself (not via <style> tag)
+      // so html2canvas getComputedStyle picks them up reliably.
       const h1El = document.createElement('h1');
-      h1El.style.cssText = 'font-size:28px;margin-bottom:24px;font-family:Arial,sans-serif;';
+      h1El.style.cssText = 'font-size:28px;margin-bottom:24px;font-family:Arial,sans-serif;color:#3b3a3a;';
       h1El.textContent = title;
       const contentEl = document.createElement('div');
+      contentEl.style.cssText = 'font-family:Arial,sans-serif;color:#3b3a3a;line-height:1.6;';
       contentEl.innerHTML = body;
-      container.append(styleEl, h1El, contentEl);
-      document.body.appendChild(container);
 
-      App.toast('מייצא PDF… אנא המתן');
+      // Inline mood-embed styles so they survive without a <style> tag
+      contentEl.querySelectorAll('.nb-mood-embed').forEach(el => {
+        el.style.cssText = 'border:2px solid #f0c4cc;border-radius:12px;padding:16px;margin:16px 0;background:#fffaf8;';
+      });
+      contentEl.querySelectorAll('.nb-mood-btn.selected').forEach(el => {
+        el.style.cssText = 'width:36px;height:36px;border-radius:50%;background:#fadadd;border:1px solid #e5a8b0;font-size:20px;';
+      });
+      contentEl.querySelectorAll('.nb-mood-btn:not(.selected)').forEach(el => {
+        el.style.cssText = 'width:36px;height:36px;border-radius:50%;background:#f5f0ea;border:1px solid #ddd;font-size:20px;';
+      });
+      contentEl.querySelectorAll('p[align="center"]').forEach(el => {
+        el.style.cssText = 'text-align:center;margin:12px 0;';
+      });
 
-      // Double rAF: ensure the browser has painted the container before html2canvas reads it
+      container.append(h1El, contentEl);
+      document.body.append(overlay, container);
+
+      // rAF × 2: let the browser paint before html2canvas reads pixels
       requestAnimationFrame(() => requestAnimationFrame(() => {
         html2pdf()
           .from(container)
@@ -925,17 +947,17 @@
               useCORS: true,
               allowTaint: true,
               logging: false,
-              backgroundColor: '#ffffff'   // prevents transparent → blank pages
+              backgroundColor: '#ffffff'
             },
             jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
           })
           .save()
           .then(() => {
-            document.body.removeChild(container);
+            overlay.remove(); container.remove();
             App.toast('✓ קובץ PDF הורד בהצלחה');
           })
           .catch(() => {
-            if (document.body.contains(container)) document.body.removeChild(container);
+            overlay.remove(); container.remove();
             doFallbackPrint();
           });
       }));
