@@ -1028,21 +1028,58 @@ self.onmessage = async function(e) {
 
       (async function() {
         try {
-          // 1. cobalt.tools — get audio stream URL
+          // 1. Get audio URL — try multiple services
           _ytStatus('⏳ מקבל קישור הורדה…');
           _vtShowProgress(3, 'מקבל קישור הורדה מ-YouTube…');
 
+          const vidId = (url.match(/(?:v=|youtu\.be\/)([^&?/#]+)/) || [])[1];
+          if (!vidId) throw new Error('קישור YouTube לא תקין');
+
           let audioUrl = null;
-          const cobaltRes = await fetch('https://api.cobalt.tools/', {
-            method: 'POST',
-            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url: url, downloadMode: 'audio', audioFormat: 'mp3' })
-          });
-          if (cobaltRes.ok) {
-            const cobaltData = await cobaltRes.json();
-            if (cobaltData.url) audioUrl = cobaltData.url;
+          const errors = [];
+
+          // — Method A: cobalt.tools (tunnel = CORS-safe proxy)
+          try {
+            const r = await fetch('https://api.cobalt.tools/', {
+              method: 'POST',
+              headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+              body: JSON.stringify({ url: url, downloadMode: 'audio', audioFormat: 'mp3' })
+            });
+            const d = await r.json();
+            console.log('[cobalt]', d);
+            if (d.url) audioUrl = d.url;
+            else if (d.audio) audioUrl = d.audio;          // picker response
+            else errors.push('cobalt: ' + JSON.stringify(d.error || d.status));
+          } catch(e) { errors.push('cobalt: ' + e.message); console.warn('[cobalt]', e); }
+
+          // — Method B: piped.video proxy (own CDN, CORS-enabled)
+          if (!audioUrl) {
+            try {
+              const instances = [
+                'https://pipedapi.kavin.rocks',
+                'https://pipedapi.tokhmi.xyz',
+                'https://api.piped.projectsegfau.lt'
+              ];
+              for (var pi = 0; pi < instances.length && !audioUrl; pi++) {
+                try {
+                  const r = await fetch(instances[pi] + '/streams/' + vidId);
+                  if (!r.ok) continue;
+                  const d = await r.json();
+                  console.log('[piped ' + instances[pi] + ']', d);
+                  if (d.audioStreams && d.audioStreams.length) {
+                    // prefer opus/webm highest bitrate
+                    const sorted = d.audioStreams.slice().sort(function(a, b) {
+                      return (parseInt(b.bitrate) || 0) - (parseInt(a.bitrate) || 0);
+                    });
+                    audioUrl = sorted[0].url;
+                  }
+                } catch(_) {}
+              }
+              if (!audioUrl) errors.push('piped: no stream found');
+            } catch(e) { errors.push('piped: ' + e.message); console.warn('[piped]', e); }
           }
-          if (!audioUrl) throw new Error('לא הצלחתי לקבל קישור הורדה מ-YouTube — נסה שוב מאוחר יותר');
+
+          if (!audioUrl) throw new Error('לא הצלחתי לקבל אודיו: ' + errors.join(' | '));
 
           // 2. Download audio blob
           _ytStatus('⏳ מוריד אודיו מ-YouTube…');
