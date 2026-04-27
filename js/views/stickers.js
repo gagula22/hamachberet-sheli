@@ -1038,45 +1038,64 @@ self.onmessage = async function(e) {
           let audioUrl = null;
           const errors = [];
 
-          // — Method A: cobalt.tools (tunnel = CORS-safe proxy)
-          try {
-            const r = await fetch('https://api.cobalt.tools/', {
-              method: 'POST',
-              headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-              body: JSON.stringify({ url: url, downloadMode: 'audio', audioFormat: 'mp3' })
-            });
-            const d = await r.json();
-            console.log('[cobalt]', d);
-            if (d.url) audioUrl = d.url;
-            else if (d.audio) audioUrl = d.audio;          // picker response
-            else errors.push('cobalt: ' + JSON.stringify(d.error || d.status));
-          } catch(e) { errors.push('cobalt: ' + e.message); console.warn('[cobalt]', e); }
+          // Helper: fetch with timeout
+          async function _fetchT(u, opts, ms) {
+            var ctrl = new AbortController();
+            var tid = setTimeout(function() { ctrl.abort(); }, ms || 8000);
+            try { var r = await fetch(u, Object.assign({ signal: ctrl.signal }, opts || {})); clearTimeout(tid); return r; }
+            catch(e) { clearTimeout(tid); throw e; }
+          }
 
-          // — Method B: piped.video proxy (own CDN, CORS-enabled)
+          // — Method A: Invidious /latest_version?local=true
+          //   Routes audio through invidious server → has CORS headers
+          var invInstances = [
+            'https://inv.nadeko.net',
+            'https://invidious.privacydev.net',
+            'https://iv.datura.network',
+            'https://yt.cdaut.de',
+            'https://invidious.nerdvpn.de',
+            'https://invidious.projectsegfau.lt'
+          ];
+          var invItags = ['251', '140', '250', '139'];
+          outer: for (var ii = 0; ii < invInstances.length; ii++) {
+            for (var ti = 0; ti < invItags.length; ti++) {
+              var candidate = invInstances[ii] + '/latest_version?id=' + vidId +
+                              '&itag=' + invItags[ti] + '&local=true';
+              try {
+                var probe = await _fetchT(candidate, { method: 'HEAD' }, 6000);
+                if (probe.ok) {
+                  audioUrl = candidate;
+                  console.log('[invidious] ✓', candidate);
+                  break outer;
+                }
+              } catch(_iv) { /* CORS or timeout — try next */ }
+            }
+          }
+          if (!audioUrl) errors.push('invidious: all instances failed');
+
+          // — Method B: piped.video API streams
           if (!audioUrl) {
-            try {
-              const instances = [
-                'https://pipedapi.kavin.rocks',
-                'https://pipedapi.tokhmi.xyz',
-                'https://api.piped.projectsegfau.lt'
-              ];
-              for (var pi = 0; pi < instances.length && !audioUrl; pi++) {
-                try {
-                  const r = await fetch(instances[pi] + '/streams/' + vidId);
-                  if (!r.ok) continue;
-                  const d = await r.json();
-                  console.log('[piped ' + instances[pi] + ']', d);
-                  if (d.audioStreams && d.audioStreams.length) {
-                    // prefer opus/webm highest bitrate
-                    const sorted = d.audioStreams.slice().sort(function(a, b) {
-                      return (parseInt(b.bitrate) || 0) - (parseInt(a.bitrate) || 0);
-                    });
-                    audioUrl = sorted[0].url;
-                  }
-                } catch(_) {}
-              }
-              if (!audioUrl) errors.push('piped: no stream found');
-            } catch(e) { errors.push('piped: ' + e.message); console.warn('[piped]', e); }
+            var pipedInst = [
+              'https://pipedapi.kavin.rocks',
+              'https://pipedapi.tokhmi.xyz',
+              'https://api.piped.projectsegfau.lt'
+            ];
+            for (var pi = 0; pi < pipedInst.length && !audioUrl; pi++) {
+              try {
+                var pr = await _fetchT(pipedInst[pi] + '/streams/' + vidId, {}, 8000);
+                if (!pr.ok) continue;
+                var pd = await pr.json();
+                console.log('[piped]', pipedInst[pi], pd);
+                if (pd.audioStreams && pd.audioStreams.length) {
+                  var sorted = pd.audioStreams.slice().sort(function(a,b){
+                    return (parseInt(b.bitrate)||0)-(parseInt(a.bitrate)||0);
+                  });
+                  audioUrl = sorted[0].url;
+                  console.log('[piped] stream url:', audioUrl);
+                }
+              } catch(ep) { console.warn('[piped]', ep.message); }
+            }
+            if (!audioUrl) errors.push('piped: no stream found');
           }
 
           if (!audioUrl) throw new Error('לא הצלחתי לקבל אודיו: ' + errors.join(' | '));
