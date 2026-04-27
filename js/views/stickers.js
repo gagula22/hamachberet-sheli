@@ -996,70 +996,16 @@ self.onmessage = async function(e) {
       if (!_vtRunning) transcribeFile(e.dataTransfer.files[0]);
     });
 
-    // ── YouTube / Full-quality section ────────────────────────────────────
-    const ytInput = document.createElement('input');
-    ytInput.type        = 'text';
-    ytInput.placeholder = 'https://www.youtube.com/watch?v=...';
-    ytInput.style.cssText = [
-      'width:100%;padding:10px 14px;border:1px solid var(--line);',
-      'border-radius:var(--r-sm);font-size:13px;direction:ltr;',
-      'background:#fff;outline:none;box-sizing:border-box;',
-      'font-family:inherit;color:var(--ink);'
-    ].join('');
-
-    const skillPath = 'C:\\Users\\user\\AppData\\Roaming\\Claude\\local-agent-mode-sessions\\skills-plugin\\b0cabb1a-8956-4ec5-bde8-98bd671598de\\c9f03117-575f-4a16-b1b5-63183dc364cd\\skills\\hebrew-video-transcriber\\scripts\\transcribe_video.py';
-
-    const cmdBox = App.el('div', {
-      style: { display: 'none', marginTop: '10px', background: '#1e1e1e', color: '#d4d4d4',
-               borderRadius: 'var(--r-sm)', padding: '12px 14px', fontSize: '11px',
-               fontFamily: 'monospace', direction: 'ltr', wordBreak: 'break-all',
-               lineHeight: '1.7', position: 'relative' }
-    });
-
-    const copyBtn = App.el('button', {
-      style: { marginTop: '8px', padding: '8px 18px', background: 'var(--sky,#cfe4f7)',
-               border: '1px solid var(--sky-deep,#5ba3d0)', borderRadius: 'var(--r-sm)',
-               fontSize: '13px', cursor: 'pointer', fontWeight: 600, display: 'none' }
-    }, '📋 העתק פקודה');
-
-    function buildCommand() {
-      const url = (ytInput.value || '').trim();
-      if (!url) return '';
-      const title = 'video_transcript';
-      return `python "${skillPath}" "${url}" --output "C:\\Users\\user\\Documents" --title "${title}"`;
-    }
-
-    ytInput.addEventListener('input', function() {
-      const cmd = buildCommand();
-      if (cmd) {
-        cmdBox.textContent = cmd;
-        cmdBox.style.display = 'block';
-        copyBtn.style.display = 'inline-block';
-      } else {
-        cmdBox.style.display = 'none';
-        copyBtn.style.display = 'none';
-      }
-    });
-
-    copyBtn.addEventListener('click', function() {
-      navigator.clipboard.writeText(buildCommand()).then(function() {
-        copyBtn.textContent = '✓ הועתק!';
-        setTimeout(function() { copyBtn.textContent = '📋 העתק פקודה'; }, 2000);
-      });
-    });
-
+    // ── YouTube notice ────────────────────────────────────────────────────
     const ytSection = App.el('div', {
-      style: { marginTop: '20px', paddingTop: '18px', borderTop: '1px solid var(--line)' }
+      style: { marginTop: '18px', paddingTop: '16px', borderTop: '1px solid var(--line)',
+               background: '#fffbf0', border: '1px solid #f0d080', borderRadius: 'var(--r-sm)',
+               padding: '12px 16px', lineHeight: '1.65' }
     }, [
-      App.el('div', {
-        style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }
-      }, [
-        App.el('span', { style: { fontSize: '18px' } }, '▶️'),
-        App.el('strong', { style: { fontSize: '14px' } }, 'YouTube / איכות מלאה + צילומי מסך'),
-      ]),
-      App.el('p', { style: { fontSize: '12px', color: 'var(--ink-mute)', margin: '0 0 10px', lineHeight: '1.6' } },
-        'להרצה עם מודל large-v3 + צילומי מסך אוטומטיים — הדבק URL, העתק את הפקודה והרץ ב-Terminal או ב-Claude Code'),
-      ytInput, cmdBox, copyBtn
+      App.el('div', { style: { fontWeight: 600, fontSize: '13px', marginBottom: '5px' } },
+        '▶️  סרטוני YouTube — לא ניתן לתמלל ישירות מהדפדפן'),
+      App.el('span', { style: { fontSize: '12px', color: 'var(--ink-mute)' } },
+        'הדפדפן חסום מהורדת אודיו מ-YouTube (מגבלת CORS). לתמלול YouTube עם מודל large-v3 + צילומי מסך — פתח Claude Code ובקש: "תמלל לי את הסרטון הזה בעברית: [URL]"')
     ]);
 
     const infoBanner = App.el('div', {
@@ -1069,7 +1015,7 @@ self.onmessage = async function(e) {
       App.el('strong', { style: { fontSize: '13px' } }, '🎙 Whisper AI · Web Worker — הדפדפן לא ייחסם'),
       App.el('br', {}),
       App.el('span', { style: { fontSize: '12px', color: 'var(--ink-mute)' } },
-        'קבצים מקומיים: תמלול ישיר בדפדפן (מודל ~150MB, חד-פעמי) · YouTube + צילומי מסך: הרץ דרך Claude Code / Terminal')
+        'גרור קובץ אודיו/וידאו מקומי · מודל ~150MB מוריד פעם אחת · תמלול ממשיך ברקע · ללא עלות')
     ]);
 
     return App.el('div', { class: 'card' }, [
