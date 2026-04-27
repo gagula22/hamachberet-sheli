@@ -1041,13 +1041,11 @@ self.onmessage = async function(e) {
           // Helper: fetch with timeout
           async function _fetchT(u, opts, ms) {
             var ctrl = new AbortController();
-            var tid = setTimeout(function() { ctrl.abort(); }, ms || 8000);
+            var tid = setTimeout(function() { ctrl.abort(); }, ms || 9000);
             try { var r = await fetch(u, Object.assign({ signal: ctrl.signal }, opts || {})); clearTimeout(tid); return r; }
             catch(e) { clearTimeout(tid); throw e; }
           }
 
-          // — Method A: Invidious /latest_version?local=true
-          //   Routes audio through invidious server → has CORS headers
           var invInstances = [
             'https://inv.nadeko.net',
             'https://invidious.privacydev.net',
@@ -1056,46 +1054,78 @@ self.onmessage = async function(e) {
             'https://invidious.nerdvpn.de',
             'https://invidious.projectsegfau.lt'
           ];
-          var invItags = ['251', '140', '250', '139'];
-          outer: for (var ii = 0; ii < invInstances.length; ii++) {
+
+          // — Method A: Invidious /latest_version?local=true  (GET Range probe)
+          var invItags = ['140', '251', '250', '139'];
+          outerA: for (var ii = 0; ii < invInstances.length; ii++) {
             for (var ti = 0; ti < invItags.length; ti++) {
               var candidate = invInstances[ii] + '/latest_version?id=' + vidId +
                               '&itag=' + invItags[ti] + '&local=true';
               try {
-                var probe = await _fetchT(candidate, { method: 'HEAD' }, 6000);
-                if (probe.ok) {
+                var probe = await _fetchT(candidate,
+                  { method: 'GET', headers: { 'Range': 'bytes=0-1023' } }, 7000);
+                if (probe.ok || probe.status === 206) {
                   audioUrl = candidate;
-                  console.log('[invidious] ✓', candidate);
-                  break outer;
+                  console.log('[inv-local] ✓', candidate);
+                  break outerA;
                 }
-              } catch(_iv) { /* CORS or timeout — try next */ }
+              } catch(_iv) { /* CORS/timeout — try next */ }
             }
           }
-          if (!audioUrl) errors.push('invidious: all instances failed');
+          if (!audioUrl) errors.push('inv-local: all failed');
 
-          // — Method B: piped.video API streams
+          // — Method B: Invidious /api/v1/videos + corsproxy.io wrapper
           if (!audioUrl) {
-            var pipedInst = [
-              'https://pipedapi.kavin.rocks',
-              'https://pipedapi.tokhmi.xyz',
-              'https://api.piped.projectsegfau.lt'
-            ];
+            outerB: for (var ii2 = 0; ii2 < invInstances.length; ii2++) {
+              try {
+                var apiR = await _fetchT(
+                  invInstances[ii2] + '/api/v1/videos/' + vidId + '?fields=adaptiveFormats',
+                  {}, 8000);
+                if (!apiR.ok) continue;
+                var apiD = await apiR.json();
+                console.log('[inv-api]', invInstances[ii2], apiD);
+                if (apiD.adaptiveFormats && apiD.adaptiveFormats.length) {
+                  var audioFmts = apiD.adaptiveFormats.filter(function(f) {
+                    return f.type && f.type.startsWith('audio/');
+                  });
+                  if (audioFmts.length) {
+                    var bestFmt = audioFmts.sort(function(a,b){
+                      return (b.bitrate||0)-(a.bitrate||0);
+                    })[0];
+                    // wrap with corsproxy.io to bypass YouTube CDN CORS
+                    audioUrl = 'https://corsproxy.io/?' + encodeURIComponent(bestFmt.url);
+                    console.log('[inv-api] proxied:', audioUrl.slice(0,80));
+                    break outerB;
+                  }
+                }
+              } catch(ea) { console.warn('[inv-api]', ea.message); }
+            }
+            if (!audioUrl) errors.push('inv-api: all failed');
+          }
+
+          // — Method C: piped.video + corsproxy.io on stream URL
+          if (!audioUrl) {
+            var pipedInst = ['https://pipedapi.kavin.rocks','https://pipedapi.tokhmi.xyz'];
             for (var pi = 0; pi < pipedInst.length && !audioUrl; pi++) {
               try {
                 var pr = await _fetchT(pipedInst[pi] + '/streams/' + vidId, {}, 8000);
                 if (!pr.ok) continue;
                 var pd = await pr.json();
-                console.log('[piped]', pipedInst[pi], pd);
+                console.log('[piped]', pd);
                 if (pd.audioStreams && pd.audioStreams.length) {
-                  var sorted = pd.audioStreams.slice().sort(function(a,b){
+                  var ps = pd.audioStreams.sort(function(a,b){
                     return (parseInt(b.bitrate)||0)-(parseInt(a.bitrate)||0);
                   });
-                  audioUrl = sorted[0].url;
-                  console.log('[piped] stream url:', audioUrl);
+                  var rawUrl = ps[0].url;
+                  // If YouTube CDN URL, wrap with corsproxy
+                  audioUrl = rawUrl.includes('googlevideo.com')
+                    ? 'https://corsproxy.io/?' + encodeURIComponent(rawUrl)
+                    : rawUrl;
+                  console.log('[piped] url:', audioUrl.slice(0,80));
                 }
               } catch(ep) { console.warn('[piped]', ep.message); }
             }
-            if (!audioUrl) errors.push('piped: no stream found');
+            if (!audioUrl) errors.push('piped: no stream');
           }
 
           if (!audioUrl) throw new Error('לא הצלחתי לקבל אודיו: ' + errors.join(' | '));
