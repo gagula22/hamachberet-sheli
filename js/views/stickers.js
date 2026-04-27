@@ -997,12 +997,15 @@ self.onmessage = async function(e) {
     });
 
     // ── YouTube / Full-quality section ────────────────────────────────────
-    const ytInput = App.el('input', {
-      style: { width: '100%', padding: '10px 14px', border: '1px solid var(--line)',
-               borderRadius: 'var(--r-sm)', fontSize: '13px', direction: 'ltr',
-               background: '#fff', outline: 'none', boxSizing: 'border-box' }
-    });
+    const ytInput = document.createElement('input');
+    ytInput.type        = 'text';
     ytInput.placeholder = 'https://www.youtube.com/watch?v=...';
+    ytInput.style.cssText = [
+      'width:100%;padding:10px 14px;border:1px solid var(--line);',
+      'border-radius:var(--r-sm);font-size:13px;direction:ltr;',
+      'background:#fff;outline:none;box-sizing:border-box;',
+      'font-family:inherit;color:var(--ink);'
+    ].join('');
 
     const skillPath = 'C:\\Users\\user\\AppData\\Roaming\\Claude\\local-agent-mode-sessions\\skills-plugin\\b0cabb1a-8956-4ec5-bde8-98bd671598de\\c9f03117-575f-4a16-b1b5-63183dc364cd\\skills\\hebrew-video-transcriber\\scripts\\transcribe_video.py';
 
