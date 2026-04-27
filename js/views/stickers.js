@@ -996,51 +996,152 @@ self.onmessage = async function(e) {
       if (!_vtRunning) transcribeFile(e.dataTransfer.files[0]);
     });
 
-    // ── YouTube → Claude Code ─────────────────────────────────────────────
+    // ── YouTube → cobalt → Whisper ────────────────────────────────────────
     const ytInput = document.createElement('input');
     ytInput.type = 'text';
-    ytInput.placeholder = 'הדבק כאן קישור YouTube…';
-    ytInput.style.cssText = 'flex:1;padding:8px 12px;border:1px solid #d0c080;border-radius:8px;font-size:13px;outline:none;background:#fffef5;direction:ltr;';
+    ytInput.placeholder = 'הדבק קישור YouTube…';
+    ytInput.style.cssText = 'flex:1;padding:8px 12px;border:1px solid #d0c080;border-radius:8px;font-size:13px;outline:none;background:#fffef5;direction:ltr;min-width:0;';
 
-    const ytCopyBtn = App.el('button', {
-      style: { padding: '8px 16px', background: '#f5c842', border: 'none',
+    const ytBtn = App.el('button', {
+      style: { padding: '8px 18px', background: '#f5c842', border: 'none',
                borderRadius: '8px', fontWeight: 700, fontSize: '13px',
-               cursor: 'pointer', whiteSpace: 'nowrap', transition: 'background .15s' }
-    }, '📋 העתק ל-Claude Code');
+               cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: '0' }
+    }, '🎙 תמלל');
 
-    ytCopyBtn.addEventListener('click', function() {
+    const ytStatusEl = App.el('div', {
+      style: { fontSize: '12px', color: 'var(--ink-mute)', marginTop: '8px', lineHeight: '1.55', minHeight: '16px' }
+    }, '');
+
+    function _ytStatus(msg, color) {
+      ytStatusEl.textContent = msg;
+      ytStatusEl.style.color = color || 'var(--ink-mute)';
+    }
+
+    async function startYtTranscription() {
       const url = ytInput.value.trim();
       if (!url) { ytInput.focus(); return; }
-      const msg = 'תמלל לי את הסרטון הזה בעברית: ' + url;
-      navigator.clipboard.writeText(msg).then(function() {
-        ytCopyBtn.textContent = '✅ הועתק!';
-        ytCopyBtn.style.background = '#b8f0b0';
-        setTimeout(function() {
-          ytCopyBtn.textContent = '📋 העתק ל-Claude Code';
-          ytCopyBtn.style.background = '#f5c842';
-        }, 2500);
-      }).catch(function() {
-        // fallback for older browsers
-        var ta = document.createElement('textarea');
-        ta.value = msg;
-        ta.style.position = 'fixed'; ta.style.opacity = '0';
-        document.body.appendChild(ta); ta.select();
-        document.execCommand('copy');
-        document.body.removeChild(ta);
-        ytCopyBtn.textContent = '✅ הועתק!';
-        setTimeout(function() { ytCopyBtn.textContent = '📋 העתק ל-Claude Code'; }, 2500);
-      });
-    });
+      if (_vtRunning) return;
+      _vtRunning = true;
+      ytBtn.disabled = true;
+      ytBtn.textContent = '⏳';
+      bgBadge.style.display = 'block';
+
+      (async function() {
+        try {
+          // 1. cobalt.tools — get audio stream URL
+          _ytStatus('⏳ מקבל קישור הורדה…');
+          _vtShowProgress(3, 'מקבל קישור הורדה מ-YouTube…');
+
+          let audioUrl = null;
+          const cobaltRes = await fetch('https://api.cobalt.tools/', {
+            method: 'POST',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: url, downloadMode: 'audio', audioFormat: 'mp3' })
+          });
+          if (cobaltRes.ok) {
+            const cobaltData = await cobaltRes.json();
+            if (cobaltData.url) audioUrl = cobaltData.url;
+          }
+          if (!audioUrl) throw new Error('לא הצלחתי לקבל קישור הורדה מ-YouTube — נסה שוב מאוחר יותר');
+
+          // 2. Download audio blob
+          _ytStatus('⏳ מוריד אודיו מ-YouTube…');
+          _vtShowProgress(10, 'מוריד אודיו…');
+          const audioRes = await fetch(audioUrl);
+          if (!audioRes.ok) throw new Error('שגיאה בהורדת האודיו (' + audioRes.status + ')');
+          const ab = await audioRes.arrayBuffer();
+
+          // 3. Decode to 16kHz mono Float32Array
+          _ytStatus('⏳ מפענח אודיו…');
+          _vtShowProgress(18, 'מפענח אודיו…');
+          const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+          const decoded  = await audioCtx.decodeAudioData(ab.slice(0));
+          const nCh = decoded.numberOfChannels;
+          let audio;
+          if (nCh > 1) {
+            const c0 = decoded.getChannelData(0), c1 = decoded.getChannelData(1);
+            audio = new Float32Array(c0.length);
+            for (var i = 0; i < c0.length; i++) audio[i] = (c0[i] + c1[i]) * 0.5;
+          } else {
+            audio = new Float32Array(decoded.getChannelData(0));
+          }
+          audioCtx.close();
+          const durationMin = Math.round(decoded.duration / 60);
+
+          // 4. Init Whisper Worker
+          _wwProgCb = function(p) {
+            if (p.status === 'progress') {
+              var pct = Math.round(p.progress || 0);
+              var msg = 'מוריד מודל Whisper… ' + pct + '% — חד-פעמי';
+              _ytStatus('⏳ ' + msg);
+              _vtShowProgress(18 + pct * 0.15, msg);
+            }
+          };
+          _ytStatus('⏳ מאתחל מודל Whisper AI…');
+          _vtShowProgress(22, 'מאתחל מודל Whisper AI…');
+          await _ensureWhisperWorker();
+
+          // 5. Transcribe
+          var transMsg = 'מתמלל ' + durationMin + ' דקות ברקע…';
+          _ytStatus('⏳ ' + transMsg);
+          _vtShowProgress(35, transMsg);
+          var text = await _whisperTranscribe(audio);
+
+          // 6. Build Word .doc
+          _vtShowProgress(97, 'מכין קובץ Word…');
+          var vidId = (url.match(/(?:v=|youtu\.be\/)([^&?/]+)/) || [])[1] || 'youtube';
+          var baseName = 'YouTube_' + vidId;
+          var dateStr  = new Date().toLocaleDateString('he-IL');
+          var paras = text.trim().split(/\n+/).map(function(p) {
+            return p.trim() ? '<p style="direction:rtl;text-align:right;font-family:Arial,sans-serif;font-size:14px;line-height:1.9;margin:0 0 10px;unicode-bidi:plaintext;">' + _esc(p.trim()) + '</p>' : '';
+          }).join('');
+          var docHtml = [
+            '<html xmlns:o="urn:schemas-microsoft-com:office:office"',
+            ' xmlns:w="urn:schemas-microsoft-com:office:word"',
+            ' xmlns="http://www.w3.org/TR/REC-html40">',
+            '<head><meta charset="utf-8"><title>' + _esc(baseName) + '</title>',
+            '<style>body{font-family:Arial,sans-serif;padding:36px;max-width:820px;direction:rtl;}',
+            'p{unicode-bidi:plaintext;}</style></head>',
+            '<body dir="rtl">',
+            '<h1 style="font-size:22px;margin-bottom:4px;direction:rtl;text-align:right;">' + _esc(baseName) + '</h1>',
+            '<p style="font-size:11px;color:#999;margin:0 0 28px;direction:ltr;text-align:left;">תמלול עברית · Whisper AI · ' + dateStr + '</p>',
+            '<hr style="border:none;border-top:1px solid #e0e0e0;margin-bottom:24px;">',
+            paras, '</body></html>'
+          ].join('');
+          var blob    = new Blob(['﻿', docHtml], { type: 'application/msword' });
+          var blobUrl = URL.createObjectURL(blob);
+          var dlName  = baseName + '_תמלול.doc';
+
+          bgBadge.style.display = 'none';
+          _ytStatus('✅ תמלול הושלם · ' + Math.round(text.split(/\s+/).length) + ' מילים', '#2d7a2d');
+          _vtShowDone(dlName, blobUrl);
+
+        } catch(e) {
+          bgBadge.style.display = 'none';
+          _ytStatus('❌ ' + e.message, '#c00');
+          _vtShowError(e.message);
+          console.error('[YouTube Transcriber]', e);
+        } finally {
+          _vtRunning = false;
+          ytBtn.disabled = false;
+          ytBtn.textContent = '🎙 תמלל';
+        }
+      })();
+    }
+
+    ytBtn.addEventListener('click', startYtTranscription);
+    ytInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') startYtTranscription(); });
 
     const ytSection = App.el('div', {
       style: { marginTop: '18px', paddingTop: '16px', borderTop: '1px solid var(--line)' }
     }, [
-      App.el('div', { style: { fontWeight: 600, fontSize: '13px', marginBottom: '8px' } },
+      App.el('div', { style: { fontWeight: 600, fontSize: '13px', marginBottom: '4px' } },
         '▶️  תמלול YouTube'),
-      App.el('div', { style: { fontSize: '12px', color: 'var(--ink-mute)', marginBottom: '10px', lineHeight: '1.55' } },
-        'הדפדפן לא יכול להוריד אודיו מ-YouTube ישירות — אבל Claude Code יכול. הדבק את הקישור, לחץ "העתק", ואז פתח Claude Code והדבק.'),
+      App.el('div', { style: { fontSize: '12px', color: 'var(--ink-mute)', marginBottom: '10px', lineHeight: '1.5' } },
+        'הדבק קישור YouTube → לחץ "תמלל" → האודיו יוריד ויתומלל ב-Whisper AI ברקע'),
       App.el('div', { style: { display: 'flex', gap: '8px', alignItems: 'center' } },
-        [ytInput, ytCopyBtn])
+        [ytInput, ytBtn]),
+      ytStatusEl
     ]);
 
     const infoBanner = App.el('div', {
