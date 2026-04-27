@@ -996,16 +996,51 @@ self.onmessage = async function(e) {
       if (!_vtRunning) transcribeFile(e.dataTransfer.files[0]);
     });
 
-    // ── YouTube notice ────────────────────────────────────────────────────
+    // ── YouTube → Claude Code ─────────────────────────────────────────────
+    const ytInput = document.createElement('input');
+    ytInput.type = 'text';
+    ytInput.placeholder = 'הדבק כאן קישור YouTube…';
+    ytInput.style.cssText = 'flex:1;padding:8px 12px;border:1px solid #d0c080;border-radius:8px;font-size:13px;outline:none;background:#fffef5;direction:ltr;';
+
+    const ytCopyBtn = App.el('button', {
+      style: { padding: '8px 16px', background: '#f5c842', border: 'none',
+               borderRadius: '8px', fontWeight: 700, fontSize: '13px',
+               cursor: 'pointer', whiteSpace: 'nowrap', transition: 'background .15s' }
+    }, '📋 העתק ל-Claude Code');
+
+    ytCopyBtn.addEventListener('click', function() {
+      const url = ytInput.value.trim();
+      if (!url) { ytInput.focus(); return; }
+      const msg = 'תמלל לי את הסרטון הזה בעברית: ' + url;
+      navigator.clipboard.writeText(msg).then(function() {
+        ytCopyBtn.textContent = '✅ הועתק!';
+        ytCopyBtn.style.background = '#b8f0b0';
+        setTimeout(function() {
+          ytCopyBtn.textContent = '📋 העתק ל-Claude Code';
+          ytCopyBtn.style.background = '#f5c842';
+        }, 2500);
+      }).catch(function() {
+        // fallback for older browsers
+        var ta = document.createElement('textarea');
+        ta.value = msg;
+        ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        ytCopyBtn.textContent = '✅ הועתק!';
+        setTimeout(function() { ytCopyBtn.textContent = '📋 העתק ל-Claude Code'; }, 2500);
+      });
+    });
+
     const ytSection = App.el('div', {
-      style: { marginTop: '18px', paddingTop: '16px', borderTop: '1px solid var(--line)',
-               background: '#fffbf0', border: '1px solid #f0d080', borderRadius: 'var(--r-sm)',
-               padding: '12px 16px', lineHeight: '1.65' }
+      style: { marginTop: '18px', paddingTop: '16px', borderTop: '1px solid var(--line)' }
     }, [
-      App.el('div', { style: { fontWeight: 600, fontSize: '13px', marginBottom: '5px' } },
-        '▶️  סרטוני YouTube — לא ניתן לתמלל ישירות מהדפדפן'),
-      App.el('span', { style: { fontSize: '12px', color: 'var(--ink-mute)' } },
-        'הדפדפן חסום מהורדת אודיו מ-YouTube (מגבלת CORS). לתמלול YouTube עם מודל large-v3 + צילומי מסך — פתח Claude Code ובקש: "תמלל לי את הסרטון הזה בעברית: [URL]"')
+      App.el('div', { style: { fontWeight: 600, fontSize: '13px', marginBottom: '8px' } },
+        '▶️  תמלול YouTube'),
+      App.el('div', { style: { fontSize: '12px', color: 'var(--ink-mute)', marginBottom: '10px', lineHeight: '1.55' } },
+        'הדפדפן לא יכול להוריד אודיו מ-YouTube ישירות — אבל Claude Code יכול. הדבק את הקישור, לחץ "העתק", ואז פתח Claude Code והדבק.'),
+      App.el('div', { style: { display: 'flex', gap: '8px', alignItems: 'center' } },
+        [ytInput, ytCopyBtn])
     ]);
 
     const infoBanner = App.el('div', {
