@@ -1126,8 +1126,7 @@ self.onmessage = async function(e) {
 
           // 6. Build Word .doc
           _vtShowProgress(97, 'מכין קובץ Word…');
-          var vidId = (url.match(/(?:v=|youtu\.be\/)([^&?/]+)/) || [])[1] || 'youtube';
-          var baseName = 'YouTube_' + vidId;
+          var baseName = 'YouTube_' + (vidId || 'youtube');
           var dateStr  = new Date().toLocaleDateString('he-IL');
           var paras = text.trim().split(/\n+/).map(function(p) {
             return p.trim() ? '<p style="direction:rtl;text-align:right;font-family:Arial,sans-serif;font-size:14px;line-height:1.9;margin:0 0 10px;unicode-bidi:plaintext;">' + _esc(p.trim()) + '</p>' : '';
