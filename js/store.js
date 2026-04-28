@@ -133,6 +133,10 @@
       emit();
       if (window.FirebaseSync && FirebaseSync.enabled) FirebaseSync.push(key, value);
     },
+    saveNow() {
+      clearTimeout(saveTimer);
+      saveNow();
+    },
     update(key, fn) {
       state[key] = fn(state[key]);
       scheduleSave();

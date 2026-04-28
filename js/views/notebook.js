@@ -4,7 +4,24 @@
   const SIDEBAR_MIN = 180;
   const SIDEBAR_MAX = 600;
   let activeId = null;
+  let activeEditor = null;
   const expanded = new Set();
+
+  // Safety net: if the user closes the tab mid-debounce (within 500ms of
+  // last keystroke), the editor's debounced save never fires. Flush the
+  // current editor's content immediately so FirebaseSync's own pagehide
+  // listener finds it in `pending` and pushes it.
+  function flushActiveEditor() {
+    try {
+      if (activeEditor && activeEditor.saveImmediate) activeEditor.saveImmediate();
+      if (window.Store && Store.saveNow) Store.saveNow();
+      if (window.FirebaseSync && FirebaseSync.flush) FirebaseSync.flush();
+    } catch {}
+  }
+  window.addEventListener('pagehide', flushActiveEditor);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flushActiveEditor();
+  });
 
   // Restore saved sidebar width once on first load
   try {
@@ -367,14 +384,18 @@
       }
     }
 
-    const save = Editable.debounce(() => {
+    function saveImmediate() {
       updateTopic(topic.id, { body: editor.innerHTML, updatedAt: Date.now() });
       refreshPageLabels();
-    }, 500);
+    }
+    const save = Editable.debounce(saveImmediate, 500);
 
     editor.addEventListener('input', save);
     Editable.attachImageBehaviors(editor, save);
     attachMoodBehaviors(editor, save);
+
+    // Track current editor module-wide so pagehide can flush even mid-debounce.
+    activeEditor = { saveImmediate, editor };
 
     requestAnimationFrame(refreshPageLabels);
     setTimeout(refreshPageLabels, 400);
@@ -541,11 +562,25 @@
       class: 'btn primary',
       style: { padding: '8px 18px', fontSize: '14px', fontWeight: '600' },
       title: 'שמור עכשיו לענן',
-      onClick: () => {
-        updateTopic(topic.id, { body: editor.innerHTML, updatedAt: Date.now() });
-        refreshPageLabels();
-        if (window.FirebaseSync && FirebaseSync.flush) FirebaseSync.flush();
-        if (window.App && App.toast) App.toast('💾 נשמר לענן');
+      onClick: async () => {
+        saveBtn.disabled = true;
+        saveBtn.textContent = '⏳ שומר…';
+        try {
+          updateTopic(topic.id, { body: editor.innerHTML, updatedAt: Date.now() });
+          refreshPageLabels();
+          if (window.Store && Store.saveNow) Store.saveNow();
+          if (window.FirebaseSync && FirebaseSync.flush) await FirebaseSync.flush();
+          saveBtn.textContent = '✓ נשמר';
+          if (window.App && App.toast) App.toast('💾 נשמר לענן בהצלחה');
+        } catch (e) {
+          saveBtn.textContent = '⚠️ שגיאה';
+          if (window.App && App.toast) App.toast('⚠️ שמירה נכשלה — בדוק חיבור לאינטרנט');
+          console.warn('Manual save failed:', e);
+        }
+        setTimeout(() => {
+          saveBtn.disabled = false;
+          saveBtn.textContent = '💾 שמור עכשיו';
+        }, 2000);
       }
     }, '💾 שמור עכשיו');
 

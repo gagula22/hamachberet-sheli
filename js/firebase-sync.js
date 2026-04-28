@@ -177,10 +177,11 @@
   }
 
   function flushAll() {
-    Object.keys(pending).forEach(key => {
+    const keys = Object.keys(pending);
+    return Promise.all(keys.map(key => {
       clearTimeout(timers[key]);
-      doPush(key);
-    });
+      return doPush(key);
+    }));
   }
 
   // ── Real-time listeners ───────────────────────────────────────────────────
@@ -321,8 +322,8 @@
     },
 
     flush() {
-      if (!this.enabled || !userId) return;
-      flushAll();
+      if (!this.enabled || !userId) return Promise.resolve();
+      return flushAll();
     }
   };
 })();
