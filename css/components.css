@@ -574,6 +574,9 @@ figure.nb-img::after {
   padding: 0;
   text-align: start;
 }
+/* Back button hidden on desktop */
+.nb-back-btn { display: none; }
+
 @media (max-width: 800px) {
   .nb-layout { grid-template-columns: 1fr; }
   .nb-resizer { display: none; }
@@ -944,12 +947,42 @@ figure.nb-img::after {
   .note-title { font-size: 22px; }
   .note-body { min-height: 300px; padding: 6px 8px 12px; font-size: 14px; }
 
-  /* ── Notebook ── */
+  /* ── Notebook — mobile panel switching ── */
   .nb-layout { grid-template-columns: 1fr; }
   .nb-resizer { display: none; }
-  .nb-editor { padding: 20px 16px; font-size: 14px; min-height: 500px; }
-  .nb-toolbar { top: 68px; }
-  .nb-title { font-size: 22px; }
+  .nb-editor { padding: 16px 12px; font-size: 14px; min-height: 400px; }
+  .nb-toolbar { top: 60px; flex-wrap: wrap; gap: 2px; }
+  .nb-title { font-size: 20px; }
+
+  /* Show only one panel at a time on mobile */
+  .nb-mobile.nb-panel-topics .nb-editor-col { display: none; }
+  .nb-mobile.nb-panel-editor .nb-topics-col  { display: none; }
+  .nb-mobile.nb-panel-editor .nb-resizer     { display: none; }
+
+  /* Back button: visible only in mobile editor panel */
+  .nb-back-btn { display: flex; }
+  .nb-back-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 14px;
+    background: var(--cream);
+    border: none;
+    border-bottom: 1px solid var(--line);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ink-soft);
+    width: 100%;
+    cursor: pointer;
+    direction: rtl;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .nb-back-btn:active { background: var(--blush); }
+
+  /* Topics list: full-width, taller tap targets */
+  .nb-mobile .nb-topic { padding: 13px 14px; min-height: 48px; }
+  .nb-mobile .nb-topics-col .btn { width: 100%; margin-bottom: 8px; padding: 12px; font-size: 14px; }
 
   /* ── Goals ── */
   .goal-row { padding: 10px 12px; }

@@ -129,6 +129,9 @@
 
   let lastRenderedId = null;
   let draggedId = null;
+  let mobilePanel = 'topics'; // 'topics' | 'editor'
+
+  function isMobile() { return window.innerWidth <= 768; }
 
   function render(root) {
     const topics = getTopics();
@@ -146,7 +149,7 @@
       class: 'btn btn-soft',
       onClick: () => {
         const t = createTopic(null);
-        if (t) { activeId = t.id; rerender(); }
+        if (t) { activeId = t.id; if (isMobile()) mobilePanel = 'editor'; rerender(); }
       }
     }, '+ נושא חדש');
 
@@ -158,13 +161,26 @@
 
     const left = App.el('div', { class: 'stack nb-topics-col' }, [addRootBtn, topicsEl]);
 
+    // Mobile back button (shown only in editor panel on small screens)
+    const backBtn = App.el('button', {
+      class: 'nb-back-btn',
+      onClick: () => { mobilePanel = 'topics'; rerender(); }
+    }, [
+      App.el('span', {}, '→'),
+      App.el('span', {}, ' כל הנושאים')
+    ]);
+
     const right = active
-      ? buildEditor(active)
+      ? buildEditor(active, backBtn)
       : App.el('div', { class: 'card' }, App.el('div', { class: 'empty-state' }, 'בחר או צור נושא כדי להתחיל ←'));
 
     const resizer = buildResizer();
 
-    root.append(App.el('div', { class: 'nb-layout' }, [left, resizer, right]));
+    const layoutClass = isMobile()
+      ? 'nb-layout nb-mobile nb-panel-' + mobilePanel
+      : 'nb-layout';
+
+    root.append(App.el('div', { class: layoutClass }, [left, resizer, right]));
   }
 
   function buildResizer() {
@@ -239,6 +255,7 @@
       onClick: (e) => {
         if (e.target.closest('.t-action') || e.target.closest('.t-chevron') || e.target.closest('.t-drag')) return;
         activeId = t.id;
+        if (isMobile()) mobilePanel = 'editor';
         rerender();
       }
     }, [
@@ -344,7 +361,7 @@
     return row;
   }
 
-  function buildEditor(topic) {
+  function buildEditor(topic, backBtn) {
     const titleInput = App.el('input', {
       class: 'nb-title',
       placeholder: 'כותרת הנושא…',
@@ -592,6 +609,7 @@
 
     // Toolbar is position:sticky — no spacer needed (stays in flow)
     return App.el('div', { class: 'nb-editor-col' }, [
+      backBtn || null,
       toolbar,
       App.el('div', { class: 'card stack' }, [breadcrumb, titleInput, stage, meta])
     ]);
