@@ -52,8 +52,20 @@
       const now = new Date();
       todayChip.textContent = now.toLocaleDateString('he-IL', { weekday: 'long', month: 'long', day: 'numeric' });
 
+      // Hamburger toggle
       document.getElementById('menuToggle').addEventListener('click', () => {
         document.body.classList.toggle('nav-open');
+      });
+
+      // Overlay — close sidebar when tapping outside on mobile
+      const overlay = document.createElement('div');
+      overlay.className = 'nav-overlay';
+      overlay.addEventListener('click', () => document.body.classList.remove('nav-open'));
+      document.body.appendChild(overlay);
+
+      // Close sidebar on nav-item click (mobile)
+      document.getElementById('nav').addEventListener('click', () => {
+        if (window.innerWidth <= 900) document.body.classList.remove('nav-open');
       });
 
       document.getElementById('globalSearch').addEventListener('input', (e) => {

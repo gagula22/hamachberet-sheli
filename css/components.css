@@ -815,3 +815,137 @@ figure.nb-img::after {
 }
 .goal-row.done { border-inline-start-color: var(--sage-deep); }
 .goal-row.done .text { text-decoration: line-through; color: var(--ink-mute); }
+
+/* ════════════════════════════════════════════════════════════════════════
+   RESPONSIVE — TABLET (≤ 768px)
+   ════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  /* Week planner: horizontal scroll instead of cramped columns */
+  .week-grid {
+    grid-template-columns: repeat(7, minmax(120px, 1fr));
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: var(--sp-2);
+    scrollbar-width: thin;
+    scroll-snap-type: x mandatory;
+  }
+  .day-col { scroll-snap-align: start; }
+
+  /* Budget summary: 2 columns */
+  .budget-summary { grid-template-columns: 1fr 1fr; }
+
+  /* Notes: already 1 col at 800px — keep */
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   RESPONSIVE — PHONE (≤ 600px)
+   ════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 600px) {
+
+  /* ── Cards ── */
+  .card { padding: var(--sp-3) var(--sp-4); }
+  .card-lg { padding: var(--sp-4); }
+  .card h2 { font-size: 17px; margin-bottom: var(--sp-2); }
+  .card h3 { font-size: 14px; }
+
+  /* ── Grids ── */
+  .grid-4 { grid-template-columns: repeat(2, 1fr); }
+  .grid-6 { grid-template-columns: repeat(3, 1fr); }
+
+  /* ── Stats ── */
+  .stat { min-height: 88px; padding: var(--sp-3) var(--sp-4); }
+  .stat-value { font-size: 26px; }
+  .stat-label { font-size: 12px; }
+
+  /* ── Section cards (dashboard grid) ── */
+  .section-card { min-height: 88px; padding: var(--sp-3); gap: var(--sp-2); }
+  .section-card .title { font-size: 14px; }
+  .section-icon { width: 34px; height: 34px; font-size: 17px; border-radius: 10px; }
+
+  /* ── Tabs ── */
+  .tabs {
+    overflow-x: auto;
+    max-width: 100%;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab { padding: 7px 14px; font-size: 12px; white-space: nowrap; }
+
+  /* ── Row between: allow wrap ── */
+  .row-between { flex-wrap: wrap; gap: var(--sp-2); }
+
+  /* ── Stack spacing ── */
+  .stack-lg { gap: var(--sp-4); }
+
+  /* ── Timeline (daily planner) ── */
+  .time-slot { grid-template-columns: 42px 1fr; gap: var(--sp-2); padding: 8px 0; }
+  .time-slot .hour { font-size: 11px; }
+  .time-slot .slot-input { padding: 6px 10px; font-size: 13px; }
+
+  /* ── Monthly calendar ── */
+  .cal-cell { border-radius: 6px; padding: 3px 4px; }
+  .cal-cell .day-num { font-size: 11px; }
+  .cal-cell .day-name-mini { font-size: 8px; }
+  .cal-head { font-size: 10px; padding: 4px 2px; }
+
+  /* ── Budget ── */
+  .budget-summary { grid-template-columns: 1fr; }
+  .tx-item { grid-template-columns: 28px 1fr auto 24px; gap: var(--sp-2); padding: 10px; }
+  .tx-icon { width: 28px; height: 28px; font-size: 13px; border-radius: 8px; }
+
+  /* ── Habit tracker ── */
+  .habit-row {
+    grid-template-columns: minmax(90px, 1fr) repeat(7, 28px) 40px 20px;
+    gap: 3px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 7px;
+    scrollbar-width: none;
+  }
+  .habit-row::-webkit-scrollbar { display: none; }
+  .habit-cell { width: 28px; height: 28px; border-radius: 7px; font-size: 9px; }
+  .habit-row .habit-name { font-size: 13px; }
+  .habit-streak { font-size: 10px; }
+
+  /* ── Mood ── */
+  .mood-strip { grid-template-columns: repeat(15, 1fr); gap: 2px; }
+  .mood-day { font-size: 10px; border-radius: 4px; }
+  .mood-btn { width: 34px; height: 34px; font-size: 20px; }
+  .mood-header-row { gap: var(--sp-2); }
+  .mood-question { font-size: 14px; }
+  .nb-mood-btn { width: 32px; height: 32px; font-size: 18px; }
+  .nb-mood-embed-row { gap: var(--sp-2); }
+
+  /* ── Water ── */
+  .water-grid { max-width: 100%; }
+
+  /* ── Notes ── */
+  .note-card { padding: 10px 12px; }
+  .note-title { font-size: 22px; }
+  .note-body { min-height: 300px; padding: 6px 8px 12px; font-size: 14px; }
+
+  /* ── Notebook ── */
+  .nb-layout { grid-template-columns: 1fr; }
+  .nb-resizer { display: none; }
+  .nb-editor { padding: 20px 16px; font-size: 14px; min-height: 500px; }
+  .nb-toolbar { top: 68px; }
+  .nb-title { font-size: 22px; }
+
+  /* ── Goals ── */
+  .goal-row { padding: 10px 12px; }
+
+  /* ── List items ── */
+  .list-item { padding: 8px 10px; }
+  .list-item .text { font-size: 13px; }
+
+  /* ── Chip ── */
+  .chip { font-size: 11px; padding: 3px 8px; }
+
+  /* ── Buttons ── */
+  .btn { padding: 8px 14px; font-size: 12px; }
+  .btn-sm { padding: 5px 10px; font-size: 11px; }
+
+  /* ── Empty state ── */
+  .empty-state { padding: var(--sp-6) var(--sp-3); font-size: 14px; }
+}

@@ -140,3 +140,34 @@ body {
   .search { width: 160px; }
   .view { padding: var(--sp-4); }
 }
+
+/* ── Overlay when sidebar is open on mobile ──────────────────────────── */
+.nav-overlay {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.35);
+  z-index: 19;
+  animation: fadeIn 180ms ease-out;
+}
+body.nav-open .nav-overlay { display: block; }
+
+/* ── Phone (≤ 600px) ─────────────────────────────────────────────────── */
+@media (max-width: 600px) {
+  :root { --topbar-h: 68px; }
+
+  .topbar {
+    min-height: var(--topbar-h);
+    padding: var(--sp-3) var(--sp-3) var(--sp-3) 56px;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-2);
+  }
+  .page-title { font-size: 20px; margin-top: 0; }
+  .crumbs { font-size: 10px; letter-spacing: 0; }
+  .search { width: 100px; padding: 6px 10px; font-size: 12px; }
+  .date-chip { font-size: 11px; padding: 5px 10px; display: none; }
+  .topbar-right { gap: var(--sp-2); }
+
+  .view { padding: var(--sp-3); }
+  .menu-toggle { top: 12px; inset-inline-start: 10px; width: 36px; height: 36px; }
+}
