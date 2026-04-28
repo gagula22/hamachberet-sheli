@@ -129,25 +129,58 @@
 
   const pending = {};
   const timers  = {};
+  let inflight = 0;
+
+  function setStatus(state) {
+    const el = document.getElementById('fb-sync-status');
+    if (!el) return;
+    if (state === 'saving') {
+      el.textContent = '✏️ שומר…';
+      el.style.color = 'var(--ink-mute)';
+    } else if (state === 'saved') {
+      const t = new Date();
+      const hh = String(t.getHours()).padStart(2, '0');
+      const mm = String(t.getMinutes()).padStart(2, '0');
+      el.textContent = `✓ נשמר • ${hh}:${mm}`;
+      el.style.color = '';
+    } else if (state === 'error') {
+      el.textContent = '⚠️ לא הצליח לסנכרן';
+      el.style.color = '#e53e3e';
+    }
+  }
 
   function schedulePush(key, value) {
     pending[key] = value;
     clearTimeout(timers[key]);
-    timers[key] = setTimeout(() => doPush(key), 1500);
+    setStatus('saving');
+    timers[key] = setTimeout(() => doPush(key), 700);
   }
 
   async function doPush(key) {
     const value = pending[key];
     if (value === undefined || !db || !userId) return;
+    delete pending[key];
+    inflight++;
     try {
       if (key === 'topics') {
         await syncTopics(value);
       } else {
         await db.doc(`users/${userId}/data/main`).set({ [key]: value }, { merge: true });
       }
+      inflight--;
+      if (inflight === 0 && Object.keys(pending).length === 0) setStatus('saved');
     } catch (e) {
+      inflight--;
       console.warn(`Push "${key}" failed:`, e);
+      setStatus('error');
     }
+  }
+
+  function flushAll() {
+    Object.keys(pending).forEach(key => {
+      clearTimeout(timers[key]);
+      doPush(key);
+    });
   }
 
   // ── Real-time listeners ───────────────────────────────────────────────────
@@ -235,7 +268,7 @@
         <div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
           ${user.displayName || user.email || 'משתמש'}
         </div>
-        <div style="font-size:11px;color:var(--ink-mute)">☁️ מסונכרן בזמן אמת</div>
+        <div id="fb-sync-status" style="font-size:11px;color:var(--ink-mute)">☁️ מסונכרן בזמן אמת</div>
       </div>
       <button id="fb-signout" title="התנתקות"
         style="font-size:20px;cursor:pointer;background:none;border:none;color:var(--ink-mute);padding:4px;line-height:1">⏏</button>`;
@@ -270,12 +303,26 @@
       loader.remove();
 
       setTimeout(() => renderUserBar(user), 600);
+
+      // Flush pending pushes when the page is about to be hidden/closed
+      // — without this, the debounce timer dies with the page and the last
+      // edits never reach Firestore.
+      window.addEventListener('pagehide', flushAll);
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') flushAll();
+      });
+
       return true;
     },
 
     push(key, value) {
       if (!this.enabled || !userId) return;
       schedulePush(key, value);
+    },
+
+    flush() {
+      if (!this.enabled || !userId) return;
+      flushAll();
     }
   };
 })();

@@ -537,10 +537,22 @@
     const breadcrumb = buildBreadcrumb(topic);
 
     const startPage = ctx.offset + 1;
-    const meta = App.el('div', { class: 'row row-between', style: { marginTop: '8px', flexWrap: 'wrap' } }, [
+    const saveBtn = App.el('button', {
+      class: 'btn primary',
+      style: { padding: '8px 18px', fontSize: '14px', fontWeight: '600' },
+      title: 'שמור עכשיו לענן',
+      onClick: () => {
+        updateTopic(topic.id, { body: editor.innerHTML, updatedAt: Date.now() });
+        refreshPageLabels();
+        if (window.FirebaseSync && FirebaseSync.flush) FirebaseSync.flush();
+        if (window.App && App.toast) App.toast('💾 נשמר לענן');
+      }
+    }, '💾 שמור עכשיו');
+
+    const meta = App.el('div', { class: 'row row-between', style: { marginTop: '8px', flexWrap: 'wrap', gap: '8px' } }, [
       App.el('span', { class: 'chip lavender' }, 'עודכן: ' + new Date(topic.updatedAt || Date.now()).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })),
       App.el('span', { class: 'chip sky' }, ctx.rootName ? `מתחיל בעמוד ${startPage} · "${ctx.rootName}"` : `עמוד ${startPage}`),
-      App.el('span', { class: 'chip' }, 'אוטו-שמירה בכל הקלדה')
+      saveBtn
     ]);
 
     // Toolbar is position:sticky — no spacer needed (stays in flow)
