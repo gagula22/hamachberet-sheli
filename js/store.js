@@ -57,16 +57,16 @@
   let state = loadSync();   // immediate load from localStorage (fast first paint)
   const listeners = new Set();
 
-  // After first paint, load from IndexedDB which may have larger / newer data
-  idbGet(KEY).then(saved => {
+  // After first paint, load from IndexedDB which may have larger / newer data.
+  // Exposed via Store.ready() so FirebaseSync can wait for local data before
+  // merging with cloud (avoids overwriting unsynced local edits).
+  const idbLoadPromise = idbGet(KEY).then(saved => {
     if (!saved) {
-      // Nothing in IDB yet — migrate from localStorage if available
       try {
         const raw = localStorage.getItem(KEY);
         if (raw) {
           const parsed = JSON.parse(raw);
           state = Object.assign(structuredClone(DEFAULTS), parsed);
-          // Save to IDB, then clear localStorage to free space
           idbSet(KEY, state).then(() => {
             try { localStorage.removeItem(KEY); } catch {}
           }).catch(() => {});
@@ -75,7 +75,6 @@
       } catch {}
       return;
     }
-    // IDB has data — use it and clear the old localStorage copy
     state = Object.assign(structuredClone(DEFAULTS), saved);
     try { localStorage.removeItem(KEY); } catch {}
     emit();
@@ -137,6 +136,7 @@
       clearTimeout(saveTimer);
       saveNow();
     },
+    ready() { return idbLoadPromise; },
     update(key, fn) {
       state[key] = fn(state[key]);
       scheduleSave();

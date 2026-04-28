@@ -184,6 +184,85 @@
     }));
   }
 
+  // ── Merge helpers — preserve unsynced local data on initial cloud load ──
+  //
+  // The first cloud snapshot used to OVERWRITE local IDB data. That meant
+  // that if a device had unsynced edits (e.g. tab closed mid-debounce), they
+  // were silently destroyed when the device next went online. Now we merge:
+  // both local and cloud contribute, and on conflict (same id) the side with
+  // the newer updatedAt wins. The merged result is then pushed back to cloud
+  // so all devices converge.
+
+  function mergeArrayById(local, cloud) {
+    const map = new Map();
+    (cloud || []).forEach(item => {
+      if (item && item.id != null) map.set(item.id, item);
+    });
+    (local || []).forEach(item => {
+      if (!item || item.id == null) return;
+      const c = map.get(item.id);
+      if (!c) { map.set(item.id, item); return; }
+      const lU = item.updatedAt || item.createdAt || 0;
+      const cU = c.updatedAt || c.createdAt || 0;
+      if (lU >= cU) map.set(item.id, item);
+    });
+    return Array.from(map.values());
+  }
+
+  function mergeHabits(local, cloud) {
+    const map = new Map();
+    (cloud || []).forEach(h => { if (h && h.id) map.set(h.id, h); });
+    (local || []).forEach(h => {
+      if (!h || !h.id) return;
+      const c = map.get(h.id);
+      if (!c) { map.set(h.id, h); return; }
+      // Merge habit logs (per-day) — union both date sets
+      map.set(h.id, { ...c, ...h, log: { ...(c.log || {}), ...(h.log || {}) } });
+    });
+    return Array.from(map.values());
+  }
+
+  function mergeSlots(local, cloud) {
+    const merged = { ...(cloud || {}) };
+    Object.keys(local || {}).forEach(date => {
+      merged[date] = merged[date]
+        ? { ...merged[date], ...local[date] }
+        : local[date];
+    });
+    return merged;
+  }
+
+  function mergeByKey(key, local, cloud) {
+    if (local === undefined || local === null) return cloud;
+    if (cloud === undefined || cloud === null) return local;
+    switch (key) {
+      case 'notes':
+      case 'transactions':
+      case 'goals':
+      case 'tasks':
+      case 'todos':
+        return mergeArrayById(local, cloud);
+      case 'habits':
+        return mergeHabits(local, cloud);
+      case 'mood':
+      case 'water':
+      case 'sleep':
+        // Date-keyed maps — local wins on conflict, cloud fills missing days
+        return { ...cloud, ...local };
+      case 'slots':
+        return mergeSlots(local, cloud);
+      case 'settings':
+        return { ...cloud, ...local };
+      default:
+        return local;
+    }
+  }
+
+  function differs(a, b) {
+    try { return JSON.stringify(a) !== JSON.stringify(b); }
+    catch { return true; }
+  }
+
   // ── Real-time listeners ───────────────────────────────────────────────────
 
   function listenToCloud() {
@@ -202,9 +281,16 @@
         if (mainFirst) {
           mainFirst = false;
           if (snap.exists) {
-            // Pull cloud data into local store (initial load)
-            const data = snap.data();
-            MAIN_KEYS.forEach(k => { if (data[k] !== undefined) Store._local(k, data[k]); });
+            // Initial load — MERGE local IDB with cloud (don't overwrite).
+            const cloud = snap.data();
+            MAIN_KEYS.forEach(k => {
+              if (cloud[k] === undefined) return;
+              const local = Store.get(k);
+              const merged = mergeByKey(k, local, cloud[k]);
+              Store._local(k, merged);
+              // If local contributed something cloud didn't have, push merged back.
+              if (differs(merged, cloud[k])) schedulePush(k, merged);
+            });
           } else {
             // First-ever login: push local data up to the cloud
             const batch = {};
@@ -214,7 +300,7 @@
           mainReady = true;
           checkDone();
         } else if (snap.exists) {
-          // Real-time update from another device/tab → update UI immediately
+          // Real-time update from another device/tab → trust cloud
           const data = snap.data();
           MAIN_KEYS.forEach(k => { if (data[k] !== undefined) Store._fromCloud(k, data[k]); });
         }
@@ -226,25 +312,38 @@
 
       // Real-time listener on topics collection
       db.collection(`users/${userId}/topics`).onSnapshot(snap => {
-        const topics = [];
-        snap.forEach(d => topics.push(d.data()));
+        const cloudTopics = [];
+        snap.forEach(d => cloudTopics.push(d.data()));
 
         if (topicsFirst) {
           topicsFirst = false;
-          if (topics.length > 0) {
-            knownTopicIds = new Set(topics.map(t => t.id));
-            Store._local('topics', topics);
-          } else {
+          const local = Store.get('topics') || [];
+          knownTopicIds = new Set(cloudTopics.map(t => t.id));
+
+          if (cloudTopics.length === 0 && local.length === 0) {
+            // both empty — nothing to do
+          } else if (cloudTopics.length === 0) {
             // First-ever login: push local topics up
-            const local = Store.get('topics') || [];
-            if (local.length) syncTopics(local).catch(() => {});
+            syncTopics(local).catch(() => {});
+          } else {
+            // Both have data — merge by id (newer updatedAt wins on conflict)
+            const merged = mergeArrayById(local, cloudTopics);
+            Store._local('topics', merged);
+            // If local had unsynced topics or newer versions, push merged back
+            // so all devices converge to the union.
+            if (differs(
+                merged.slice().sort((a,b) => String(a.id).localeCompare(b.id)),
+                cloudTopics.slice().sort((a,b) => String(a.id).localeCompare(b.id))
+            )) {
+              schedulePush('topics', merged);
+            }
           }
           topicsReady = true;
           checkDone();
         } else {
-          // Real-time update from another device/tab
-          knownTopicIds = new Set(topics.map(t => t.id));
-          Store._fromCloud('topics', topics);
+          // Real-time update from another device/tab → trust cloud
+          knownTopicIds = new Set(cloudTopics.map(t => t.id));
+          Store._fromCloud('topics', cloudTopics);
         }
       }, err => {
         console.warn('Topics listener error:', err);
@@ -298,6 +397,13 @@
         'direction:rtl;font-size:17px;color:#888;gap:16px';
       loader.innerHTML = '<div style="font-size:40px">☁️</div><div>טוען נתונים מהענן…</div>';
       document.body.appendChild(loader);
+
+      // CRITICAL: wait for local IDB to load BEFORE the cloud listener fires
+      // its first snapshot. Otherwise the merge would see empty local state
+      // and the cloud would still effectively overwrite unsynced edits.
+      if (window.Store && Store.ready) {
+        try { await Store.ready(); } catch {}
+      }
 
       // Start real-time listeners; wait for initial snapshot to load
       await listenToCloud();
