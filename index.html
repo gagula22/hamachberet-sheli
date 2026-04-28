@@ -2,7 +2,10 @@
 <html lang="he" dir="rtl">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#FAF6F0" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
@@ -10,9 +13,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700&family=Frank+Ruhl+Libre:wght@400;500;600;700&family=Assistant:wght@400;500;600;700&family=Rubik:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/tokens.css?v=8" />
-  <link rel="stylesheet" href="css/layout.css?v=8" />
-  <link rel="stylesheet" href="css/components.css?v=8" />
+  <link rel="stylesheet" href="css/tokens.css?v=9" />
+  <link rel="stylesheet" href="css/layout.css?v=9" />
+  <link rel="stylesheet" href="css/components.css?v=9" />
   <!-- html2pdf: client-side PDF export (local bundle — no CDN dependency) -->
   <script src="js/vendor/html2pdf.bundle.min.js"></script>
   <!-- Tools page: Word↔PDF conversion -->
@@ -26,6 +29,25 @@
 </head>
 <body>
   <button id="menuToggle" class="menu-toggle" aria-label="תפריט">☰</button>
+
+  <!-- Bottom navigation bar (mobile only) -->
+  <nav id="bottomNav" class="bottom-nav" aria-label="ניווט ראשי">
+    <button class="bn-item" data-route="dashboard">
+      <span class="bn-icon">🏠</span><span class="bn-label">בקרה</span>
+    </button>
+    <button class="bn-item" data-route="notebook">
+      <span class="bn-icon">📓</span><span class="bn-label">מחברת</span>
+    </button>
+    <button class="bn-item" data-route="calendar">
+      <span class="bn-icon">📅</span><span class="bn-label">יומן</span>
+    </button>
+    <button class="bn-item" data-route="todos">
+      <span class="bn-icon">✅</span><span class="bn-label">משימות</span>
+    </button>
+    <button class="bn-item bn-more" id="bnMore">
+      <span class="bn-icon">☰</span><span class="bn-label">עוד</span>
+    </button>
+  </nav>
 
   <main class="main">
     <header class="topbar">
@@ -56,26 +78,26 @@
     <div id="sidebarUserBar" style="display:none;align-items:center;gap:10px;padding:10px 12px;background:rgba(255,255,255,.55);border-radius:12px;margin-top:8px"></div>
   </aside>
 
-  <script src="js/firebase-config.js?v=8"></script>
-  <script src="js/store.js?v=8"></script>
-  <script src="js/app.js?v=8"></script>
-  <script src="js/firebase-sync.js?v=8"></script>
-  <script src="js/components/sidebar.js?v=8"></script>
-  <script src="js/components/editable.js?v=8"></script>
-  <script src="js/views/dashboard.js?v=8"></script>
-  <script src="js/views/notebook.js?v=8"></script>
-  <script src="js/views/daily.js?v=8"></script>
-  <script src="js/views/weekly.js?v=8"></script>
-  <script src="js/views/monthly.js?v=8"></script>
-  <script src="js/views/calendar.js?v=8"></script>
-  <script src="js/views/notes.js?v=8"></script>
-  <script src="js/views/todos.js?v=8"></script>
-  <script src="js/views/habits.js?v=8"></script>
-  <script src="js/views/mood.js?v=8"></script>
-  <script src="js/views/water.js?v=8"></script>
-  <script src="js/views/budget.js?v=8"></script>
-  <script src="js/views/goals.js?v=8"></script>
-  <script src="js/views/stickers.js?v=8"></script>
+  <script src="js/firebase-config.js?v=9"></script>
+  <script src="js/store.js?v=9"></script>
+  <script src="js/app.js?v=9"></script>
+  <script src="js/firebase-sync.js?v=9"></script>
+  <script src="js/components/sidebar.js?v=9"></script>
+  <script src="js/components/editable.js?v=9"></script>
+  <script src="js/views/dashboard.js?v=9"></script>
+  <script src="js/views/notebook.js?v=9"></script>
+  <script src="js/views/daily.js?v=9"></script>
+  <script src="js/views/weekly.js?v=9"></script>
+  <script src="js/views/monthly.js?v=9"></script>
+  <script src="js/views/calendar.js?v=9"></script>
+  <script src="js/views/notes.js?v=9"></script>
+  <script src="js/views/todos.js?v=9"></script>
+  <script src="js/views/habits.js?v=9"></script>
+  <script src="js/views/mood.js?v=9"></script>
+  <script src="js/views/water.js?v=9"></script>
+  <script src="js/views/budget.js?v=9"></script>
+  <script src="js/views/goals.js?v=9"></script>
+  <script src="js/views/stickers.js?v=9"></script>
   <script>
     (async function () {
       if (window.FirebaseSync) {

@@ -817,6 +817,25 @@ figure.nb-img::after {
 .goal-row.done .text { text-decoration: line-through; color: var(--ink-mute); }
 
 /* ════════════════════════════════════════════════════════════════════════
+   TOUCH TARGETS & ANDROID BASICS (≤ 900px)
+   ════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 900px) {
+  .btn, .tab, .nav-item, .checkbox,
+  .habit-cell, .mood-btn, .glass, .cal-cell,
+  .note-card, .list-item, .goal-row, .bn-item {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+  /* Ensure checkboxes and small targets are tappable */
+  .checkbox { min-width: 24px; min-height: 24px; }
+  .mood-btn { width: 44px; height: 44px; font-size: 22px; }
+  /* Remove hover-only patterns on touch devices */
+  .list-item .del { opacity: 1; }
+  .habit-row .habit-del { opacity: 1; }
+  .goal-row .del { opacity: 1; }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
    RESPONSIVE — TABLET (≤ 768px)
    ════════════════════════════════════════════════════════════════════════ */
 @media (max-width: 768px) {

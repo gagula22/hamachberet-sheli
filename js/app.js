@@ -52,7 +52,7 @@
       const now = new Date();
       todayChip.textContent = now.toLocaleDateString('he-IL', { weekday: 'long', month: 'long', day: 'numeric' });
 
-      // Hamburger toggle
+      // Hamburger toggle (desktop/tablet)
       document.getElementById('menuToggle').addEventListener('click', () => {
         document.body.classList.toggle('nav-open');
       });
@@ -66,6 +66,18 @@
       // Close sidebar on nav-item click (mobile)
       document.getElementById('nav').addEventListener('click', () => {
         if (window.innerWidth <= 900) document.body.classList.remove('nav-open');
+      });
+
+      // Bottom navigation bar (mobile)
+      const bnMore = document.getElementById('bnMore');
+      if (bnMore) {
+        bnMore.addEventListener('click', () => document.body.classList.toggle('nav-open'));
+      }
+      document.querySelectorAll('.bn-item[data-route]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          location.hash = '#/' + btn.dataset.route;
+          document.body.classList.remove('nav-open');
+        });
       });
 
       document.getElementById('globalSearch').addEventListener('input', (e) => {
@@ -96,6 +108,11 @@
       document.getElementById('pageTitle').textContent = section.id === 'dashboard' ? this.greeting() : section.title;
       document.body.classList.remove('nav-open');
       Sidebar.setActive(section.id);
+
+      // Sync bottom nav active state
+      document.querySelectorAll('.bn-item').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.route === section.id);
+      });
 
       const view = document.getElementById('view');
       view.innerHTML = '';

@@ -15,7 +15,30 @@
       "Bash(git add *)",
       "Bash(git rm *)",
       "Bash(git commit *)",
-      "Bash(git config *)"
+      "Bash(git config *)",
+      "Bash(git remote *)",
+      "Bash(git branch *)",
+      "Bash(git push *)",
+      "Bash(curl -L \"https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js\" -o js/vendor/html2pdf.bundle.min.js)",
+      "Bash(powershell -command \"Get-Content 'C:\\\\Users\\\\user\\\\Desktop\\\\יום ראשון ETH- 26.4.26.doc' -Encoding UTF8 | Select-Object -First 80\")",
+      "Bash(curl -sL \"https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js\" -o mammoth.min.js)",
+      "Bash(curl -sL \"https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js\" -o pdfjs.min.js)",
+      "Bash(curl -sL \"https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js\" -o pdfjs.worker.min.js)",
+      "Bash(gh run *)",
+      "WebFetch(domain:gagula22.github.io)",
+      "WebFetch(domain:github.com)",
+      "Bash(node --check \"C:\\\\Users\\\\user\\\\Documents\\\\מחברת\\\\js\\\\views\\\\stickers.js\")",
+      "Bash(ffmpeg -version)",
+      "Bash(where ffmpeg *)",
+      "Bash(where ffmpeg.exe)",
+      "Bash(set PATH=%PATH%)",
+      "Bash(C:\\\\Users\\\\user\\\\AppData\\\\Local\\\\Microsoft\\\\WinGet\\\\Packages\\\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\\\ffmpeg-8.1-full_build\\\\bin)",
+      "PowerShell(Get-Command ffmpeg 2>&1)",
+      "PowerShell($env:PATH += \";C:\\\\Users\\\\user\\\\AppData\\\\Local\\\\Microsoft\\\\WinGet\\\\Packages\\\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\\\ffmpeg-8.1-full_build\\\\bin\"; $scriptPath = \"C:\\\\Users\\\\user\\\\AppData\\\\Roaming\\\\Claude\\\\local-agent-mode-sessions\\\\skills-plugin\\\\b0cabb1a-8956-4ec5-bde8-98bd671598de\\\\c9f03117-575f-4a16-b1b5-63183dc364cd\\\\skills\\\\hebrew-video-transcriber\\\\scripts\\\\transcribe_video.py\"; python $scriptPath \"https://www.youtube.com/watch?v=m_buJUtP4Jk\" --output \"C:\\\\Users\\\\user\\\\Documents\" 2>&1 | Select-Object -First 30)",
+      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\user\\\\.cache\\\\huggingface\\\\hub\" -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -gt \\(Get-Date\\).AddMinutes\\(-5\\) } | Select-Object FullName, LastWriteTime | Select-Object -First 5)",
+      "Read(//mnt/c/Users/user/Documents/**)",
+      "Bash(git pull *)",
+      "Bash(git stash *)"
     ]
   }
 }
