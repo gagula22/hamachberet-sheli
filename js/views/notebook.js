@@ -982,21 +982,23 @@
 
     // ── Step 4: handle page-spacers and remove UI-only elements
     //
-    //  A .nb-page-spacer is inserted by snapFigToPage() just before a figure
-    //  that would otherwise straddle a page boundary.  After Step 3 the figure
-    //  has been replaced by a <table>, so a valid spacer has a <table> as its
-    //  immediate nextElementSibling.
+    //  CRITICAL WORD QUIRK: Word only respects page-break-after:always on a <p>
+    //  when that <p> is a direct child of <body> (i.e. at the top level of the
+    //  content).  If the <p> is nested inside a <div>, Word silently ignores it.
     //
-    //  Any OTHER spacer (stale one from a deleted image, duplicate from a
-    //  ResizeObserver re-run, or a bare spacer at the bottom of a page) has
-    //  NO adjacent table.  Converting those to page-breaks creates blank pages.
-    //  → valid spacer  → replace with MSO page-break paragraph
-    //  → stale spacer  → just remove it
+    //  Contenteditable wraps everything in <div> elements (one per line), so
+    //  the spacer and its adjacent table both live inside such a <div>.
+    //  We must walk up the DOM from the spacer until we find the ancestor that
+    //  is a direct child of `cloned` (= the editor root that becomes <body>),
+    //  then insert the page-break <p> BEFORE that ancestor — not inside it.
+    //
+    //  → valid spacer (nextSibling is TABLE)  → lift page-break to top level
+    //  → stale spacer (no adjacent TABLE)     → just remove (avoid blank pages)
     cloned.querySelectorAll('.nb-page-spacer').forEach(spacer => {
       const next = spacer.nextElementSibling;
+
       if (next && next.tagName === 'TABLE') {
-        // Hard Word page-break: the mso-special-character on the <br> is how
-        // Word itself writes page breaks when it saves HTML.
+        // Build the hard page-break paragraph
         const pb = document.createElement('p');
         pb.setAttribute('style',
           'margin:0;padding:0;line-height:0;font-size:1px;' +
@@ -1004,7 +1006,15 @@
         const br = document.createElement('br');
         br.setAttribute('style', 'mso-special-character:line-break;page-break-before:always');
         pb.appendChild(br);
-        spacer.replaceWith(pb);
+
+        // Walk up to find the direct child of cloned so we can insert pb at the top level
+        let anchor = spacer;
+        while (anchor.parentElement && anchor.parentElement !== cloned) {
+          anchor = anchor.parentElement;
+        }
+        // Insert page-break paragraph BEFORE the outermost wrapper div
+        (anchor.parentElement || spacer.parentElement).insertBefore(pb, anchor);
+        spacer.remove();
       } else {
         spacer.remove(); // stale spacer — would create a blank page if kept
       }
