@@ -839,7 +839,7 @@
             exportDoc(currentTopic, editor, format);
           } else if (choice === 'other') {
             const id = otherSel.value;
-            if (id) exportTopicById(id, format);
+            if (id) exportTopicById(id, format);  // already async-safe
           } else {
             exportAllTopics(format);
           }
@@ -851,7 +851,7 @@
     document.body.appendChild(overlay);
   }
 
-  function exportTopicById(id, format) {
+  async function exportTopicById(id, format) {
     const t = getById(id);
     if (!t) return;
     function collectHtml(topicId) {
@@ -865,10 +865,10 @@
     }
     const div = document.createElement('div');
     div.innerHTML = collectHtml(id);
-    exportDoc(t, div, format);
+    await exportDoc(t, div, format);
   }
 
-  function exportAllTopics(format) {
+  async function exportAllTopics(format) {
     const roots = getChildren(null);
     let html = '';
     function addTopic(topicId, depth) {
@@ -881,22 +881,44 @@
     roots.forEach(t => addTopic(t.id, 0));
     const div = document.createElement('div');
     div.innerHTML = html;
-    exportDoc({ name: 'כל המחברות', updatedAt: Date.now() }, div, format);
+    await exportDoc({ name: 'כל המחברות', updatedAt: Date.now() }, div, format);
   }
 
-  function exportDoc(topic, editor, format) {
+  // Convert any img to a data-URL via canvas (handles external URLs + ensures inline)
+  function imgToDataUrl(img) {
+    return new Promise(resolve => {
+      if (!img.src || img.src.startsWith('data:')) { resolve(img.src); return; }
+      const tmp = new Image();
+      tmp.crossOrigin = 'anonymous';
+      tmp.onload = () => {
+        try {
+          const c = document.createElement('canvas');
+          c.width = tmp.naturalWidth; c.height = tmp.naturalHeight;
+          c.getContext('2d').drawImage(tmp, 0, 0);
+          resolve(c.toDataURL('image/jpeg', 0.85));
+        } catch { resolve(img.src); }
+      };
+      tmp.onerror = () => resolve(img.src);
+      tmp.src = img.src;
+    });
+  }
+
+  async function exportDoc(topic, editor, format) {
     const title = topic.name || 'מחברת';
 
+    // ── Step 0: ensure all images are inline data-URLs (not external URLs)
+    await Promise.all(Array.from(editor.querySelectorAll('figure.nb-img img')).map(async img => {
+      if (img.src && !img.src.startsWith('data:')) {
+        img.src = await imgToDataUrl(img);
+      }
+    }));
+
     // ── Step 1: stamp each figure's rendered pixel-width onto data-ew
-    //    getBoundingClientRect() only works for live (in-DOM) editors.
-    //    For detached editors (exportById / exportAll), fall back to
-    //    the inline style width, then the CSS default (300px).
-    //    Width is capped at 480px so it always fits inside an A4 Word page.
     const MAX_IMG_W = 480;
     editor.querySelectorAll('figure.nb-img').forEach(fig => {
-      const liveW = fig.getBoundingClientRect().width;          // >0 only when in DOM
-      const styleW = parseInt(fig.style.width) || 0;            // user-resized
-      const w = liveW > 0 ? liveW : styleW > 0 ? styleW : 300; // 300 = CSS default
+      const liveW = fig.getBoundingClientRect().width;
+      const styleW = parseInt(fig.style.width) || 0;
+      const w = liveW > 0 ? liveW : styleW > 0 ? styleW : 300;
       fig.dataset.ew = String(Math.round(Math.min(w, MAX_IMG_W)));
     });
 
