@@ -16,15 +16,16 @@
   <link rel="stylesheet" href="css/tokens.css?v=10" />
   <link rel="stylesheet" href="css/layout.css?v=10" />
   <link rel="stylesheet" href="css/components.css?v=10" />
-  <!-- html2pdf: client-side PDF export (local bundle — no CDN dependency) -->
-  <script src="js/vendor/html2pdf.bundle.min.js"></script>
-  <!-- Tools page: Word↔PDF conversion -->
-  <script src="js/vendor/mammoth.min.js"></script>
-  <script src="js/vendor/pdfjs.min.js"></script>
-  <!-- Firebase SDK (loaded only when connected; harmless if offline) -->
-  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  <!-- Vendor scripts: deferred so they never block first render.
+       html2pdf / mammoth / pdfjs are only needed when the user clicks Export. -->
+  <script defer src="js/vendor/html2pdf.bundle.min.js"></script>
+  <script defer src="js/vendor/mammoth.min.js"></script>
+  <script defer src="js/vendor/pdfjs.min.js"></script>
+  <!-- Firebase SDK: deferred — downloads in parallel but doesn't block rendering.
+       App.start() runs immediately with local data; Firebase syncs in the background. -->
+  <script defer src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script defer src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <script defer src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23FADADD'/%3E%3Ctext x='50%25' y='58%25' text-anchor='middle' font-size='34' font-family='serif' fill='%233B3A3A'%3E%D7%9E%3C/text%3E%3C/svg%3E" />
 </head>
 <body>
@@ -99,13 +100,17 @@
   <script src="js/views/budget.js?v=10"></script>
   <script src="js/views/goals.js?v=10"></script>
   <script src="js/views/stickers.js?v=10"></script>
-  <script>
-    (async function () {
-      if (window.FirebaseSync) {
-        try { await FirebaseSync.setup(); } catch (e) { console.warn('Firebase setup error:', e); }
-      }
-      App.start();
-    })();
+  <!-- Bootstrap: App starts immediately with local (IndexedDB / localStorage) data.
+       Firebase setup runs in the background after all deferred scripts are ready.
+       The firebase-sync loader overlay will appear if the user needs to authenticate
+       or while initial cloud data is being fetched — but the UI is never blocked. -->
+  <script type="module">
+    // type="module" is implicitly deferred, so all <script defer> above have
+    // already executed by the time this runs — Firebase SDK is guaranteed loaded.
+    App.start();
+    if (window.FirebaseSync) {
+      FirebaseSync.setup().catch(e => console.warn('Firebase setup error:', e));
+    }
   </script>
 </body>
 </html>

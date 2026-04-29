@@ -957,25 +957,39 @@
       clonedImg.setAttribute('height', 'auto');
       // Keep inline style minimal: no max-width (confuses Word), no display:block
       clonedImg.style.cssText = `width:${w}px;height:auto;display:inline;`;
-      // Wrap in a div with page-break-inside:avoid so Word/browsers
-      // never split the image across a page boundary
-      const wrapper = document.createElement('div');
-      wrapper.style.cssText = 'page-break-inside:avoid;break-inside:avoid;';
-      const p = document.createElement('p');
-      p.setAttribute('align', 'center');
-      p.style.cssText = 'text-align:center;margin:12px 0;page-break-inside:avoid;break-inside:avoid;';
-      p.appendChild(clonedImg);
-      wrapper.appendChild(p);
-      fig.replaceWith(wrapper);
+      // Use a table wrapper — the most reliable way to prevent Word from
+      // splitting an image across a page (plain div/p keep-together is often ignored).
+      // The MSO attribute mso-pagination:widow-orphan keep-together is the
+      // Office-specific signal; page-break-inside:avoid covers other renderers.
+      const tbl = document.createElement('table');
+      tbl.setAttribute('border', '0');
+      tbl.setAttribute('cellpadding', '0');
+      tbl.setAttribute('cellspacing', '0');
+      tbl.setAttribute('align', 'center');
+      tbl.setAttribute('width', '100%');
+      tbl.style.cssText = 'page-break-inside:avoid;break-inside:avoid;mso-pagination:widow-orphan keep-together;border-collapse:collapse;';
+      const tr = document.createElement('tr');
+      const td = document.createElement('td');
+      td.setAttribute('align', 'center');
+      td.style.cssText = 'padding:8px 0;text-align:center;page-break-inside:avoid;';
+      td.appendChild(clonedImg);
+      tr.appendChild(td);
+      tbl.appendChild(tr);
+      fig.replaceWith(tbl);
     });
 
-    // ── Step 4: convert page-spacers → real page-breaks; remove other UI-only elements
+    // ── Step 4: convert page-spacers → real Word page-breaks; remove UI-only elements
     cloned.querySelectorAll('.nb-page-spacer').forEach(spacer => {
-      // Replace the visual spacer with a hard page-break paragraph so Word/PDF
-      // honour the page boundary the user sees in the editor.
+      // The <br mso-special-character:line-break> inside a page-break-after paragraph
+      // is the ONLY reliably-respected hard page-break in Word's HTML (.doc) format.
+      // Plain CSS page-break-after:always is often silently ignored by Word's HTML importer.
       const pb = document.createElement('p');
-      pb.style.cssText = 'margin:0;padding:0;page-break-after:always;break-after:page;font-size:1px;line-height:1px;';
-      pb.innerHTML = '&nbsp;';
+      pb.setAttribute('style',
+        'margin:0;padding:0;line-height:0;font-size:1px;' +
+        'page-break-after:always;break-after:page;mso-break-type:page-break;');
+      const br = document.createElement('br');
+      br.setAttribute('style', 'mso-special-character:line-break;page-break-before:always');
+      pb.appendChild(br);
       spacer.replaceWith(pb);
     });
     cloned.querySelectorAll('.nb-img-del').forEach(el => el.remove());
@@ -984,9 +998,8 @@
     const baseStyles = `
       body{font-family:Arial,sans-serif;direction:rtl;padding:40px;max-width:820px;margin:0 auto;color:#3b3a3a;}
       h1{font-size:28px;margin-bottom:24px;}
-      p[align="center"]{text-align:center;margin:12px 0;page-break-inside:avoid;break-inside:avoid;}
-      p[align="center"] img{display:inline;height:auto;}
-      div:has(>p[align="center"]){page-break-inside:avoid;break-inside:avoid;}
+      table[align="center"]{border-collapse:collapse;page-break-inside:avoid;mso-pagination:widow-orphan keep-together;}
+      table[align="center"] td{text-align:center;padding:8px 0;}
       .nb-mood-embed{border:2px solid #f0c4cc;border-radius:12px;padding:16px;margin:16px 0;background:#fffaf8;}
       .nb-mood-embed-header{font-weight:600;font-size:12px;color:#888;letter-spacing:.05em;margin-bottom:10px;}
       .nb-mood-embed-row{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:12px;}
