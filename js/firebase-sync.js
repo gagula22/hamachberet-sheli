@@ -4,12 +4,18 @@
   let db = null;
   let auth = null;
   let userId = null;
-  let knownTopicIds = null;
 
-  const MAIN_KEYS = [
-    'notes', 'tasks', 'todos', 'habits', 'mood',
-    'water', 'sleep', 'transactions', 'goals', 'slots', 'settings'
-  ];
+  // ── Data model split ──────────────────────────────────────────────────────
+  // SUBCOL_KEYS  → each item is its own Firestore document in a subcollection
+  //               (only changed/added/deleted items are written — true diffs)
+  // MAIN_DOC_KEYS→ small non-array data stays in one merged document
+  // 'topics'     → already individual docs under users/${uid}/topics/
+  const SUBCOL_KEYS    = ['notes', 'tasks', 'todos', 'goals', 'transactions'];
+  const MAIN_DOC_KEYS  = ['mood', 'water', 'sleep', 'slots', 'settings', 'habits'];
+
+  // lastPushed: the exact value last successfully written to Firestore per key.
+  // Used to diff before every write so unchanged data is never re-sent.
+  const lastPushed = {};
 
   // ── Initialisation ────────────────────────────────────────────────────────
 
@@ -33,7 +39,8 @@
     }
   }
 
-  // Shows a non-blocking banner at the top of the page when Firebase is unavailable
+  // ── Offline banner ────────────────────────────────────────────────────────
+
   function showOfflineBanner() {
     if (document.getElementById('fb-offline-banner')) return;
     const banner = document.createElement('div');
@@ -69,25 +76,19 @@
       'position:fixed;inset:0;z-index:9999;display:grid;place-items:center;' +
       'background:linear-gradient(135deg,#FFF7F3 0%,#F6EDFF 100%);' +
       'font-family:Heebo,Arial,sans-serif;direction:rtl';
-
     ov.innerHTML = `
       <div style="background:#fff;padding:48px 40px;border-radius:24px;
                   box-shadow:0 24px 64px rgba(0,0,0,.14);text-align:center;
                   width:min(400px,92vw)">
         <div style="font-size:56px;margin-bottom:16px">📓</div>
-        <h1 style="font-size:26px;font-weight:700;margin-bottom:8px;color:#3b3a3a">
-          המחברת שלי
-        </h1>
+        <h1 style="font-size:26px;font-weight:700;margin-bottom:8px;color:#3b3a3a">המחברת שלי</h1>
         <p style="color:#888;margin-bottom:36px;font-size:15px;line-height:1.7">
           התחבר עם חשבון Google כדי לגשת למחברת שלך<br>מכל מכשיר ובכל מקום
         </p>
         <button id="fb-google-btn" style="
-          width:100%;padding:14px 20px;
-          background:#4285f4;color:#fff;
-          border:none;border-radius:12px;
-          font-size:16px;font-weight:600;cursor:pointer;
-          display:flex;align-items:center;justify-content:center;gap:10px;
-          transition:opacity 180ms">
+          width:100%;padding:14px 20px;background:#4285f4;color:#fff;
+          border:none;border-radius:12px;font-size:16px;font-weight:600;cursor:pointer;
+          display:flex;align-items:center;justify-content:center;gap:10px;transition:opacity 180ms">
           <svg width="20" height="20" viewBox="0 0 48 48" style="flex-shrink:0">
             <path fill="#ffc107" d="M43.6 20.1H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.1 6.8 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.6-.4-3.9z"/>
             <path fill="#ff3d00" d="M6.3 14.7 13 19.6C14.8 15.1 19 12 24 12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.1 6.8 29.3 4 24 4 16.3 4 9.7 8.5 6.3 14.7z"/>
@@ -98,7 +99,6 @@
         </button>
         <div id="fb-login-err" style="color:#e53e3e;margin-top:12px;font-size:14px"></div>
       </div>`;
-
     document.body.appendChild(ov);
 
     document.getElementById('fb-google-btn').addEventListener('click', async () => {
@@ -107,15 +107,11 @@
       btn.querySelector('span').textContent = 'מתחבר…';
       try {
         await auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
-        // onAuthStateChanged will handle the rest
       } catch (e) {
-        // popup-blocked or popup-closed: fall back to full-page redirect
         if (e.code === 'auth/popup-blocked' || e.code === 'auth/popup-closed-by-user') {
           btn.querySelector('span').textContent = 'מפנה לכניסה…';
-          try {
-            await auth.signInWithRedirect(new firebase.auth.GoogleAuthProvider());
-            return; // page will navigate away
-          } catch (re) {
+          try { await auth.signInWithRedirect(new firebase.auth.GoogleAuthProvider()); return; }
+          catch (re) {
             const err = document.getElementById('fb-login-err');
             if (err) err.textContent = 'שגיאה: ' + (re.message || re.code || 'נסה שוב');
           }
@@ -142,62 +138,102 @@
     });
   }
 
-  // ── Cloud push ────────────────────────────────────────────────────────────
-
-  async function syncTopics(topics) {
-    try {
-      const col = db.collection(`users/${userId}/topics`);
-      const currentIds = new Set(topics.map(t => t.id));
-
-      if (knownTopicIds === null) {
-        const snap = await col.get();
-        knownTopicIds = new Set();
-        snap.forEach(d => knownTopicIds.add(d.id));
-      }
-
-      const batch = db.batch();
-      topics.forEach(t => batch.set(col.doc(t.id), t));
-      for (const id of knownTopicIds) {
-        if (!currentIds.has(id)) batch.delete(col.doc(id));
-      }
-      knownTopicIds = currentIds;
-      await batch.commit();
-    } catch (e) {
-      console.warn('Topics sync failed:', e);
-    }
-  }
-
-  const pending = {};
-  const timers  = {};
-  let inflight = 0;
+  // ── Status display ────────────────────────────────────────────────────────
 
   function setStatus(state) {
     const el = document.getElementById('fb-sync-status');
     if (el) {
       if (state === 'saving') {
-        el.textContent = '✏️ שומר…';
-        el.style.color = 'var(--ink-mute)';
+        el.textContent = '✏️ שומר…'; el.style.color = 'var(--ink-mute)';
       } else if (state === 'saved') {
         const t = new Date();
-        const hh = String(t.getHours()).padStart(2, '0');
-        const mm = String(t.getMinutes()).padStart(2, '0');
-        el.textContent = `✓ נשמר • ${hh}:${mm}`;
+        el.textContent = `✓ נשמר • ${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`;
         el.style.color = '';
       } else if (state === 'error') {
-        el.textContent = '⚠️ לא הצליח לסנכרן';
-        el.style.color = '#e53e3e';
+        el.textContent = '⚠️ לא הצליח לסנכרן'; el.style.color = '#e53e3e';
       }
     }
-    // Also update the notebook editor's sync chip if open
-    if (window._nbSyncHook) {
-      try { window._nbSyncHook(state); } catch {}
-    }
+    if (window._nbSyncHook) { try { window._nbSyncHook(state); } catch {} }
   }
+
+  // ── Diff-based write functions ────────────────────────────────────────────
+
+  // Write only changed/added/deleted items in a subcollection
+  async function syncSubcol(key, newItems) {
+    const items = newItems || [];
+    const col   = db.collection(`users/${userId}/${key}`);
+    const prev  = lastPushed[key];
+    const newMap = new Map(items.filter(i => i.id != null).map(i => [String(i.id), i]));
+    const batch  = db.batch();
+    let   writes = 0;
+
+    if (prev !== undefined) {
+      // Diff against last pushed state
+      const prevMap = new Map(prev.map(i => [String(i.id), JSON.stringify(i)]));
+      for (const [id, item] of newMap) {
+        if (prevMap.get(id) !== JSON.stringify(item)) { batch.set(col.doc(id), item); writes++; }
+      }
+      for (const id of prevMap.keys()) {
+        if (!newMap.has(id)) { batch.delete(col.doc(id)); writes++; }
+      }
+    } else {
+      // First push ever — write everything
+      for (const [id, item] of newMap) { batch.set(col.doc(id), item); writes++; }
+    }
+
+    if (writes > 0) await batch.commit();
+    lastPushed[key] = [...items];
+    return writes;
+  }
+
+  // Write only changed/added/deleted topics
+  async function syncTopics(topics) {
+    const col    = db.collection(`users/${userId}/topics`);
+    const prev   = lastPushed['topics'];
+    const newMap = new Map(topics.map(t => [String(t.id), t]));
+    const batch  = db.batch();
+    let   writes = 0;
+
+    if (prev !== undefined) {
+      const prevMap = new Map(prev.map(t => [String(t.id), JSON.stringify(t)]));
+      for (const [id, topic] of newMap) {
+        if (prevMap.get(id) !== JSON.stringify(topic)) { batch.set(col.doc(id), topic); writes++; }
+      }
+      for (const id of prevMap.keys()) {
+        if (!newMap.has(id)) { batch.delete(col.doc(id)); writes++; }
+      }
+    } else {
+      // First push — fetch cloud to detect deletes
+      const snap = await col.get();
+      const cloudIds = new Set(); snap.forEach(d => cloudIds.add(d.id));
+      for (const [id, topic] of newMap) { batch.set(col.doc(id), topic); writes++; }
+      for (const id of cloudIds) { if (!newMap.has(id)) { batch.delete(col.doc(id)); writes++; } }
+    }
+
+    if (writes > 0) await batch.commit();
+    lastPushed['topics'] = [...topics];
+    return writes;
+  }
+
+  // Write a single field to data/main, skipping if unchanged
+  async function syncMainDocKey(key, value) {
+    try {
+      if (lastPushed[key] !== undefined && JSON.stringify(value) === JSON.stringify(lastPushed[key])) return 0;
+    } catch {}
+    await db.doc(`users/${userId}/data/main`).set({ [key]: value }, { merge: true });
+    lastPushed[key] = value;
+    return 1;
+  }
+
+  // ── Push scheduling ───────────────────────────────────────────────────────
+
+  const pending = {};
+  const timers  = {};
+  let inflight  = 0;
 
   function schedulePush(key, value) {
     pending[key] = value;
     clearTimeout(timers[key]);
-    // Only show "saving" when a write actually starts — not while debounce timer is pending
     timers[key] = setTimeout(() => doPush(key), 700);
   }
 
@@ -206,16 +242,14 @@
     if (value === undefined || !db || !userId) return;
     delete pending[key];
     inflight++;
-    setStatus('saving'); // show "saving" only when write actually begins
-    const WRITE_TIMEOUT = 5000; // 5-second hard cap per write
+    setStatus('saving');
     try {
-      const writePromise = key === 'topics'
-        ? syncTopics(value)
-        : db.doc(`users/${userId}/data/main`).set({ [key]: value }, { merge: true });
-      await Promise.race([
-        writePromise,
-        new Promise((_, rej) => setTimeout(() => rej(new Error('write-timeout')), WRITE_TIMEOUT))
-      ]);
+      let writePromise;
+      if      (key === 'topics')            writePromise = syncTopics(value);
+      else if (SUBCOL_KEYS.includes(key))   writePromise = syncSubcol(key, value);
+      else                                  writePromise = syncMainDocKey(key, value);
+
+      await Promise.race([writePromise, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000))]);
       inflight--;
       if (inflight === 0 && Object.keys(pending).length === 0) setStatus('saved');
     } catch (e) {
@@ -227,180 +261,168 @@
 
   function flushAll() {
     const keys = Object.keys(pending);
-    const work = Promise.all(keys.map(key => {
-      clearTimeout(timers[key]);
-      return doPush(key);
-    }));
-    // Hard 8-second timeout — never leave callers hanging
-    const timeout = new Promise(resolve => setTimeout(resolve, 8000));
-    return Promise.race([work, timeout]);
+    const work = Promise.all(keys.map(key => { clearTimeout(timers[key]); return doPush(key); }));
+    return Promise.race([work, new Promise(r => setTimeout(r, 8000))]);
   }
 
-  // ── Merge helpers — preserve unsynced local data on initial cloud load ──
-  //
-  // The first cloud snapshot used to OVERWRITE local IDB data. That meant
-  // that if a device had unsynced edits (e.g. tab closed mid-debounce), they
-  // were silently destroyed when the device next went online. Now we merge:
-  // both local and cloud contribute, and on conflict (same id) the side with
-  // the newer updatedAt wins. The merged result is then pushed back to cloud
-  // so all devices converge.
+  // ── Merge helpers ─────────────────────────────────────────────────────────
 
   function mergeArrayById(local, cloud) {
     const map = new Map();
-    (cloud || []).forEach(item => {
-      if (item && item.id != null) map.set(item.id, item);
-    });
+    (cloud || []).forEach(item => { if (item && item.id != null) map.set(item.id, item); });
     (local || []).forEach(item => {
       if (!item || item.id == null) return;
       const c = map.get(item.id);
       if (!c) { map.set(item.id, item); return; }
       const lU = item.updatedAt || item.createdAt || 0;
-      const cU = c.updatedAt || c.createdAt || 0;
+      const cU = c.updatedAt   || c.createdAt   || 0;
       if (lU >= cU) map.set(item.id, item);
     });
     return Array.from(map.values());
-  }
-
-  function mergeHabits(local, cloud) {
-    const map = new Map();
-    (cloud || []).forEach(h => { if (h && h.id) map.set(h.id, h); });
-    (local || []).forEach(h => {
-      if (!h || !h.id) return;
-      const c = map.get(h.id);
-      if (!c) { map.set(h.id, h); return; }
-      // Merge habit logs (per-day) — union both date sets
-      map.set(h.id, { ...c, ...h, log: { ...(c.log || {}), ...(h.log || {}) } });
-    });
-    return Array.from(map.values());
-  }
-
-  function mergeSlots(local, cloud) {
-    const merged = { ...(cloud || {}) };
-    Object.keys(local || {}).forEach(date => {
-      merged[date] = merged[date]
-        ? { ...merged[date], ...local[date] }
-        : local[date];
-    });
-    return merged;
   }
 
   function mergeByKey(key, local, cloud) {
     if (local === undefined || local === null) return cloud;
     if (cloud === undefined || cloud === null) return local;
     switch (key) {
-      case 'notes':
-      case 'transactions':
-      case 'goals':
-      case 'tasks':
-      case 'todos':
-        return mergeArrayById(local, cloud);
-      case 'habits':
-        return mergeHabits(local, cloud);
-      case 'mood':
-      case 'water':
-      case 'sleep':
-        // Date-keyed maps — local wins on conflict, cloud fills missing days
+      case 'habits': {
+        const map = new Map();
+        (cloud || []).forEach(h => { if (h && h.id) map.set(h.id, h); });
+        (local || []).forEach(h => {
+          if (!h || !h.id) return;
+          const c = map.get(h.id);
+          if (!c) { map.set(h.id, h); return; }
+          map.set(h.id, { ...c, ...h, log: { ...(c.log || {}), ...(h.log || {}) } });
+        });
+        return Array.from(map.values());
+      }
+      case 'slots': {
+        const merged = { ...(cloud || {}) };
+        Object.keys(local || {}).forEach(d => {
+          merged[d] = merged[d] ? { ...merged[d], ...local[d] } : local[d];
+        });
+        return merged;
+      }
+      case 'mood': case 'water': case 'sleep':
         return { ...cloud, ...local };
-      case 'slots':
-        return mergeSlots(local, cloud);
       case 'settings':
         return { ...cloud, ...local };
       default:
-        return local;
+        return mergeArrayById(local, cloud);
     }
   }
 
   function differs(a, b) {
-    try { return JSON.stringify(a) !== JSON.stringify(b); }
-    catch { return true; }
+    try { return JSON.stringify(a) !== JSON.stringify(b); } catch { return true; }
   }
 
-  // ── Real-time listeners ───────────────────────────────────────────────────
+  // ── Initial cloud load & real-time listeners ──────────────────────────────
 
   function listenToCloud() {
     return new Promise(resolve => {
-      let mainReady = false;
-      let topicsReady = false;
+      // Wait for: data/main + topics + each SUBCOL_KEY = 2 + SUBCOL_KEYS.length
+      const TOTAL = 2 + SUBCOL_KEYS.length;
+      let doneCount = 0;
+      function checkDone() { if (++doneCount >= TOTAL) resolve(); }
+
+      // ── 1. data/main  (MAIN_DOC_KEYS + migration detection) ──
       let mainFirst = true;
-      let topicsFirst = true;
-
-      function checkDone() {
-        if (mainReady && topicsReady) resolve();
-      }
-
-      // Real-time listener on main document
       db.doc(`users/${userId}/data/main`).onSnapshot(snap => {
         if (mainFirst) {
           mainFirst = false;
           if (snap.exists) {
-            // Initial load — MERGE local IDB with cloud (don't overwrite).
             const cloud = snap.data();
-            MAIN_KEYS.forEach(k => {
+            MAIN_DOC_KEYS.forEach(k => {
               if (cloud[k] === undefined) return;
-              const local = Store.get(k);
-              const merged = mergeByKey(k, local, cloud[k]);
+              const merged = mergeByKey(k, Store.get(k), cloud[k]);
               Store._local(k, merged);
-              // If local contributed something cloud didn't have, push merged back.
               if (differs(merged, cloud[k])) schedulePush(k, merged);
+              else lastPushed[k] = cloud[k];
+            });
+            // Legacy: if main doc still has SUBCOL arrays, merge them into
+            // local store now — subcol listeners will handle cloud migration.
+            SUBCOL_KEYS.forEach(k => {
+              if (Array.isArray(cloud[k]) && cloud[k].length > 0) {
+                const merged = mergeArrayById(Store.get(k), cloud[k]);
+                Store._local(k, merged);
+              }
             });
           } else {
-            // First-ever login: push local data up to the cloud
-            const batch = {};
-            MAIN_KEYS.forEach(k => { batch[k] = Store.get(k); });
-            db.doc(`users/${userId}/data/main`).set(batch).catch(() => {});
+            // Brand-new account: upload small data to main doc
+            const init = {};
+            MAIN_DOC_KEYS.forEach(k => { init[k] = Store.get(k); });
+            db.doc(`users/${userId}/data/main`).set(init).catch(() => {});
           }
-          mainReady = true;
           checkDone();
         } else if (snap.exists) {
-          // Real-time update from another device/tab → trust cloud
+          // Real-time update from another device
           const data = snap.data();
-          MAIN_KEYS.forEach(k => { if (data[k] !== undefined) Store._fromCloud(k, data[k]); });
+          MAIN_DOC_KEYS.forEach(k => { if (data[k] !== undefined) Store._fromCloud(k, data[k]); });
         }
-      }, err => {
-        console.warn('Main listener error:', err);
-        mainReady = true;
-        checkDone();
-      });
+      }, () => { if (mainFirst) { mainFirst = false; checkDone(); } });
 
-      // Real-time listener on topics collection
+      // ── 2. topics subcollection ──
+      let topicsFirst = true;
       db.collection(`users/${userId}/topics`).onSnapshot(snap => {
-        const cloudTopics = [];
-        snap.forEach(d => cloudTopics.push(d.data()));
-
+        const cloud = [];
+        snap.forEach(d => cloud.push(d.data()));
         if (topicsFirst) {
           topicsFirst = false;
           const local = Store.get('topics') || [];
-          knownTopicIds = new Set(cloudTopics.map(t => t.id));
-
-          if (cloudTopics.length === 0 && local.length === 0) {
-            // both empty — nothing to do
-          } else if (cloudTopics.length === 0) {
-            // First-ever login: push local topics up
+          if (cloud.length === 0 && local.length > 0) {
+            // First upload
             syncTopics(local).catch(() => {});
-          } else {
-            // Both have data — merge by id (newer updatedAt wins on conflict)
-            const merged = mergeArrayById(local, cloudTopics);
+          } else if (cloud.length > 0) {
+            const merged = mergeArrayById(local, cloud);
             Store._local('topics', merged);
-            // If local had unsynced topics or newer versions, push merged back
-            // so all devices converge to the union.
+            lastPushed['topics'] = [...cloud];
             if (differs(
-                merged.slice().sort((a,b) => String(a.id).localeCompare(b.id)),
-                cloudTopics.slice().sort((a,b) => String(a.id).localeCompare(b.id))
-            )) {
-              schedulePush('topics', merged);
-            }
+              merged.slice().sort((a,b) => String(a.id).localeCompare(b.id)),
+              cloud.slice().sort((a,b)  => String(a.id).localeCompare(b.id))
+            )) schedulePush('topics', merged);
           }
-          topicsReady = true;
           checkDone();
         } else {
-          // Real-time update from another device/tab → trust cloud
-          knownTopicIds = new Set(cloudTopics.map(t => t.id));
-          Store._fromCloud('topics', cloudTopics);
+          Store._fromCloud('topics', cloud);
         }
-      }, err => {
-        console.warn('Topics listener error:', err);
-        topicsReady = true;
-        checkDone();
+      }, () => { if (topicsFirst) { topicsFirst = false; checkDone(); } });
+
+      // ── 3. Per-key subcollection listeners ──
+      SUBCOL_KEYS.forEach(key => {
+        let first = true;
+        db.collection(`users/${userId}/${key}`).onSnapshot(snap => {
+          const cloud = [];
+          snap.forEach(d => cloud.push(d.data()));
+          if (first) {
+            first = false;
+            const local = Store.get(key) || []; // may already contain migrated main-doc data
+            if (cloud.length === 0 && local.length > 0) {
+              // Migrate: push local (which may include legacy main-doc data) to subcollection
+              syncSubcol(key, local).then(() => {
+                // Clean up legacy array in data/main
+                db.doc(`users/${userId}/data/main`).update({
+                  [key]: firebase.firestore.FieldValue.delete()
+                }).catch(() => {});
+              }).catch(() => {});
+            } else if (cloud.length > 0) {
+              const merged = mergeArrayById(local, cloud);
+              Store._local(key, merged);
+              lastPushed[key] = [...cloud];
+              if (differs(merged, cloud)) schedulePush(key, merged);
+              // Clean up legacy array in data/main (best-effort)
+              db.doc(`users/${userId}/data/main`).get().then(doc => {
+                if (doc.exists && Array.isArray(doc.data()[key]) && doc.data()[key].length > 0) {
+                  db.doc(`users/${userId}/data/main`).update({
+                    [key]: firebase.firestore.FieldValue.delete()
+                  }).catch(() => {});
+                }
+              }).catch(() => {});
+            }
+            checkDone();
+          } else {
+            Store._fromCloud(key, cloud);
+          }
+        }, () => { if (first) { first = false; checkDone(); } });
       });
     });
   }
@@ -409,7 +431,6 @@
 
   function renderSyncBtn() {
     let btn = document.getElementById('syncNowBtn');
-    // Create the button dynamically if HTML is cached and element doesn't exist
     if (!btn) {
       btn = document.createElement('button');
       btn.id = 'syncNowBtn';
@@ -418,11 +439,9 @@
       btn.textContent = '☁️';
       const topbarRight = document.querySelector('.topbar-right');
       const search = document.getElementById('globalSearch');
-      if (topbarRight && search) {
-        topbarRight.insertBefore(btn, search.nextSibling);
-      } else if (topbarRight) {
-        topbarRight.appendChild(btn);
-      } else { return; }
+      if (topbarRight && search) topbarRight.insertBefore(btn, search.nextSibling);
+      else if (topbarRight) topbarRight.appendChild(btn);
+      else return;
     }
     btn.style.display = 'grid';
     btn.addEventListener('click', async () => {
@@ -430,12 +449,8 @@
       btn.classList.add('syncing');
       btn.title = 'מסנכרן…';
       try {
-        const KEYS = ['notes','tasks','todos','habits','mood','water','sleep',
-                      'transactions','goals','slots','settings','topics'];
-        KEYS.forEach(k => {
-          const v = Store.get(k);
-          if (v !== undefined) schedulePush(k, v);
-        });
+        const ALL = [...MAIN_DOC_KEYS, ...SUBCOL_KEYS, 'topics'];
+        ALL.forEach(k => { const v = Store.get(k); if (v !== undefined) schedulePush(k, v); });
         await Promise.race([flushAll(), new Promise(r => setTimeout(r, 8000))]);
         btn.title = 'סונכרן ✓';
         if (window.App) App.toast('☁️ סנכרון הושלם');
@@ -472,18 +487,12 @@
     document.getElementById('fb-sync-status').addEventListener('click', async () => {
       setStatus('saving');
       try {
-        const KEYS = ['notes','tasks','todos','habits','mood','water','sleep',
-                      'transactions','goals','slots','settings','topics'];
-        KEYS.forEach(k => {
-          const v = Store.get(k);
-          if (v !== undefined) schedulePush(k, v);
-        });
+        const ALL = [...MAIN_DOC_KEYS, ...SUBCOL_KEYS, 'topics'];
+        ALL.forEach(k => { const v = Store.get(k); if (v !== undefined) schedulePush(k, v); });
         await flushAll();
         setStatus('saved');
         if (window.App) App.toast('סנכרון הושלם ✓');
-      } catch {
-        setStatus('error');
-      }
+      } catch { setStatus('error'); }
     });
 
     document.getElementById('fb-signout').addEventListener('click', () => {
@@ -497,16 +506,9 @@
     enabled: false,
 
     async setup() {
-      if (!initSDK()) {
-        // Firebase SDK not loaded or not configured — show non-blocking warning
-        setTimeout(showOfflineBanner, 1500);
-        return false;
-      }
+      if (!initSDK()) { setTimeout(showOfflineBanner, 1500); return false; }
 
-      // Handle post-redirect auth (when signInWithRedirect was used)
-      try {
-        await auth.getRedirectResult();
-      } catch { /* no redirect result is fine */ }
+      try { await auth.getRedirectResult(); } catch {}
 
       const user = await waitForUser();
       userId = user.uid;
@@ -520,32 +522,23 @@
       loader.innerHTML = '<div style="font-size:40px">☁️</div><div>טוען נתונים מהענן…</div>';
       document.body.appendChild(loader);
 
-      // CRITICAL: wait for local IDB to load BEFORE the cloud listener fires
-      // its first snapshot. Otherwise the merge would see empty local state
-      // and the cloud would still effectively overwrite unsynced edits.
-      if (window.Store && Store.ready) {
-        try { await Store.ready(); } catch {}
-      }
+      if (window.Store && Store.ready) { try { await Store.ready(); } catch {} }
 
-      // Start real-time listeners; wait for initial snapshot to load
       await listenToCloud();
       loader.remove();
 
       setTimeout(() => { renderUserBar(user); renderSyncBtn(); }, 600);
 
-      // Flush pending pushes when the page is about to be hidden/closed
-      // — without this, the debounce timer dies with the page and the last
-      // edits never reach Firestore.
+      // Flush on page hide / close
       window.addEventListener('pagehide', flushAll);
       window.addEventListener('beforeunload', flushAll);
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'hidden') flushAll();
       });
 
-      // Safety-net: if there are still pending writes after 30s, flush them
+      // Safety-net: retry any stuck pending writes every 30s
       setInterval(() => {
-        if (!userId || !db) return;
-        if (Object.keys(pending).length > 0) flushAll();
+        if (userId && db && Object.keys(pending).length > 0) flushAll();
       }, 30000);
 
       return true;
