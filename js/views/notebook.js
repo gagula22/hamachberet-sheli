@@ -312,11 +312,12 @@
     });
 
     // Returns 'before' | 'inside' | 'after' based on cursor position within the row.
-    // Top 25% → before (sibling above), middle 50% → inside (become child), bottom 25% → after (sibling below).
+    // Only the top/bottom 15px edges are before/after — everything else is 'inside' (become child).
     function getDropZone(e, rect) {
       const y = e.clientY - rect.top;
-      if (y < rect.height * 0.25) return 'before';
-      if (y > rect.height * 0.75) return 'after';
+      const edge = Math.min(12, rect.height * 0.2);
+      if (y < edge) return 'before';
+      if (y > rect.height - edge) return 'after';
       return 'inside';
     }
 
