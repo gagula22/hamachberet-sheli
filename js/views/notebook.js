@@ -1020,6 +1020,48 @@
       }
     });
     cloned.querySelectorAll('.nb-img-del').forEach(el => el.remove());
+
+    // ── Step 5: Flatten for Word ─────────────────────────────────────────────
+    // contenteditable produces one <div> per line, which Word renders as
+    // a separate block — turning 20 blank lines into 20 blank paragraphs
+    // (= a full blank page of white space).  We:
+    //   A) unwrap <div> shells around tables so tables are top-level
+    //   B) drop empty <div>/<br> lines entirely
+    //   C) convert remaining content <div>s to <p> so Word sees paragraphs
+    const kids = Array.from(cloned.children);
+    let blankRun = 0;
+    for (const child of kids) {
+      if (child.tagName !== 'DIV') { blankRun = 0; continue; }
+
+      // A) div whose first element child is our image table → unwrap
+      const firstEl = child.firstElementChild;
+      if (firstEl && firstEl.tagName === 'TABLE') {
+        child.before(firstEl);                        // lift table out
+        if (!child.textContent.trim()) child.remove();// drop empty shell
+        blankRun = 0;
+        continue;
+      }
+
+      // B) empty div (only whitespace / <br> with no style) → drop or keep 1
+      if (!child.textContent.trim()) {
+        blankRun++;
+        if (blankRun > 1) { child.remove(); continue; } // collapse runs > 1
+        const ep = document.createElement('p');
+        ep.setAttribute('style', 'margin:0;line-height:1;');
+        child.replaceWith(ep);
+        continue;
+      }
+
+      // C) div with real text content → convert to <p>
+      blankRun = 0;
+      const p = document.createElement('p');
+      p.setAttribute('dir', 'rtl');
+      const cs = child.getAttribute('style');
+      p.setAttribute('style', (cs || '') + ';margin:3px 0;');
+      while (child.firstChild) p.appendChild(child.firstChild);
+      child.replaceWith(p);
+    }
+
     const body = cloned.innerHTML;
 
     const baseStyles = `
