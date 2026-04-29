@@ -432,17 +432,41 @@ body.nb-resizing * { cursor: col-resize !important; user-select: none !important
 }
 .nb-select:hover { background: #fff; }
 .nb-select:focus { background: #fff; border-color: var(--lavender-deep); }
-.nb-color {
+.nb-color-btn {
+  position: relative;
   width: 34px; height: 34px;
   border-radius: 8px;
   border: 1px solid var(--line);
   background: #fff;
-  padding: 2px;
   cursor: pointer;
   flex-shrink: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 2px; font-size: 14px; font-weight: 700;
+  transition: background 150ms;
 }
-.nb-color::-webkit-color-swatch-wrapper { padding: 0; }
-.nb-color::-webkit-color-swatch { border: none; border-radius: 6px; }
+.nb-color-btn:hover { background: var(--cream); }
+.nb-color-swatch { width: 18px; height: 4px; border-radius: 2px; pointer-events: none; }
+.nb-color-palette {
+  position: fixed;
+  z-index: 200;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px;
+  box-shadow: 0 8px 28px rgba(0,0,0,.14);
+  display: grid;
+  grid-template-columns: repeat(8, 22px);
+  gap: 5px;
+}
+.nb-color-palette .cp-dot {
+  width: 22px; height: 22px;
+  border-radius: 5px;
+  border: 1.5px solid rgba(0,0,0,.10);
+  cursor: pointer;
+  transition: transform 120ms, box-shadow 120ms;
+}
+.nb-color-palette .cp-dot:hover { transform: scale(1.2); box-shadow: 0 2px 8px rgba(0,0,0,.18); }
 .nb-tool-wrap {
   position: relative;
   display: inline-flex;

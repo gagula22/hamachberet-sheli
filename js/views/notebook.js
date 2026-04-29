@@ -520,26 +520,70 @@
       }
     }, SIZES.map(s => App.el('option', { value: s }, s || 'גודל')));
 
-    const colorInput = App.el('input', {
-      type: 'color',
-      class: 'nb-color',
-      title: 'צבע טקסט',
-      value: '#3B3A3A',
-      onInput: (e) => exec('foreColor', e.target.value)
+    // ── Custom colour palette (replaces native <input type=color>) ──────────
+    const PALETTE = [
+      '#000000','#434343','#666666','#999999','#cccccc','#ffffff',
+      '#FF0000','#FF6600','#FFCC00','#00BB00','#0066FF','#9900CC',
+      '#FF99AA','#FFBB77','#FFEE99','#99DD99','#99CCFF','#CC99FF',
+      '#FADADD','#FFF3C4','#CDE7C1','#CFE4F7','#E6DDF4','#FAF6F0',
+      '#3B3A3A','#5C3317','#1A3A5C','#1A4A1A','#4A1A4A','#2E2E5E'
+    ];
+
+    function makeColorPicker(label, title, defaultColor, onPick) {
+      const swatch = App.el('span', { class: 'nb-color-swatch', style: { background: defaultColor } });
+      const btn = App.el('button', { class: 'nb-color-btn', title }, [label, swatch]);
+      let palette = null;
+
+      function closePalette() { if (palette) { palette.remove(); palette = null; } }
+
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (palette) { closePalette(); return; }
+
+        palette = App.el('div', { class: 'nb-color-palette' });
+        PALETTE.forEach(hex => {
+          const dot = App.el('button', {
+            class: 'cp-dot',
+            title: hex,
+            style: { background: hex },
+            onClick: (ev) => {
+              ev.stopPropagation();
+              swatch.style.background = hex;
+              onPick(hex);
+              closePalette();
+            }
+          });
+          palette.appendChild(dot);
+        });
+
+        document.body.appendChild(palette);
+        const r = btn.getBoundingClientRect();
+        // Position below button, keep within viewport
+        let left = r.left;
+        const palW = 8 * 27; // 8 cols × 27px
+        if (left + palW > window.innerWidth - 8) left = window.innerWidth - palW - 8;
+        palette.style.top  = (r.bottom + 6) + 'px';
+        palette.style.left = left + 'px';
+
+        setTimeout(() => {
+          document.addEventListener('click', function handler() {
+            closePalette();
+            document.removeEventListener('click', handler);
+          });
+        }, 0);
+      });
+      return btn;
+    }
+
+    const colorInput = makeColorPicker('A', 'צבע טקסט', '#3B3A3A', (hex) => {
+      exec('foreColor', hex); save();
     });
 
-    const hilightInput = App.el('input', {
-      type: 'color',
-      class: 'nb-color',
-      title: 'צבע הדגשה',
-      value: '#FFF3C4',
-      onInput: (e) => {
-        editor.focus();
-        if (!document.execCommand('hiliteColor', false, e.target.value)) {
-          document.execCommand('backColor', false, e.target.value);
-        }
-        save();
-      }
+    const hilightInput = makeColorPicker('▌', 'צבע הדגשה', '#FFF3C4', (hex) => {
+      editor.focus();
+      if (!document.execCommand('hiliteColor', false, hex))
+        document.execCommand('backColor', false, hex);
+      save();
     });
 
     const toolbar = App.el('div', { class: 'nb-toolbar' }, [
