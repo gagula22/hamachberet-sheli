@@ -957,11 +957,16 @@
       clonedImg.setAttribute('height', 'auto');
       // Keep inline style minimal: no max-width (confuses Word), no display:block
       clonedImg.style.cssText = `width:${w}px;height:auto;display:inline;`;
+      // Wrap in a div with page-break-inside:avoid so Word/browsers
+      // never split the image across a page boundary
+      const wrapper = document.createElement('div');
+      wrapper.style.cssText = 'page-break-inside:avoid;break-inside:avoid;';
       const p = document.createElement('p');
       p.setAttribute('align', 'center');
-      p.style.cssText = 'text-align:center;margin:12px 0;';
+      p.style.cssText = 'text-align:center;margin:12px 0;page-break-inside:avoid;break-inside:avoid;';
       p.appendChild(clonedImg);
-      fig.replaceWith(p);
+      wrapper.appendChild(p);
+      fig.replaceWith(wrapper);
     });
 
     // ── Step 4: remove UI-only elements
@@ -971,8 +976,9 @@
     const baseStyles = `
       body{font-family:Arial,sans-serif;direction:rtl;padding:40px;max-width:820px;margin:0 auto;color:#3b3a3a;}
       h1{font-size:28px;margin-bottom:24px;}
-      p[align="center"]{text-align:center;margin:12px 0;}
+      p[align="center"]{text-align:center;margin:12px 0;page-break-inside:avoid;break-inside:avoid;}
       p[align="center"] img{display:inline;height:auto;}
+      div:has(>p[align="center"]){page-break-inside:avoid;break-inside:avoid;}
       .nb-mood-embed{border:2px solid #f0c4cc;border-radius:12px;padding:16px;margin:16px 0;background:#fffaf8;}
       .nb-mood-embed-header{font-weight:600;font-size:12px;color:#888;letter-spacing:.05em;margin-bottom:10px;}
       .nb-mood-embed-row{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:12px;}
