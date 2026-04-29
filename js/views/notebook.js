@@ -941,56 +941,73 @@
       }
     });
 
-    // ── Step 3: replace every figure with <p align="center"><img width="N"></p>
-    //    Rules for Word-compatible image centering:
-    //      • explicit integer width (no "px" in attribute) for Word to size it correctly
-    //      • NO max-width / width:% — Word ignores or misinterprets them
-    //      • display:inline (NOT block) so text-align:center on the paragraph works
-    //      • width capped at MAX_IMG_W so it never exceeds the A4 content area
+    // ── Step 3: replace every figure with a Word-safe <table> wrapper
+    //
+    //  CRITICAL: MUST use el.setAttribute('style', ...) — NOT el.style.cssText.
+    //  el.style.cssText goes through the browser's CSS parser which silently
+    //  strips non-standard properties like mso-pagination, mso-break-type etc.
+    //  setAttribute stores the raw string; innerHTML serialisation preserves it
+    //  so Word sees the MSO directives it needs.
     cloned.querySelectorAll('figure.nb-img').forEach(fig => {
       const img = fig.querySelector('img');
       if (!img) return;
-      const w = parseInt(fig.dataset.ew) || 300;   // fallback = CSS default 300px
+      const w = parseInt(fig.dataset.ew) || 300;
       const clonedImg = img.cloneNode(true);
-      // Word reads the width= attribute as points/pixels — integer only, no "px"
       clonedImg.setAttribute('width', w);
       clonedImg.setAttribute('height', 'auto');
-      // Keep inline style minimal: no max-width (confuses Word), no display:block
-      clonedImg.style.cssText = `width:${w}px;height:auto;display:inline;`;
-      // Use a table wrapper — the most reliable way to prevent Word from
-      // splitting an image across a page (plain div/p keep-together is often ignored).
-      // The MSO attribute mso-pagination:widow-orphan keep-together is the
-      // Office-specific signal; page-break-inside:avoid covers other renderers.
+      // setAttribute — preserves all properties in the serialised HTML
+      clonedImg.setAttribute('style', `width:${w}px;height:auto;display:block;margin:0 auto;`);
+
+      // <table> is the only element Word reliably keeps on one page.
+      // mso-pagination:widow-orphan keep-together = Word's native "keep together" flag.
       const tbl = document.createElement('table');
       tbl.setAttribute('border', '0');
       tbl.setAttribute('cellpadding', '0');
       tbl.setAttribute('cellspacing', '0');
       tbl.setAttribute('align', 'center');
       tbl.setAttribute('width', '100%');
-      tbl.style.cssText = 'page-break-inside:avoid;break-inside:avoid;mso-pagination:widow-orphan keep-together;border-collapse:collapse;';
+      tbl.setAttribute('style',          // setAttribute = MSO props survive serialisation
+        'page-break-inside:avoid;break-inside:avoid;' +
+        'mso-pagination:widow-orphan keep-together;' +
+        'border-collapse:collapse;margin:8px 0;');
       const tr = document.createElement('tr');
       const td = document.createElement('td');
       td.setAttribute('align', 'center');
-      td.style.cssText = 'padding:8px 0;text-align:center;page-break-inside:avoid;';
+      td.setAttribute('style', 'padding:8px 0;text-align:center;');
       td.appendChild(clonedImg);
       tr.appendChild(td);
       tbl.appendChild(tr);
       fig.replaceWith(tbl);
     });
 
-    // ── Step 4: convert page-spacers → real Word page-breaks; remove UI-only elements
+    // ── Step 4: handle page-spacers and remove UI-only elements
+    //
+    //  A .nb-page-spacer is inserted by snapFigToPage() just before a figure
+    //  that would otherwise straddle a page boundary.  After Step 3 the figure
+    //  has been replaced by a <table>, so a valid spacer has a <table> as its
+    //  immediate nextElementSibling.
+    //
+    //  Any OTHER spacer (stale one from a deleted image, duplicate from a
+    //  ResizeObserver re-run, or a bare spacer at the bottom of a page) has
+    //  NO adjacent table.  Converting those to page-breaks creates blank pages.
+    //  → valid spacer  → replace with MSO page-break paragraph
+    //  → stale spacer  → just remove it
     cloned.querySelectorAll('.nb-page-spacer').forEach(spacer => {
-      // The <br mso-special-character:line-break> inside a page-break-after paragraph
-      // is the ONLY reliably-respected hard page-break in Word's HTML (.doc) format.
-      // Plain CSS page-break-after:always is often silently ignored by Word's HTML importer.
-      const pb = document.createElement('p');
-      pb.setAttribute('style',
-        'margin:0;padding:0;line-height:0;font-size:1px;' +
-        'page-break-after:always;break-after:page;mso-break-type:page-break;');
-      const br = document.createElement('br');
-      br.setAttribute('style', 'mso-special-character:line-break;page-break-before:always');
-      pb.appendChild(br);
-      spacer.replaceWith(pb);
+      const next = spacer.nextElementSibling;
+      if (next && next.tagName === 'TABLE') {
+        // Hard Word page-break: the mso-special-character on the <br> is how
+        // Word itself writes page breaks when it saves HTML.
+        const pb = document.createElement('p');
+        pb.setAttribute('style',
+          'margin:0;padding:0;line-height:0;font-size:1px;' +
+          'page-break-after:always;break-after:page;mso-break-type:page-break;');
+        const br = document.createElement('br');
+        br.setAttribute('style', 'mso-special-character:line-break;page-break-before:always');
+        pb.appendChild(br);
+        spacer.replaceWith(pb);
+      } else {
+        spacer.remove(); // stale spacer — would create a blank page if kept
+      }
     });
     cloned.querySelectorAll('.nb-img-del').forEach(el => el.remove());
     const body = cloned.innerHTML;
