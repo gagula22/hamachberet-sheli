@@ -582,22 +582,21 @@
       onClick: async () => {
         saveBtn.disabled = true;
         saveBtn.textContent = '⏳ שומר…';
-        try {
-          updateTopic(topic.id, { body: editor.innerHTML, updatedAt: Date.now() });
-          refreshPageLabels();
-          if (window.Store && Store.saveNow) Store.saveNow();
-          if (window.FirebaseSync && FirebaseSync.flush) await FirebaseSync.flush();
-          saveBtn.textContent = '✓ נשמר';
-          if (window.App && App.toast) App.toast('💾 נשמר לענן בהצלחה');
-        } catch (e) {
-          saveBtn.textContent = '⚠️ שגיאה';
-          if (window.App && App.toast) App.toast('⚠️ שמירה נכשלה — בדוק חיבור לאינטרנט');
-          console.warn('Manual save failed:', e);
-        }
+        // Save locally first — instant, no waiting for network
+        updateTopic(topic.id, { body: editor.innerHTML, updatedAt: Date.now() });
+        refreshPageLabels();
+        if (window.Store && Store.saveNow) Store.saveNow();
+        // Show success immediately — local save is safe
+        saveBtn.textContent = '✓ נשמר';
+        if (window.App && App.toast) App.toast('💾 נשמר');
         setTimeout(() => {
           saveBtn.disabled = false;
           saveBtn.textContent = '💾 שמור עכשיו';
-        }, 2000);
+        }, 1800);
+        // Push to cloud in background — don't block UI
+        if (window.FirebaseSync && FirebaseSync.flush) {
+          FirebaseSync.flush().catch(e => console.warn('Cloud sync failed:', e));
+        }
       }
     }, '💾 שמור עכשיו');
 

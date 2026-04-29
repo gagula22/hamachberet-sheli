@@ -218,10 +218,13 @@
 
   function flushAll() {
     const keys = Object.keys(pending);
-    return Promise.all(keys.map(key => {
+    const work = Promise.all(keys.map(key => {
       clearTimeout(timers[key]);
       return doPush(key);
     }));
+    // Hard 8-second timeout — never leave callers hanging
+    const timeout = new Promise(resolve => setTimeout(resolve, 8000));
+    return Promise.race([work, timeout]);
   }
 
   // ── Merge helpers — preserve unsynced local data on initial cloud load ──
