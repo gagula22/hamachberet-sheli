@@ -311,50 +311,70 @@
       );
     });
 
+    // Returns 'before' | 'inside' | 'after' based on cursor position within the row.
+    // Top 25% → before (sibling above), middle 50% → inside (become child), bottom 25% → after (sibling below).
+    function getDropZone(e, rect) {
+      const y = e.clientY - rect.top;
+      if (y < rect.height * 0.25) return 'before';
+      if (y > rect.height * 0.75) return 'after';
+      return 'inside';
+    }
+
     row.addEventListener('dragover', (e) => {
       e.preventDefault();
       if (!draggedId || draggedId === t.id) return;
-      if (getDescendantIds(draggedId).slice(1).includes(t.id)) return;
-      document.querySelectorAll('.nb-drop-before,.nb-drop-after').forEach(el =>
-        el.classList.remove('nb-drop-before', 'nb-drop-after')
+      if (getDescendantIds(draggedId).includes(t.id)) return;
+      document.querySelectorAll('.nb-drop-before,.nb-drop-after,.nb-drop-inside').forEach(el =>
+        el.classList.remove('nb-drop-before', 'nb-drop-after', 'nb-drop-inside')
       );
       const rect = row.getBoundingClientRect();
-      row.classList.add(e.clientY < rect.top + rect.height / 2 ? 'nb-drop-before' : 'nb-drop-after');
+      const zone = getDropZone(e, rect);
+      row.classList.add(zone === 'before' ? 'nb-drop-before' : zone === 'after' ? 'nb-drop-after' : 'nb-drop-inside');
     });
 
     row.addEventListener('dragleave', (e) => {
       if (!row.contains(e.relatedTarget)) {
-        row.classList.remove('nb-drop-before', 'nb-drop-after');
+        row.classList.remove('nb-drop-before', 'nb-drop-after', 'nb-drop-inside');
       }
     });
 
     row.addEventListener('drop', (e) => {
       e.preventDefault();
-      row.classList.remove('nb-drop-before', 'nb-drop-after');
+      row.classList.remove('nb-drop-before', 'nb-drop-after', 'nb-drop-inside');
       if (!draggedId || draggedId === t.id) return;
-      if (getDescendantIds(draggedId).slice(1).includes(t.id)) return;
+      if (getDescendantIds(draggedId).includes(t.id)) return;
 
       const rect = row.getBoundingClientRect();
-      const insertBefore = e.clientY < rect.top + rect.height / 2;
+      const zone = getDropZone(e, rect);
 
       const topics = getTopics();
       const draggedTopic = topics.find(x => x.id === draggedId);
       if (!draggedTopic) return;
 
-      const newParentId = t.parentId || null;
-      draggedTopic.parentId = newParentId;
-
-      // Reorder ONLY within the target sibling group — leave other groups untouched
-      const siblings = topics
-        .filter(x => x.id !== draggedId && (x.parentId || null) === newParentId)
-        .sort((a, b) => (a.order ?? a.createdAt ?? 0) - (b.order ?? b.createdAt ?? 0));
-      const targetIdx = siblings.findIndex(x => x.id === t.id);
-      if (targetIdx === -1) return;
-      siblings.splice(insertBefore ? targetIdx : targetIdx + 1, 0, draggedTopic);
-      siblings.forEach((topic, i) => { topic.order = i * 10; });
+      if (zone === 'inside') {
+        // Drop INSIDE t → draggedTopic becomes the last child of t
+        draggedTopic.parentId = t.id;
+        const children = topics
+          .filter(x => x.id !== draggedId && (x.parentId || null) === t.id)
+          .sort((a, b) => (a.order ?? a.createdAt ?? 0) - (b.order ?? b.createdAt ?? 0));
+        children.push(draggedTopic);
+        children.forEach((topic, i) => { topic.order = i * 10; });
+        expanded.add(t.id);
+      } else {
+        // Drop BEFORE or AFTER t → draggedTopic becomes sibling of t (shares t's parent)
+        const newParentId = t.parentId || null;
+        draggedTopic.parentId = newParentId;
+        const siblings = topics
+          .filter(x => x.id !== draggedId && (x.parentId || null) === newParentId)
+          .sort((a, b) => (a.order ?? a.createdAt ?? 0) - (b.order ?? b.createdAt ?? 0));
+        const targetIdx = siblings.findIndex(x => x.id === t.id);
+        if (targetIdx === -1) return;
+        siblings.splice(zone === 'before' ? targetIdx : targetIdx + 1, 0, draggedTopic);
+        siblings.forEach((topic, i) => { topic.order = i * 10; });
+        if (draggedTopic.parentId) expanded.add(draggedTopic.parentId);
+      }
 
       Store.set('topics', topics);
-      if (draggedTopic.parentId) expanded.add(draggedTopic.parentId);
       rerender();
     });
 
