@@ -969,8 +969,16 @@
       fig.replaceWith(wrapper);
     });
 
-    // ── Step 4: remove UI-only elements
-    cloned.querySelectorAll('.nb-page-spacer, .nb-img-del').forEach(el => el.remove());
+    // ── Step 4: convert page-spacers → real page-breaks; remove other UI-only elements
+    cloned.querySelectorAll('.nb-page-spacer').forEach(spacer => {
+      // Replace the visual spacer with a hard page-break paragraph so Word/PDF
+      // honour the page boundary the user sees in the editor.
+      const pb = document.createElement('p');
+      pb.style.cssText = 'margin:0;padding:0;page-break-after:always;break-after:page;font-size:1px;line-height:1px;';
+      pb.innerHTML = '&nbsp;';
+      spacer.replaceWith(pb);
+    });
+    cloned.querySelectorAll('.nb-img-del').forEach(el => el.remove());
     const body = cloned.innerHTML;
 
     const baseStyles = `
@@ -1025,7 +1033,9 @@
           #${printId} .nb-mood-btn { width: 28pt; height: 28pt; border-radius: 50%; font-size: 16pt; display: inline-flex; align-items: center; justify-content: center; }
           #${printId} .nb-mood-btn.selected { background: #fadadd; border: 1pt solid #e5a8b0; }
           #${printId} .nb-mood-note { border: 1pt solid #ddd; border-radius: 5pt; padding: 6pt; width: 100%; min-height: 40pt; font-family: Arial; }
-          #${printId} .nb-page-spacer, #${printId} .nb-img-del { display: none !important; }
+          #${printId} .nb-page-spacer { page-break-after: always; break-after: page; height: 0; overflow: hidden; }
+          #${printId} .nb-img-del { display: none !important; }
+          #${printId} figure.nb-img, #${printId} p[align="center"] { page-break-inside: avoid; break-inside: avoid; }
           @page { margin: 15mm; size: A4; }
         }`;
 
