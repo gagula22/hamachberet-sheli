@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="he" dir="rtl">
 <head>
   <meta charset="utf-8" />
@@ -9,7 +9,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
-  <title>׳”׳׳—׳‘׳¨׳× ׳©׳׳™</title>
+  <title>המחברת שלי</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700&family=Frank+Ruhl+Libre:wght@400;500;600;700&family=Assistant:wght@400;500;600;700&family=Rubik:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -19,10 +19,9 @@
   <!-- Vendor scripts: deferred so they never block first render.
        html2pdf / mammoth / pdfjs are only needed when the user clicks Export. -->
   <script defer src="js/vendor/html2pdf.bundle.min.js"></script>
-  <script defer src="js/vendor/html-docx.js"></script>
   <script defer src="js/vendor/mammoth.min.js"></script>
   <script defer src="js/vendor/pdfjs.min.js"></script>
-  <!-- Firebase SDK: deferred ג€” downloads in parallel but doesn't block rendering.
+  <!-- Firebase SDK: deferred — downloads in parallel but doesn't block rendering.
        App.start() runs immediately with local data; Firebase syncs in the background. -->
   <script defer src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
   <script defer src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
@@ -30,36 +29,36 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23FADADD'/%3E%3Ctext x='50%25' y='58%25' text-anchor='middle' font-size='34' font-family='serif' fill='%233B3A3A'%3E%D7%9E%3C/text%3E%3C/svg%3E" />
 </head>
 <body>
-  <button id="menuToggle" class="menu-toggle" aria-label="׳×׳₪׳¨׳™׳˜">ג˜°</button>
+  <button id="menuToggle" class="menu-toggle" aria-label="תפריט">☰</button>
 
   <!-- Bottom navigation bar (mobile only) -->
-  <nav id="bottomNav" class="bottom-nav" aria-label="׳ ׳™׳•׳•׳˜ ׳¨׳׳©׳™">
+  <nav id="bottomNav" class="bottom-nav" aria-label="ניווט ראשי">
     <button class="bn-item" data-route="dashboard">
-      <span class="bn-icon">נ </span><span class="bn-label">׳‘׳§׳¨׳”</span>
+      <span class="bn-icon">🏠</span><span class="bn-label">בקרה</span>
     </button>
     <button class="bn-item" data-route="notebook">
-      <span class="bn-icon">נ““</span><span class="bn-label">׳׳—׳‘׳¨׳×</span>
+      <span class="bn-icon">📓</span><span class="bn-label">מחברת</span>
     </button>
     <button class="bn-item" data-route="calendar">
-      <span class="bn-icon">נ“…</span><span class="bn-label">׳™׳•׳׳</span>
+      <span class="bn-icon">📅</span><span class="bn-label">יומן</span>
     </button>
     <button class="bn-item" data-route="todos">
-      <span class="bn-icon">ג…</span><span class="bn-label">׳׳©׳™׳׳•׳×</span>
+      <span class="bn-icon">✅</span><span class="bn-label">משימות</span>
     </button>
     <button class="bn-item bn-more" id="bnMore">
-      <span class="bn-icon">ג˜°</span><span class="bn-label">׳¢׳•׳“</span>
+      <span class="bn-icon">☰</span><span class="bn-label">עוד</span>
     </button>
   </nav>
 
   <main class="main">
     <header class="topbar">
       <div>
-        <div class="crumbs" id="crumbs">׳׳•׳— ׳‘׳§׳¨׳”</div>
-        <h1 class="page-title" id="pageTitle">׳‘׳¨׳•׳ ׳”׳‘׳</h1>
+        <div class="crumbs" id="crumbs">לוח בקרה</div>
+        <h1 class="page-title" id="pageTitle">ברוך הבא</h1>
       </div>
       <div class="topbar-right">
-        <input id="globalSearch" class="search" placeholder="׳—׳™׳₪׳•׳© ׳‘׳”׳¢׳¨׳•׳×, ׳׳©׳™׳׳•׳×ג€¦" />
-        <button id="syncNowBtn" class="sync-now-btn" title="׳¡׳ ׳›׳¨׳ ׳¢׳›׳©׳™׳•" style="display:none">ג˜ן¸</button>
+        <input id="globalSearch" class="search" placeholder="חיפוש בהערות, משימות…" />
+        <button id="syncNowBtn" class="sync-now-btn" title="סנכרן עכשיו" style="display:none">☁️</button>
         <div class="date-chip" id="todayChip"></div>
       </div>
     </header>
@@ -68,10 +67,10 @@
 
   <aside id="sidebar" class="sidebar">
     <div class="brand">
-      <div class="brand-mark">׳</div>
+      <div class="brand-mark">מ</div>
       <div>
-        <div class="brand-title">׳”׳׳—׳‘׳¨׳× ׳©׳׳™</div>
-        <div class="brand-sub">׳”׳›׳•׳ ׳‘׳׳§׳•׳ ׳׳—׳“</div>
+        <div class="brand-title">המחברת שלי</div>
+        <div class="brand-sub">הכול במקום אחד</div>
       </div>
     </div>
     <nav id="nav" class="nav"></nav>
@@ -104,10 +103,10 @@
   <!-- Bootstrap: App starts immediately with local (IndexedDB / localStorage) data.
        Firebase setup runs in the background after all deferred scripts are ready.
        The firebase-sync loader overlay will appear if the user needs to authenticate
-       or while initial cloud data is being fetched ג€” but the UI is never blocked. -->
+       or while initial cloud data is being fetched — but the UI is never blocked. -->
   <script type="module">
     // type="module" is implicitly deferred, so all <script defer> above have
-    // already executed by the time this runs ג€” Firebase SDK is guaranteed loaded.
+    // already executed by the time this runs — Firebase SDK is guaranteed loaded.
     App.start();
     if (window.FirebaseSync) {
       FirebaseSync.setup().catch(e => console.warn('Firebase setup error:', e));
