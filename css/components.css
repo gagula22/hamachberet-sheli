@@ -363,7 +363,7 @@ body.nb-resizing * { cursor: col-resize !important; user-select: none !important
 .nb-topic.nb-topic-dragging { opacity: .4; }
 .nb-topic.nb-drop-before { border-top: 2px solid var(--lavender-deep); }
 .nb-topic.nb-drop-after { border-bottom: 2px solid var(--lavender-deep); }
-.nb-topic.nb-drop-inside { background: rgba(100,160,255,0.18); border-radius: 8px; outline: 2px dashed #7ab4f5; outline-offset: -2px; }
+.nb-topic.nb-drop-inside { background: rgba(100,160,255,0.15); border-radius: 8px; outline: 2px dashed #7ab4f5; outline-offset: -2px; }
 .nb-topic .t-chevron {
   width: 18px; height: 18px;
   display: grid; place-items: center;
