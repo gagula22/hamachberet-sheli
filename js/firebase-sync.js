@@ -399,8 +399,22 @@
   // ── Topbar sync button ────────────────────────────────────────────────────
 
   function renderSyncBtn() {
-    const btn = document.getElementById('syncNowBtn');
-    if (!btn) return;
+    let btn = document.getElementById('syncNowBtn');
+    // Create the button dynamically if HTML is cached and element doesn't exist
+    if (!btn) {
+      btn = document.createElement('button');
+      btn.id = 'syncNowBtn';
+      btn.className = 'sync-now-btn';
+      btn.title = 'סנכרן עכשיו';
+      btn.textContent = '☁️';
+      const topbarRight = document.querySelector('.topbar-right');
+      const search = document.getElementById('globalSearch');
+      if (topbarRight && search) {
+        topbarRight.insertBefore(btn, search.nextSibling);
+      } else if (topbarRight) {
+        topbarRight.appendChild(btn);
+      } else { return; }
+    }
     btn.style.display = 'grid';
     btn.addEventListener('click', async () => {
       if (btn.classList.contains('syncing')) return;
