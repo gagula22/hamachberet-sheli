@@ -173,19 +173,24 @@
 
   function setStatus(state) {
     const el = document.getElementById('fb-sync-status');
-    if (!el) return;
-    if (state === 'saving') {
-      el.textContent = '✏️ שומר…';
-      el.style.color = 'var(--ink-mute)';
-    } else if (state === 'saved') {
-      const t = new Date();
-      const hh = String(t.getHours()).padStart(2, '0');
-      const mm = String(t.getMinutes()).padStart(2, '0');
-      el.textContent = `✓ נשמר • ${hh}:${mm}`;
-      el.style.color = '';
-    } else if (state === 'error') {
-      el.textContent = '⚠️ לא הצליח לסנכרן';
-      el.style.color = '#e53e3e';
+    if (el) {
+      if (state === 'saving') {
+        el.textContent = '✏️ שומר…';
+        el.style.color = 'var(--ink-mute)';
+      } else if (state === 'saved') {
+        const t = new Date();
+        const hh = String(t.getHours()).padStart(2, '0');
+        const mm = String(t.getMinutes()).padStart(2, '0');
+        el.textContent = `✓ נשמר • ${hh}:${mm}`;
+        el.style.color = '';
+      } else if (state === 'error') {
+        el.textContent = '⚠️ לא הצליח לסנכרן';
+        el.style.color = '#e53e3e';
+      }
+    }
+    // Also update the notebook editor's sync chip if open
+    if (window._nbSyncHook) {
+      try { window._nbSyncHook(state); } catch {}
     }
   }
 

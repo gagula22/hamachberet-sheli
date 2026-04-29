@@ -575,48 +575,24 @@
     const breadcrumb = buildBreadcrumb(topic);
 
     const startPage = ctx.offset + 1;
-    const saveBtn = App.el('button', {
-      class: 'btn primary',
-      style: { padding: '8px 18px', fontSize: '14px', fontWeight: '600' },
-      title: 'שמור עכשיו לענן',
-      onClick: async () => {
-        saveBtn.disabled = true;
-        saveBtn.textContent = '⏳ שומר…';
-        // 1. Save locally — instant
-        updateTopic(topic.id, { body: editor.innerHTML, updatedAt: Date.now() });
-        refreshPageLabels();
-        if (window.Store && Store.saveNow) Store.saveNow();
-        // 2. Try cloud with 4-second timeout
-        let cloudOk = false;
-        if (window.FirebaseSync && FirebaseSync.enabled) {
-          try {
-            await Promise.race([
-              FirebaseSync.flush(),
-              new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 4000))
-            ]);
-            cloudOk = true;
-          } catch {}
-        }
-        if (cloudOk) {
-          saveBtn.textContent = '☁️ נשמר בענן';
-          if (window.App) App.toast('☁️ נשמר בענן בהצלחה');
-        } else {
-          saveBtn.textContent = '✓ נשמר מקומית';
-          if (window.App) App.toast('💾 נשמר — יסונכרן כשהחיבור יתאושש');
-          // keep pushing in background
-          if (window.FirebaseSync && FirebaseSync.flush) FirebaseSync.flush().catch(() => {});
-        }
-        setTimeout(() => {
-          saveBtn.disabled = false;
-          saveBtn.textContent = '💾 שמור עכשיו';
-        }, 2200);
-      }
-    }, '💾 שמור עכשיו');
+
+    // Sync status chip — mirrors Firebase sync state, no duplicate save button
+    const syncChip = App.el('span', { class: 'chip', style: { fontSize: '12px', opacity: '0.75' } }, '✓ נשמר אוטומטית');
+    function updateSyncChip(state) {
+      if (state === 'saving') { syncChip.textContent = '✏️ שומר…'; syncChip.style.opacity = '1'; }
+      else if (state === 'saved') { syncChip.textContent = '☁️ נשמר בענן'; syncChip.style.opacity = '0.75'; }
+      else if (state === 'error') { syncChip.textContent = '⚠️ לא סונכרן'; syncChip.style.opacity = '1'; }
+    }
+    // Hook into firebase-sync status updates if available
+    if (window.FirebaseSync) {
+      const origSet = window._nbSyncHook;
+      window._nbSyncHook = updateSyncChip;
+    }
 
     const meta = App.el('div', { class: 'row row-between', style: { marginTop: '8px', flexWrap: 'wrap', gap: '8px' } }, [
       App.el('span', { class: 'chip lavender' }, 'עודכן: ' + new Date(topic.updatedAt || Date.now()).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })),
       App.el('span', { class: 'chip sky' }, ctx.rootName ? `מתחיל בעמוד ${startPage} · "${ctx.rootName}"` : `עמוד ${startPage}`),
-      saveBtn
+      syncChip
     ]);
 
     // Toolbar is position:sticky — no spacer needed (stays in flow)
