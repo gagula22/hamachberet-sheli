@@ -197,7 +197,7 @@
   function schedulePush(key, value) {
     pending[key] = value;
     clearTimeout(timers[key]);
-    setStatus('saving');
+    // Only show "saving" when a write actually starts — not while debounce timer is pending
     timers[key] = setTimeout(() => doPush(key), 700);
   }
 
@@ -206,18 +206,22 @@
     if (value === undefined || !db || !userId) return;
     delete pending[key];
     inflight++;
+    setStatus('saving'); // show "saving" only when write actually begins
+    const WRITE_TIMEOUT = 5000; // 5-second hard cap per write
     try {
-      if (key === 'topics') {
-        await syncTopics(value);
-      } else {
-        await db.doc(`users/${userId}/data/main`).set({ [key]: value }, { merge: true });
-      }
+      const writePromise = key === 'topics'
+        ? syncTopics(value)
+        : db.doc(`users/${userId}/data/main`).set({ [key]: value }, { merge: true });
+      await Promise.race([
+        writePromise,
+        new Promise((_, rej) => setTimeout(() => rej(new Error('write-timeout')), WRITE_TIMEOUT))
+      ]);
       inflight--;
       if (inflight === 0 && Object.keys(pending).length === 0) setStatus('saved');
     } catch (e) {
       inflight--;
-      console.warn(`Push "${key}" failed:`, e);
-      setStatus('error');
+      console.warn(`Push "${key}" failed:`, e.message || e);
+      if (inflight === 0) setStatus('error');
     }
   }
 
@@ -538,20 +542,11 @@
         if (document.visibilityState === 'hidden') flushAll();
       });
 
-      // Periodic forced push every 90 seconds — safety net for any missed pushes
+      // Safety-net: if there are still pending writes after 30s, flush them
       setInterval(() => {
         if (!userId || !db) return;
-        const MAIN_KEYS_SYNC = [
-          'notes', 'tasks', 'todos', 'habits', 'mood',
-          'water', 'sleep', 'transactions', 'goals', 'slots', 'settings'
-        ];
-        MAIN_KEYS_SYNC.forEach(k => {
-          const v = Store.get(k);
-          if (v !== undefined) schedulePush(k, v);
-        });
-        const topics = Store.get('topics');
-        if (topics) schedulePush('topics', topics);
-      }, 90000);
+        if (Object.keys(pending).length > 0) flushAll();
+      }, 30000);
 
       return true;
     },
