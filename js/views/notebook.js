@@ -582,21 +582,34 @@
       onClick: async () => {
         saveBtn.disabled = true;
         saveBtn.textContent = '⏳ שומר…';
-        // Save locally first — instant, no waiting for network
+        // 1. Save locally — instant
         updateTopic(topic.id, { body: editor.innerHTML, updatedAt: Date.now() });
         refreshPageLabels();
         if (window.Store && Store.saveNow) Store.saveNow();
-        // Show success immediately — local save is safe
-        saveBtn.textContent = '✓ נשמר';
-        if (window.App && App.toast) App.toast('💾 נשמר');
+        // 2. Try cloud with 4-second timeout
+        let cloudOk = false;
+        if (window.FirebaseSync && FirebaseSync.enabled) {
+          try {
+            await Promise.race([
+              FirebaseSync.flush(),
+              new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 4000))
+            ]);
+            cloudOk = true;
+          } catch {}
+        }
+        if (cloudOk) {
+          saveBtn.textContent = '☁️ נשמר בענן';
+          if (window.App) App.toast('☁️ נשמר בענן בהצלחה');
+        } else {
+          saveBtn.textContent = '✓ נשמר מקומית';
+          if (window.App) App.toast('💾 נשמר — יסונכרן כשהחיבור יתאושש');
+          // keep pushing in background
+          if (window.FirebaseSync && FirebaseSync.flush) FirebaseSync.flush().catch(() => {});
+        }
         setTimeout(() => {
           saveBtn.disabled = false;
           saveBtn.textContent = '💾 שמור עכשיו';
-        }, 1800);
-        // Push to cloud in background — don't block UI
-        if (window.FirebaseSync && FirebaseSync.flush) {
-          FirebaseSync.flush().catch(e => console.warn('Cloud sync failed:', e));
-        }
+        }, 2200);
       }
     }, '💾 שמור עכשיו');
 
