@@ -1022,44 +1022,63 @@
     cloned.querySelectorAll('.nb-img-del').forEach(el => el.remove());
 
     // ── Step 5: Flatten for Word ─────────────────────────────────────────────
-    // contenteditable produces one <div> per line, which Word renders as
-    // a separate block — turning 20 blank lines into 20 blank paragraphs
-    // (= a full blank page of white space).  We:
-    //   A) unwrap <div> shells around tables so tables are top-level
-    //   B) drop empty <div>/<br> lines entirely
-    //   C) convert remaining content <div>s to <p> so Word sees paragraphs
+    // contenteditable produces one <div> per line.
+    // Rules (applied only to direct children of the editor root):
+    //   A) div wrapping an image table → lift table out, convert remainder to <p>
+    //   B) empty div (just whitespace/br) → collapse (keep at most 1 per run)
+    //   C) plain text div with no block children → convert to <p>
+    //   SKIP: divs with class names (nb-mood-embed, etc.) — leave untouched
+    //   SKIP: divs that contain nested block elements — leave as div
+    const BLOCK_TAGS = new Set(['DIV','TABLE','P','H1','H2','H3','UL','OL','LI','BLOCKQUOTE','FIGURE']);
     const kids = Array.from(cloned.children);
     let blankRun = 0;
+
     for (const child of kids) {
       if (child.tagName !== 'DIV') { blankRun = 0; continue; }
 
-      // A) div whose first element child is our image table → unwrap
+      // SKIP: divs with a class (mood-embed, etc.) — don't touch them
+      if (child.className && child.className.trim()) { blankRun = 0; continue; }
+
+      // A) first child element is our image table → lift it out
       const firstEl = child.firstElementChild;
       if (firstEl && firstEl.tagName === 'TABLE') {
-        child.before(firstEl);                        // lift table out
-        if (!child.textContent.trim()) child.remove();// drop empty shell
+        child.before(firstEl);            // move table before this div
+        if (!child.textContent.trim()) {
+          child.remove();                 // shell is empty — drop it
+        } else {
+          // Remaining text after the table → convert shell to <p>
+          const p = document.createElement('p');
+          p.setAttribute('dir', 'rtl');
+          p.setAttribute('style', 'margin:3px 0;');
+          while (child.firstChild) p.appendChild(child.firstChild);
+          child.replaceWith(p);
+        }
         blankRun = 0;
         continue;
       }
 
-      // B) empty div (only whitespace / <br> with no style) → drop or keep 1
+      // B) empty div → collapse consecutive blank lines (max 1 kept)
       if (!child.textContent.trim()) {
         blankRun++;
-        if (blankRun > 1) { child.remove(); continue; } // collapse runs > 1
+        if (blankRun > 1) { child.remove(); continue; }
         const ep = document.createElement('p');
         ep.setAttribute('style', 'margin:0;line-height:1;');
         child.replaceWith(ep);
         continue;
       }
 
-      // C) div with real text content → convert to <p>
+      // C) div with text but no nested block elements → safe to convert to <p>
       blankRun = 0;
-      const p = document.createElement('p');
-      p.setAttribute('dir', 'rtl');
-      const cs = child.getAttribute('style');
-      p.setAttribute('style', (cs || '') + ';margin:3px 0;');
-      while (child.firstChild) p.appendChild(child.firstChild);
-      child.replaceWith(p);
+      const hasBlock = Array.from(child.children).some(c => BLOCK_TAGS.has(c.tagName));
+      if (!hasBlock) {
+        const p = document.createElement('p');
+        p.setAttribute('dir', 'rtl');
+        const cs = child.getAttribute('style') || '';
+        p.setAttribute('style', cs + (cs ? ';' : '') + 'margin:3px 0;');
+        while (child.firstChild) p.appendChild(child.firstChild);
+        child.replaceWith(p);
+      }
+      // div with block children → leave as-is (Word handles it)
     }
 
     const body = cloned.innerHTML;
