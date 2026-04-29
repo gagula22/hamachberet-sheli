@@ -82,6 +82,20 @@ body {
 .page-title { font-size: 32px; margin-top: 4px; }
 
 .topbar-right { display: flex; align-items: center; gap: var(--sp-3); }
+.sync-now-btn {
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: #fff;
+  font-size: 18px;
+  cursor: pointer;
+  display: grid; place-items: center;
+  transition: background 150ms, transform 150ms;
+  flex-shrink: 0;
+}
+.sync-now-btn:hover { background: var(--cream); }
+.sync-now-btn.syncing { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 .search {
   padding: 10px 14px;
   border-radius: 999px;

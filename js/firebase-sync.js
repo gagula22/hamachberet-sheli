@@ -396,6 +396,35 @@
     });
   }
 
+  // ── Topbar sync button ────────────────────────────────────────────────────
+
+  function renderSyncBtn() {
+    const btn = document.getElementById('syncNowBtn');
+    if (!btn) return;
+    btn.style.display = 'grid';
+    btn.addEventListener('click', async () => {
+      if (btn.classList.contains('syncing')) return;
+      btn.classList.add('syncing');
+      btn.title = 'מסנכרן…';
+      try {
+        const KEYS = ['notes','tasks','todos','habits','mood','water','sleep',
+                      'transactions','goals','slots','settings','topics'];
+        KEYS.forEach(k => {
+          const v = Store.get(k);
+          if (v !== undefined) schedulePush(k, v);
+        });
+        await Promise.race([flushAll(), new Promise(r => setTimeout(r, 8000))]);
+        btn.title = 'סונכרן ✓';
+        if (window.App) App.toast('☁️ סנכרון הושלם');
+      } catch {
+        btn.title = 'שגיאת סנכרון';
+        if (window.App) App.toast('⚠️ סנכרון נכשל');
+      }
+      btn.classList.remove('syncing');
+      setTimeout(() => { btn.title = 'סנכרן עכשיו'; }, 3000);
+    });
+  }
+
   // ── User bar in sidebar ───────────────────────────────────────────────────
 
   function renderUserBar(user) {
@@ -479,7 +508,7 @@
       await listenToCloud();
       loader.remove();
 
-      setTimeout(() => renderUserBar(user), 600);
+      setTimeout(() => { renderUserBar(user); renderSyncBtn(); }, 600);
 
       // Flush pending pushes when the page is about to be hidden/closed
       // — without this, the debounce timer dies with the page and the last
