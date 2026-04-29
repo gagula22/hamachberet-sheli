@@ -579,7 +579,7 @@
       exec('foreColor', hex); save();
     });
 
-    const hilightInput = makeColorPicker('▌', 'צבע הדגשה', '#FFF3C4', (hex) => {
+    const hilightInput = makeColorPicker('✏️', 'צבע הדגשה', '#FFF3C4', (hex) => {
       editor.focus();
       if (!document.execCommand('hiliteColor', false, hex))
         document.execCommand('backColor', false, hex);
