@@ -507,7 +507,7 @@ body.nb-resizing * { cursor: col-resize !important; user-select: none !important
   background-size: 100% 1100px;
   background-repeat: repeat-y;
   outline: none;
-  font-size: 16px;
+  font-size: 11px;
   line-height: 1.8;
   text-align: start;
   box-shadow: inset 0 0 0 1px rgba(60,50,40,0.06);
@@ -537,6 +537,7 @@ figure.nb-img {
   resize: both;
   overflow: hidden;
   width: 300px;
+  max-width: min(100%, 600px); /* A4 printable width ≈ 600px — never cut on print/export */
   height: auto;
   min-width: 80px;
   min-height: 60px;
@@ -574,6 +575,7 @@ figure.nb-img:hover .nb-img-del { opacity: 1; pointer-events: auto; }
 figure.nb-img img {
   display: block;
   width: 100%;
+  max-width: 100%;
   height: 100%;
   object-fit: contain;
   pointer-events: none;

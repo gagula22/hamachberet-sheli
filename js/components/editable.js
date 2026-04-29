@@ -41,6 +41,19 @@
     reader.readAsDataURL(file);
   }
 
+  // A4 printable width: 210mm − 2×25.4mm margins ≈ 602px at 96 DPI → rounded to 600.
+  const A4_CONTENT_W = 600;
+
+  // Returns the effective max image width: the smaller of A4 printable width
+  // and the editor's actual content area (for narrow/mobile screens).
+  function editorContentWidth(editor) {
+    const cs = getComputedStyle(editor);
+    const contentW = editor.clientWidth
+                   - parseFloat(cs.paddingLeft  || 0)
+                   - parseFloat(cs.paddingRight || 0);
+    return Math.min(contentW, A4_CONTENT_W);
+  }
+
   function insertImage(dataUrl, editor, save) {
     editor.focus();
     const fig = document.createElement('figure');
@@ -50,6 +63,11 @@
     img.src = dataUrl;
     img.alt = '';
     fig.appendChild(img);
+
+    // Clamp initial width to the printable content area
+    const maxW = editorContentWidth(editor);
+    const initW = Math.min(300, maxW);
+    if (initW > 0) fig.style.width = initW + 'px';
 
     const delBtn = document.createElement('button');
     delBtn.className = 'nb-img-del';
@@ -64,6 +82,7 @@
     fig.appendChild(delBtn);
     snapFigToGrid(fig);
     snapFigToPage(fig, editor);
+    clampFigToEditor(fig, editor);
 
     const sel = window.getSelection();
     if (sel && sel.rangeCount && editor.contains(sel.anchorNode)) {
@@ -156,6 +175,20 @@
     fig.appendChild(delBtn);
     snapFigToGrid(fig);
     if (editor) snapFigToPage(fig, editor);
+    if (editor) clampFigToEditor(fig, editor);
+  }
+
+  // Attach a ResizeObserver to a figure that prevents it from ever exceeding
+  // the editor's printable content width. Fires continuously while the user
+  // drags the resize handle — no mouseup lag.
+  function clampFigToEditor(fig, editor) {
+    if (!window.ResizeObserver) return;
+    new ResizeObserver(() => {
+      const maxW = editorContentWidth(editor);
+      if (maxW > 0 && fig.offsetWidth > maxW) {
+        fig.style.width = maxW + 'px';
+      }
+    }).observe(fig);
   }
 
   function attachImageBehaviors(editor, save) {
@@ -196,11 +229,8 @@
       // Images are always centered — no alignment cycling
     });
 
-    // Persist size after the user finishes resizing (mouse up)
-    editor.addEventListener('mouseup', () => {
-      // Browser-native resize updates inline styles on figure — just save.
-      save && save();
-    });
+    // Persist size after the user finishes resizing (mouse up).
+    editor.addEventListener('mouseup', () => { save && save(); });
   }
 
   window.Editable = { debounce, insertImageFromFile, insertImage, attachImageBehaviors };

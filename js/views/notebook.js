@@ -1084,7 +1084,7 @@
     const body = cloned.innerHTML;
 
     const baseStyles = `
-      body{font-family:Arial,sans-serif;direction:rtl;padding:40px;max-width:820px;margin:0 auto;color:#3b3a3a;}
+      body{font-family:Arial,sans-serif;font-size:11pt;direction:rtl;padding:40px;max-width:820px;margin:0 auto;color:#3b3a3a;}
       h1{font-size:28px;margin-bottom:24px;}
       table[align="center"]{border-collapse:collapse;page-break-inside:avoid;mso-pagination:widow-orphan keep-together;}
       table[align="center"] td{text-align:center;padding:8px 0;}
@@ -1108,7 +1108,7 @@
       const printDiv = document.createElement('div');
       printDiv.id = printId;
       printDiv.setAttribute('dir', 'rtl');
-      printDiv.style.display = 'none'; // hidden on screen; shown only via @media print
+      printDiv.setAttribute('style', 'font-size:11pt;font-family:Arial,sans-serif;display:none;');
       printDiv.innerHTML = `<h1 style="font-size:24pt;margin-bottom:18pt;font-family:Arial,sans-serif;">${title}</h1>${body}`;
 
       // 2. Print-only stylesheet: hide everything else, show only our div
@@ -1122,6 +1122,7 @@
             visibility: visible !important;
             position: static !important;
             font-family: Arial, sans-serif;
+            font-size: 11pt;
             color: #000;
             direction: rtl;
             line-height: 1.7;
@@ -1189,7 +1190,7 @@
         ` xmlns='http://www.w3.org/TR/REC-html40'>`,
         `<head><meta charset='utf-8'><title>${title}</title>`,
         `<style>${baseStyles}</style></head>`,
-        `<body dir="rtl"><h1>${title}</h1>${body}</body></html>`
+        `<body dir="rtl" style="font-size:11pt;font-family:Arial,sans-serif;"><h1>${title}</h1>${body}</body></html>`
       ].join('');
       const blob = new Blob(['﻿', html], { type: 'application/msword' });
       const url = URL.createObjectURL(blob);
