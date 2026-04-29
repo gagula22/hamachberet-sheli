@@ -33,6 +33,33 @@
     }
   }
 
+  // Shows a non-blocking banner at the top of the page when Firebase is unavailable
+  function showOfflineBanner() {
+    if (document.getElementById('fb-offline-banner')) return;
+    const banner = document.createElement('div');
+    banner.id = 'fb-offline-banner';
+    banner.style.cssText =
+      'position:fixed;top:0;left:0;right:0;z-index:9997;' +
+      'background:#fff3cd;border-bottom:1px solid #ffc107;' +
+      'padding:10px 20px;font-family:Heebo,Arial,sans-serif;direction:rtl;' +
+      'font-size:13px;color:#856404;display:flex;align-items:center;gap:10px;';
+    banner.innerHTML =
+      '⚠️ <strong>הסנכרון בין מכשירים אינו פעיל</strong> — ' +
+      'הנתונים נשמרים רק במכשיר זה. ' +
+      '<button id="fb-retry-btn" style="margin-right:8px;padding:4px 10px;' +
+      'background:#ffc107;border:none;border-radius:6px;cursor:pointer;' +
+      'font-family:Heebo,Arial,sans-serif;font-size:12px;font-weight:600">' +
+      'התחבר עכשיו</button>' +
+      '<button id="fb-dismiss-banner" style="margin-right:auto;background:none;border:none;' +
+      'cursor:pointer;font-size:16px;color:#856404">✕</button>';
+    document.body.appendChild(banner);
+    document.getElementById('fb-dismiss-banner').addEventListener('click', () => banner.remove());
+    document.getElementById('fb-retry-btn').addEventListener('click', () => {
+      banner.remove();
+      window.FirebaseSync.setup();
+    });
+  }
+
   // ── Login UI ──────────────────────────────────────────────────────────────
 
   function showLoginUI(resolve) {
@@ -80,9 +107,22 @@
       btn.querySelector('span').textContent = 'מתחבר…';
       try {
         await auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
+        // onAuthStateChanged will handle the rest
       } catch (e) {
-        const err = document.getElementById('fb-login-err');
-        if (err) err.textContent = 'שגיאה: ' + (e.message || e.code || 'נסה שוב');
+        // popup-blocked or popup-closed: fall back to full-page redirect
+        if (e.code === 'auth/popup-blocked' || e.code === 'auth/popup-closed-by-user') {
+          btn.querySelector('span').textContent = 'מפנה לכניסה…';
+          try {
+            await auth.signInWithRedirect(new firebase.auth.GoogleAuthProvider());
+            return; // page will navigate away
+          } catch (re) {
+            const err = document.getElementById('fb-login-err');
+            if (err) err.textContent = 'שגיאה: ' + (re.message || re.code || 'נסה שוב');
+          }
+        } else {
+          const err = document.getElementById('fb-login-err');
+          if (err) err.textContent = 'שגיאה: ' + (e.message || e.code || 'נסה שוב');
+        }
         btn.disabled = false; btn.style.opacity = '1';
         btn.querySelector('span').textContent = 'כניסה עם Google';
       }
@@ -368,10 +408,28 @@
         <div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
           ${user.displayName || user.email || 'משתמש'}
         </div>
-        <div id="fb-sync-status" style="font-size:11px;color:var(--ink-mute)">☁️ מסונכרן בזמן אמת</div>
+        <div id="fb-sync-status" style="font-size:11px;color:var(--ink-mute);cursor:pointer"
+             title="לחץ לסנכרן עכשיו">☁️ מסונכרן בזמן אמת</div>
       </div>
       <button id="fb-signout" title="התנתקות"
         style="font-size:20px;cursor:pointer;background:none;border:none;color:var(--ink-mute);padding:4px;line-height:1">⏏</button>`;
+
+    document.getElementById('fb-sync-status').addEventListener('click', async () => {
+      setStatus('saving');
+      try {
+        const KEYS = ['notes','tasks','todos','habits','mood','water','sleep',
+                      'transactions','goals','slots','settings','topics'];
+        KEYS.forEach(k => {
+          const v = Store.get(k);
+          if (v !== undefined) schedulePush(k, v);
+        });
+        await flushAll();
+        setStatus('saved');
+        if (window.App) App.toast('סנכרון הושלם ✓');
+      } catch {
+        setStatus('error');
+      }
+    });
 
     document.getElementById('fb-signout').addEventListener('click', () => {
       if (confirm('להתנתק מהחשבון?')) auth.signOut().then(() => location.reload());
@@ -384,7 +442,16 @@
     enabled: false,
 
     async setup() {
-      if (!initSDK()) return false;
+      if (!initSDK()) {
+        // Firebase SDK not loaded or not configured — show non-blocking warning
+        setTimeout(showOfflineBanner, 1500);
+        return false;
+      }
+
+      // Handle post-redirect auth (when signInWithRedirect was used)
+      try {
+        await auth.getRedirectResult();
+      } catch { /* no redirect result is fine */ }
 
       const user = await waitForUser();
       userId = user.uid;
@@ -415,9 +482,25 @@
       // — without this, the debounce timer dies with the page and the last
       // edits never reach Firestore.
       window.addEventListener('pagehide', flushAll);
+      window.addEventListener('beforeunload', flushAll);
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'hidden') flushAll();
       });
+
+      // Periodic forced push every 90 seconds — safety net for any missed pushes
+      setInterval(() => {
+        if (!userId || !db) return;
+        const MAIN_KEYS_SYNC = [
+          'notes', 'tasks', 'todos', 'habits', 'mood',
+          'water', 'sleep', 'transactions', 'goals', 'slots', 'settings'
+        ];
+        MAIN_KEYS_SYNC.forEach(k => {
+          const v = Store.get(k);
+          if (v !== undefined) schedulePush(k, v);
+        });
+        const topics = Store.get('topics');
+        if (topics) schedulePush('topics', topics);
+      }, 90000);
 
       return true;
     },

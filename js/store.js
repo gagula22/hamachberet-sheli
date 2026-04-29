@@ -141,6 +141,7 @@
       state[key] = fn(state[key]);
       scheduleSave();
       emit();
+      if (window.FirebaseSync && FirebaseSync.enabled) FirebaseSync.push(key, state[key]);
     },
     subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
 
