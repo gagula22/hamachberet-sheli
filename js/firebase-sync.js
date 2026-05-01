@@ -156,6 +156,37 @@
     if (window._nbSyncHook) { try { window._nbSyncHook(state); } catch {} }
   }
 
+  // ── Document size safety ──────────────────────────────────────────────────
+  // Firestore hard limit: 1 048 576 bytes per document.
+  // Base64 images embedded in topic.body can easily exceed this.
+  // Strategy: if a topic doc > 900 KB, strip base64 image data before syncing
+  // (images are already stored safely in local IndexedDB — no data loss).
+
+  const MAX_DOC_BYTES = 900 * 1024; // 900 KB safety margin
+
+  function _docBytes(obj) {
+    try { return new TextEncoder().encode(JSON.stringify(obj)).length; } catch { return 0; }
+  }
+
+  // Replace base64 image src values with a tiny transparent 1×1 GIF placeholder.
+  // The full image data stays in IndexedDB — only the cloud copy is slimmed down.
+  function _stripBase64Images(html) {
+    return (html || '').replace(
+      /src="data:image\/[^"]{20,}"/g,
+      'src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"'
+    );
+  }
+
+  function _sizeSafeTopic(topic) {
+    if (_docBytes(topic) <= MAX_DOC_BYTES) return topic;
+    // Strip images from body — keeps text + metadata intact
+    const slim = { ...topic, body: _stripBase64Images(topic.body || ''), _imgStripped: true };
+    if (window.App) App.toast('⚠️ הנושא מכיל תמונות גדולות — הטקסט יסונכרן, התמונות נשמרות מקומית');
+    if (_docBytes(slim) <= MAX_DOC_BYTES) return slim;
+    // Extreme case: even text is too long — truncate
+    return { ...slim, body: slim.body.slice(0, 60000) };
+  }
+
   // ── Diff-based write functions ────────────────────────────────────────────
 
   // Write only changed/added/deleted items in a subcollection
@@ -197,7 +228,7 @@
     if (prev !== undefined) {
       const prevMap = new Map(prev.map(t => [String(t.id), JSON.stringify(t)]));
       for (const [id, topic] of newMap) {
-        if (prevMap.get(id) !== JSON.stringify(topic)) { batch.set(col.doc(id), topic); writes++; }
+        if (prevMap.get(id) !== JSON.stringify(topic)) { batch.set(col.doc(id), _sizeSafeTopic(topic)); writes++; }
       }
       for (const id of prevMap.keys()) {
         if (!newMap.has(id)) { batch.delete(col.doc(id)); writes++; }
@@ -206,7 +237,7 @@
       // First push — fetch cloud to detect deletes
       const snap = await col.get();
       const cloudIds = new Set(); snap.forEach(d => cloudIds.add(d.id));
-      for (const [id, topic] of newMap) { batch.set(col.doc(id), topic); writes++; }
+      for (const [id, topic] of newMap) { batch.set(col.doc(id), _sizeSafeTopic(topic)); writes++; }
       for (const id of cloudIds) { if (!newMap.has(id)) { batch.delete(col.doc(id)); writes++; } }
     }
 
@@ -249,7 +280,9 @@
       else if (SUBCOL_KEYS.includes(key))   writePromise = syncSubcol(key, value);
       else                                  writePromise = syncMainDocKey(key, value);
 
-      await Promise.race([writePromise, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000))]);
+      // Timeout: 30s for topics (may contain images), 10s for everything else
+      const timeoutMs = key === 'topics' ? 30000 : 10000;
+      await Promise.race([writePromise, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), timeoutMs))]);
       inflight--;
       if (inflight === 0 && Object.keys(pending).length === 0) setStatus('saved');
     } catch (e) {
