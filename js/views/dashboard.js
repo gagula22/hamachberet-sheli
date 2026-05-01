@@ -66,7 +66,18 @@
           onClick: () => {
             window.open('wyckoff/latest.html', '_blank');
           }
-        }, '🚀 פתח דוח ניתוח אחרון'),
+        }, '📊 פתח דוח אחרון'),
+        App.el('button', {
+          class: 'btn btn-primary',
+          style: { background: '#0a7', borderColor: '#0a7' },
+          onClick: () => {
+            const isOnPC = location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.protocol === 'file:';
+            const msg = isOnPC
+              ? 'להפקת דוח חדש:\n\n1. לחץ על האייקון "🚀 Run Wyckoff Analysis" בשולחן העבודה\n2. או הרץ ידנית:\n   C:\\Users\\user\\trading-agent\\agent\\generate-report.js\n\nהדוח ייפתח אוטומטית כשיסיים (~3-5 דקות)'
+              : 'הפקת דוח חדש פועלת רק מהמחשב הביתי שלך:\n\n1. גש למחשב הביתי\n2. לחץ על האייקון "🚀 Run Wyckoff Analysis" בשולחן העבודה\n3. המתן 3-5 דקות\n4. הדוח יתעדכן אוטומטית באתר';
+            alert(msg);
+          }
+        }, '🚀 הפק ניתוח חדש'),
         App.el('button', {
           class: 'btn btn-ghost btn-sm',
           onClick: () => {
