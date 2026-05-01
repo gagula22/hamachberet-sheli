@@ -65,13 +65,59 @@
   .toc a { color: #0a4; text-decoration: none; margin-inline-end: 16px; font-size: 14px; }
   .gen-banner { background: #0a7; color: white; padding: 10px 16px; border-radius: 6px; margin: 0 0 12px; font-size: 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
   .gen-banner .label { opacity: 0.85; font-size: 12px; }
+  .export-btn { background: #d4a017; color: white; border: none; padding: 8px 16px; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.1); transition: all 0.2s; }
+  .export-btn:hover { background: #c19412; transform: translateY(-1px); box-shadow: 0 4px 8px rgba(0,0,0,0.15); }
+  .export-btn:active { transform: translateY(0); }
+  @media print { .export-btn, .toc { display: none !important; } }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html-docx-js/0.3.1/html-docx.js"></script>
+<script>
+function exportToWord() {
+  const reportTitle = document.title || 'Wyckoff-Report';
+  const date = new Date().toISOString().slice(0, 10);
+  const filename = `${reportTitle.replace(/[^\w֐-׿\-]/g, '_')}_${date}.docx`;
+
+  // Clone document and inline images as base64 (so they're embedded in the docx)
+  const docClone = document.documentElement.cloneNode(true);
+  // Remove the export button from clone
+  docClone.querySelectorAll('.export-btn').forEach(el => el.remove());
+
+  Promise.all(Array.from(docClone.querySelectorAll('img')).map(img => {
+    return new Promise(resolve => {
+      const realImg = document.querySelector(`img[src="${img.getAttribute('src')}"]`);
+      if (!realImg || !realImg.complete) return resolve();
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = realImg.naturalWidth;
+        canvas.height = realImg.naturalHeight;
+        canvas.getContext('2d').drawImage(realImg, 0, 0);
+        img.setAttribute('src', canvas.toDataURL('image/png'));
+      } catch(e) { console.warn('Could not embed', img.src, e); }
+      resolve();
+    });
+  })).then(() => {
+    const html = '<!DOCTYPE html><html dir="rtl" lang="he">' + docClone.innerHTML + '</html>';
+    const converted = htmlDocx.asBlob(html, { orientation: 'portrait', margins: { top: 720, right: 720, bottom: 720, left: 720 } });
+    const url = URL.createObjectURL(converted);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 100);
+  });
+}
+</script>
 </head>
 <body>
 
   <div class="gen-banner">
     <span><strong>📊 דוח נוצר:</strong> 2026-05-01 18:41 שעון ישראל</span>
-    <span class="label">BYBIT:BTCUSDT.P · ניתוח Wyckoff מלא</span>
+    <span style="display:flex;gap:8px;align-items:center;">
+      <button class="export-btn" onclick="exportToWord()">📄 ייצא ל-Word</button>
+      <span class="label">BYBIT:BTCUSDT.P</span>
+    </span>
   </div>
 
   <div class="toc"><strong>תוכן עניינים:</strong>
