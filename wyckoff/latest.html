@@ -81,27 +81,69 @@ async function exportToWord() {
     const date = new Date().toISOString().slice(0, 10);
     const filename = `${reportTitle}_${date}.doc`;
 
-    // Convert all images to base64 via fetch (avoids canvas-taint issues)
+    // Multi-method image embedding (works on file:// and https://)
+    async function imgToDataUrl(src) {
+      // Method 1: fetch + FileReader (works on https)
+      try {
+        const r = await fetch(src);
+        const blob = await r.blob();
+        return await new Promise((res, rej) => {
+          const fr = new FileReader();
+          fr.onloadend = () => res(fr.result);
+          fr.onerror = () => rej(new Error('FileReader failed'));
+          fr.readAsDataURL(blob);
+        });
+      } catch (e) { /* fall through */ }
+      // Method 2: XHR with arraybuffer (works on file:// in many browsers)
+      try {
+        return await new Promise((res, rej) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open('GET', src, true);
+          xhr.responseType = 'arraybuffer';
+          xhr.onload = () => {
+            if (xhr.status === 0 || xhr.status === 200) {
+              const bytes = new Uint8Array(xhr.response);
+              let binary = '';
+              const chunkSize = 8192;
+              for (let i = 0; i < bytes.length; i += chunkSize) {
+                binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+              }
+              res('data:image/png;base64,' + btoa(binary));
+            } else rej(new Error('XHR status ' + xhr.status));
+          };
+          xhr.onerror = () => rej(new Error('XHR network error'));
+          xhr.send();
+        });
+      } catch (e) { /* fall through */ }
+      // Method 3: canvas (works only if image is from same origin)
+      try {
+        const img = document.querySelector(`img[src="${src}"]`);
+        if (!img || !img.complete) return null;
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        canvas.getContext('2d').drawImage(img, 0, 0);
+        return canvas.toDataURL('image/png');
+      } catch (e) { return null; }
+    }
+
     const imgs = Array.from(document.querySelectorAll('img'));
     btn.textContent = `⏳ טוען ${imgs.length} תמונות...`;
+    let successCount = 0;
     await Promise.all(imgs.map(async img => {
-      try {
-        const response = await fetch(img.src);
-        const blob = await response.blob();
-        const dataUrl = await new Promise(resolve => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result);
-          reader.onerror = () => resolve(null);
-          reader.readAsDataURL(blob);
-        });
-        if (dataUrl) {
-          img.dataset.originalSrc = img.src;
-          img.src = dataUrl;
-        }
-      } catch (e) {
-        console.warn('Could not embed image:', img.src, e.message);
+      const dataUrl = await imgToDataUrl(img.src);
+      if (dataUrl) {
+        img.dataset.originalSrc = img.src;
+        img.src = dataUrl;
+        successCount++;
+      } else {
+        console.warn('❌ Failed to embed:', img.getAttribute('src'));
       }
     }));
+    console.log(`✅ Embedded ${successCount}/${imgs.length} images`);
+    if (successCount === 0 && imgs.length > 0) {
+      alert(`⚠️ לא הצלחתי לטעון אף תמונה. יתכן שהדפדפן חוסם גישה לקבצים מקומיים.\nנסה לפתוח את הדוח דרך האתר במקום מהמחשב.`);
+    }
     btn.textContent = '⏳ מכין מסמך...';
 
     // Word-friendly CSS — explicit RTL + table borders
