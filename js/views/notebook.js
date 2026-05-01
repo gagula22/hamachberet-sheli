@@ -435,9 +435,71 @@
     }
     const save = Editable.debounce(saveImmediate, 500);
 
+    // ── Undo / Redo stack ───────────────────────────────────────────────────
+    const _undoStack = [];
+    let _undoPtr    = -1;
+    const MAX_UNDO  = 60;
+
+    function pushUndo() {
+      const snap = editor.innerHTML;
+      if (_undoPtr >= 0 && _undoStack[_undoPtr] === snap) return; // no change
+      _undoStack.splice(_undoPtr + 1);           // discard forward history
+      _undoStack.push(snap);
+      if (_undoStack.length > MAX_UNDO) _undoStack.shift();
+      else _undoPtr++;
+    }
+
+    function restoreSnapshot(snap) {
+      editor.innerHTML = snap;
+      restoreMoodBlocks(editor);
+      Editable.attachImageBehaviors(editor, save);
+      attachMoodBehaviors(editor, save);
+      saveImmediate();
+    }
+
+    function doUndo() {
+      if (_undoPtr <= 0) { App.toast('אין מה לבטל'); return; }
+      _undoPtr--;
+      restoreSnapshot(_undoStack[_undoPtr]);
+      App.toast('↩ בוטל');
+    }
+
+    function doRedo() {
+      if (_undoPtr >= _undoStack.length - 1) { App.toast('אין מה לשחזר'); return; }
+      _undoPtr++;
+      restoreSnapshot(_undoStack[_undoPtr]);
+      App.toast('↪ שוחזר');
+    }
+
+    // Snapshot on load
+    pushUndo();
+
+    // Expose so editable.js image operations can push before acting
+    editor._pushUndo = pushUndo;
+
+    // Snapshot after each burst of typing (800ms quiet)
+    const _debouncedPush = Editable.debounce(pushUndo, 800);
+    editor.addEventListener('input', _debouncedPush);
+
+    // Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y
+    editor.addEventListener('keydown', (e) => {
+      const mod = e.ctrlKey || e.metaKey;
+      if (!mod) return;
+      if (e.key === 'z' && !e.shiftKey) {
+        e.preventDefault(); e.stopPropagation(); doUndo();
+      } else if (e.key === 'y' || (e.key === 'z' && e.shiftKey)) {
+        e.preventDefault(); e.stopPropagation(); doRedo();
+      }
+    });
+    // ── end undo/redo ───────────────────────────────────────────────────────
+
     editor.addEventListener('input', save);
     Editable.attachImageBehaviors(editor, save);
     attachMoodBehaviors(editor, save);
+
+    // Store doUndo/doRedo so toolbar buttons (built below) can reference them
+    editor._doUndo = doUndo;
+    editor._doRedo = doRedo;
 
     // Track current editor module-wide so pagehide can flush even mid-debounce.
     activeEditor = { saveImmediate, editor };
@@ -615,6 +677,9 @@
     });
 
     const toolbar = App.el('div', { class: 'nb-toolbar' }, [
+      tool('↩', 'בטל (Ctrl+Z)',     () => editor._doUndo?.()),
+      tool('↪', 'שחזר (Ctrl+Y)',    () => editor._doRedo?.()),
+      sep(),
       fontSel,
       sizeSel,
       sep(),

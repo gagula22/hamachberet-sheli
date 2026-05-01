@@ -55,6 +55,7 @@
   }
 
   function insertImage(dataUrl, editor, save) {
+    editor._pushUndo?.();   // snapshot before insert — makes insert undoable
     editor.focus();
     const fig = document.createElement('figure');
     fig.className = 'nb-img';
@@ -76,6 +77,7 @@
     delBtn.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
+      editor._pushUndo?.();  // snapshot before delete — makes delete undoable
       fig.remove();
       save && save();
     });
@@ -481,6 +483,7 @@
     editor.addEventListener('drop', (e) => {
       if (!_draggedFig || !editor.contains(_draggedFig)) return;
       e.preventDefault();
+      editor._pushUndo?.();  // snapshot before move — makes move undoable
       if (_dropIndicator && _dropIndicator.parentNode) {
         _dropIndicator.replaceWith(_draggedFig);
       } else {
