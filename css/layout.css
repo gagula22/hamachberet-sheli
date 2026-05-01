@@ -1,3 +1,9 @@
+/* ── Page-level zoom: entire page scales as ONE unit, no per-component reflow ── */
+html {
+  zoom: 0.8;            /* scale everything uniformly — like browser 80% zoom   */
+  min-width: 1280px;    /* prevent inner collapse; scrollbar appears if needed   */
+}
+
 body {
   display: grid;
   grid-template-columns: 1fr var(--sidebar-w);

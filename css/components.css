@@ -592,6 +592,40 @@ figure.nb-img::after {
   pointer-events: none;
   opacity: 0.6;
 }
+/* ── Image move handle ─────────────────────────────────────────────────── */
+figure.nb-img .nb-img-move {
+  position: absolute;
+  top: 6px;
+  inset-inline-start: 6px;
+  width: 24px;
+  height: 24px;
+  background: rgba(255,255,255,0.92);
+  border: 1px solid rgba(0,0,0,0.15);
+  border-radius: 5px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  font-size: 16px;
+  color: #555;
+  z-index: 6;
+  user-select: none;
+  line-height: 1;
+  box-shadow: 0 1px 4px rgba(0,0,0,.12);
+}
+figure.nb-img:hover .nb-img-move { display: flex; }
+figure.nb-img.nb-img-dragging { opacity: 0.35; pointer-events: none; }
+
+/* Drop indicator line shown while dragging image to new position */
+.nb-drop-line {
+  height: 3px;
+  background: var(--sky, #7ab4f5);
+  border-radius: 2px;
+  margin: 4px 0;
+  pointer-events: none;
+  display: block;
+}
+
 /* Images are always centered — no float/alignment classes */
 .nb-editor h1, .nb-editor h2, .nb-editor h3 {
   font-family: var(--font-head);
