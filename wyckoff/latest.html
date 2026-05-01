@@ -81,19 +81,28 @@ async function exportToWord() {
     const date = new Date().toISOString().slice(0, 10);
     const filename = `${reportTitle}_${date}.doc`;
 
-    // Convert all images to base64 (embedded in the document)
+    // Convert all images to base64 via fetch (avoids canvas-taint issues)
     const imgs = Array.from(document.querySelectorAll('img'));
+    btn.textContent = `⏳ טוען ${imgs.length} תמונות...`;
     await Promise.all(imgs.map(async img => {
       try {
-        if (!img.complete) await new Promise(r => { img.onload = img.onerror = r; });
-        const canvas = document.createElement('canvas');
-        canvas.width = img.naturalWidth || img.width;
-        canvas.height = img.naturalHeight || img.height;
-        canvas.getContext('2d').drawImage(img, 0, 0);
-        img.dataset.originalSrc = img.src;
-        img.src = canvas.toDataURL('image/png');
-      } catch (e) { console.warn('Could not embed image:', img.src, e); }
+        const response = await fetch(img.src);
+        const blob = await response.blob();
+        const dataUrl = await new Promise(resolve => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result);
+          reader.onerror = () => resolve(null);
+          reader.readAsDataURL(blob);
+        });
+        if (dataUrl) {
+          img.dataset.originalSrc = img.src;
+          img.src = dataUrl;
+        }
+      } catch (e) {
+        console.warn('Could not embed image:', img.src, e.message);
+      }
     }));
+    btn.textContent = '⏳ מכין מסמך...';
 
     // Word-friendly CSS — explicit RTL + table borders
     const wordStyle = `
