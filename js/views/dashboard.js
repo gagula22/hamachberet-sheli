@@ -51,9 +51,35 @@
         : App.el('div', { class: 'empty-state' }, 'עדיין אין הערות. קדימה, להתחיל לכתוב ←')
     ]);
 
+    // Wyckoff Analysis card — opens latest BTC report from local PC
+    const wyckoffCard = App.el('div', { class: 'card', style: { background: 'linear-gradient(135deg, #fff8e7 0%, #ffe5e5 100%)', borderLeft: '4px solid #d4a017' } }, [
+      App.el('div', { class: 'row row-between' }, [
+        App.el('h2', { style: { margin: 0 } }, '📊 ניתוח Wyckoff — BTCUSDT.P'),
+        App.el('span', { style: { fontSize: '11px', color: 'var(--ink-soft)' } }, 'מקומי בלבד')
+      ]),
+      App.el('div', { style: { fontSize: '13px', color: 'var(--ink-soft)', margin: '8px 0' } },
+        'דוח אחרון: 1D + 4H + 1H + 30m + 15m עם אסטרטגיית 3 שלבים, ווליום פר 1%, ותרחישים'),
+      App.el('div', { class: 'row', style: { gap: '8px', flexWrap: 'wrap' } }, [
+        App.el('button', {
+          class: 'btn btn-primary',
+          style: { background: '#d4a017', borderColor: '#d4a017' },
+          onClick: () => {
+            window.open('file:///C:/Users/user/trading-agent/agent/output/report-2026-05-01.html', '_blank');
+          }
+        }, '🚀 פתח דוח ניתוח אחרון'),
+        App.el('button', {
+          class: 'btn btn-ghost btn-sm',
+          onClick: () => {
+            window.open('file:///C:/Users/user/trading-agent/agent/output/', '_blank');
+          }
+        }, '📁 כל הדוחות'),
+      ])
+    ]);
+
     root.append(
       App.el('div', { class: 'stack stack-lg' }, [
         stats,
+        wyckoffCard,
         App.el('h2', { style: { marginTop: '8px' } }, 'הכול במקום אחד'),
         sectionGrid,
         notesCard
