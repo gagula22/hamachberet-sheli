@@ -70,35 +70,48 @@
   .export-btn:active { transform: translateY(0); }
   @media print { .export-btn, .toc { display: none !important; } }
 </style>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html-docx-js/0.3.1/html-docx.js"></script>
 <script>
-function exportToWord() {
-  const reportTitle = document.title || 'Wyckoff-Report';
-  const date = new Date().toISOString().slice(0, 10);
-  const filename = `${reportTitle.replace(/[^\w֐-׿\-]/g, '_')}_${date}.docx`;
+async function exportToWord() {
+  const btn = document.querySelector('.export-btn');
+  const origText = btn.textContent;
+  btn.textContent = '⏳ מכין...';
+  btn.disabled = true;
+  try {
+    const reportTitle = (document.title || 'Wyckoff-Report').replace(/[^\w֐-׿\-]/g, '_');
+    const date = new Date().toISOString().slice(0, 10);
+    const filename = `${reportTitle}_${date}.doc`;
 
-  // Clone document and inline images as base64 (so they're embedded in the docx)
-  const docClone = document.documentElement.cloneNode(true);
-  // Remove the export button from clone
-  docClone.querySelectorAll('.export-btn').forEach(el => el.remove());
-
-  Promise.all(Array.from(docClone.querySelectorAll('img')).map(img => {
-    return new Promise(resolve => {
-      const realImg = document.querySelector(`img[src="${img.getAttribute('src')}"]`);
-      if (!realImg || !realImg.complete) return resolve();
+    // Convert all images to base64 (embedded in the document)
+    const imgs = Array.from(document.querySelectorAll('img'));
+    await Promise.all(imgs.map(async img => {
       try {
+        // Wait for image to load if not loaded
+        if (!img.complete) await new Promise(r => { img.onload = img.onerror = r; });
         const canvas = document.createElement('canvas');
-        canvas.width = realImg.naturalWidth;
-        canvas.height = realImg.naturalHeight;
-        canvas.getContext('2d').drawImage(realImg, 0, 0);
-        img.setAttribute('src', canvas.toDataURL('image/png'));
-      } catch(e) { console.warn('Could not embed', img.src, e); }
-      resolve();
-    });
-  })).then(() => {
-    const html = '<!DOCTYPE html><html dir="rtl" lang="he">' + docClone.innerHTML + '</html>';
-    const converted = htmlDocx.asBlob(html, { orientation: 'portrait', margins: { top: 720, right: 720, bottom: 720, left: 720 } });
-    const url = URL.createObjectURL(converted);
+        canvas.width = img.naturalWidth || img.width;
+        canvas.height = img.naturalHeight || img.height;
+        canvas.getContext('2d').drawImage(img, 0, 0);
+        img.dataset.originalSrc = img.src;
+        img.src = canvas.toDataURL('image/png');
+      } catch (e) { console.warn('Could not embed image:', img.src, e); }
+    }));
+
+    // Clone the page (with embedded images now)
+    const html = '<!DOCTYPE html><html dir="rtl" lang="he"><head><meta charset="UTF-8"></head><body>'
+      + document.body.innerHTML.replace(/<button[^<]*export-btn[^<]*<\/button>/gi, '')
+      + '</body></html>';
+
+    // Restore original src
+    imgs.forEach(img => { if (img.dataset.originalSrc) img.src = img.dataset.originalSrc; });
+
+    // Use Microsoft Word's HTML format — saved as .doc opens cleanly in Word
+    // Word + Pages + LibreOffice all open this correctly with full formatting
+    const preface = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><title>Export</title></head><body>';
+    const postfix = '</body></html>';
+    const fullHtml = preface + html + postfix;
+    const blob = new Blob(['﻿', fullHtml], { type: 'application/msword;charset=utf-8' });
+
+    const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = filename;
@@ -106,7 +119,15 @@ function exportToWord() {
     a.click();
     document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 100);
-  });
+
+    btn.textContent = '✅ הורד!';
+    setTimeout(() => { btn.textContent = origText; btn.disabled = false; }, 2500);
+  } catch (e) {
+    console.error('Export error:', e);
+    alert('שגיאה בייצוא: ' + e.message);
+    btn.textContent = origText;
+    btn.disabled = false;
+  }
 }
 </script>
 </head>
