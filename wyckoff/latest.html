@@ -63,35 +63,15 @@
   .section-divider { height: 4px; background: linear-gradient(90deg,#0a7,#0c6,#0a7); margin: 32px 0; border-radius: 2px; }
   .toc { background: white; padding: 12px 16px; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,.06); margin: 16px 0; }
   .toc a { color: #0a4; text-decoration: none; margin-inline-end: 16px; font-size: 14px; }
-  .live-banner { background: #0a7; color: white; padding: 8px 16px; border-radius: 6px; margin: 0 0 12px; font-size: 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
-  .live-banner .live-now { font-weight: 600; }
-  .live-banner .gen-time { opacity: 0.85; font-size: 12px; }
+  .gen-banner { background: #0a7; color: white; padding: 10px 16px; border-radius: 6px; margin: 0 0 12px; font-size: 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+  .gen-banner .label { opacity: 0.85; font-size: 12px; }
 </style>
-<script>
-  // Update Israel time live on page open
-  function updateIsraelTime() {
-    const now = new Date();
-    const fmt = new Intl.DateTimeFormat('he-IL', {
-      timeZone: 'Asia/Jerusalem',
-      year: 'numeric', month: '2-digit', day: '2-digit',
-      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
-    });
-    const parts = fmt.formatToParts(now);
-    const get = type => parts.find(p => p.type === type).value;
-    const text = `${get('year')}-${get('month')}-${get('day')} ${get('hour')}:${get('minute')}:${get('second')}`;
-    document.querySelectorAll('.now-isr').forEach(el => el.textContent = text);
-  }
-  document.addEventListener('DOMContentLoaded', () => {
-    updateIsraelTime();
-    setInterval(updateIsraelTime, 1000);
-  });
-</script>
 </head>
 <body>
 
-  <div class="live-banner">
-    <span class="live-now">🕐 שעון ישראל כעת: <span class="now-isr">--</span></span>
-    <span class="gen-time">📅 דוח נוצר: 2026-05-01 16:50 שעון ישראל · BYBIT:BTCUSDT.P</span>
+  <div class="gen-banner">
+    <span><strong>📊 דוח נוצר:</strong> 2026-05-01 16:30 שעון ישראל</span>
+    <span class="label">BYBIT:BTCUSDT.P · ניתוח Wyckoff מלא</span>
   </div>
 
   <div class="toc"><strong>תוכן עניינים:</strong>
