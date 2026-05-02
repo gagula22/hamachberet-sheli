@@ -921,27 +921,27 @@
         grp(
           tbBtn('💾', 'שמור (Ctrl+S)', () => { saveImmediate(); App.toast('✓ נשמר'); }),
           tbBtn('↩', 'בטל (Ctrl+Z)',   () => editor._doUndo?.()),
-          tbBtn('↪', 'שחזר (Ctrl+Y)', () => editor._doRedo?.()),
-          (() => {
-            const syncBtn = tbBtn('☁️', 'סנכרן עכשיו עם Firebase', async () => {
-              if (syncBtn.dataset.syncing) return;
-              syncBtn.dataset.syncing = '1';
-              syncBtn.title = 'מסנכרן…';
-              try {
-                if (window.FirebaseSync) await FirebaseSync.flush();
-                App.toast('☁️ סנכרון הושלם');
-              } catch { App.toast('⚠️ סנכרון נכשל'); }
-              delete syncBtn.dataset.syncing;
-              syncBtn.title = 'סנכרן עכשיו עם Firebase';
-            });
-            return syncBtn;
-          })()
+          tbBtn('↪', 'שחזר (Ctrl+Y)', () => editor._doRedo?.())
         ),
         grp(blockStyleSel),
         grp(fontSelR, sizeSelR),
         grp(boldBtn, italicBtn, ulBtn, strikeBtn),
         grp(colorInputR, hilightInputR),
-        grp(dirBtn)
+        grp(dirBtn),
+        grp((() => {
+          const syncBtn = tbBtn('☁️', 'סנכרן עכשיו עם Firebase', async () => {
+            if (syncBtn.dataset.syncing) return;
+            syncBtn.dataset.syncing = '1';
+            syncBtn.title = 'מסנכרן…';
+            try {
+              if (window.FirebaseSync) await FirebaseSync.flush();
+              App.toast('☁️ סנכרון הושלם');
+            } catch { App.toast('⚠️ סנכרון נכשל'); }
+            delete syncBtn.dataset.syncing;
+            syncBtn.title = 'סנכרן עכשיו עם Firebase';
+          });
+          return syncBtn;
+        })())
       ]),
       // Row 2: align | lists | indent | insert | actions/export
       App.el('div', { class: 'nb-ribbon-row' }, [
