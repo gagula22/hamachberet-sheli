@@ -1097,9 +1097,13 @@
 
     function doInsertTable(rows, cols) {
       const HEB = ['א','ב','ג','ד','ה','ו','ז','ח','ט','י'];
-      const th = 'style="border:1px solid #D8C9B0;padding:6px 10px;background:#F4ECD8;font-weight:500;text-align:start"';
-      const td = 'style="border:1px solid #D8C9B0;padding:6px 10px;min-width:60px"';
-      let html = '<table dir="rtl" style="border-collapse:collapse;width:100%;margin:8px 0"><tbody>';
+      const pct = Math.floor(100 / cols);  // equal column % widths
+      const th  = 'style="border:1px solid #D8C9B0;padding:6px 10px;background:#F4ECD8;font-weight:500;text-align:start;word-break:break-word"';
+      const td  = 'style="border:1px solid #D8C9B0;padding:6px 10px;word-break:break-word"';
+      // table-layout:fixed + equal <col> widths → always stays within page on export/print
+      let html = '<table dir="rtl" style="border-collapse:collapse;width:100%;table-layout:fixed;margin:8px 0"><colgroup>'
+               + Array.from({length:cols}, () => `<col style="width:${pct}%">`).join('')
+               + '</colgroup><tbody>';
       html += '<tr>' + Array.from({length:cols},(_,i)=>`<th ${th}>עמודה ${HEB[i]||i+1}</th>`).join('') + '</tr>';
       for (let r = 0; r < rows; r++) {
         html += '<tr>' + Array.from({length:cols},()=>`<td ${td}>&nbsp;</td>`).join('') + '</tr>';

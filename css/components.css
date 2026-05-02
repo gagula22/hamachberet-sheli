@@ -720,6 +720,21 @@ figure.nb-img.nb-img-dragging { opacity: 0.35; pointer-events: none; }
     background-image: none !important;
     min-height: 0 !important;
     font-size: 13pt;
+    padding: 0 !important;
+  }
+  /* Tables: always fit within page, never overflow */
+  .nb-editor table {
+    width: 100% !important;
+    max-width: 100% !important;
+    table-layout: fixed !important;
+    word-break: break-word !important;
+    page-break-inside: avoid;
+    font-size: 10pt;
+  }
+  .nb-editor table td,
+  .nb-editor table th {
+    overflow: hidden !important;
+    word-break: break-word !important;
   }
   .nb-mood-embed { border: 1px solid #ccc; background: #fafafa !important; }
   figure { page-break-inside: avoid; }
