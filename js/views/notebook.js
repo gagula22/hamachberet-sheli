@@ -905,17 +905,62 @@
       window._nbSyncHook = updateSyncChip;
     }
 
-    const meta = App.el('div', { class: 'row row-between', style: { marginTop: '8px', flexWrap: 'wrap', gap: '8px' } }, [
-      App.el('span', { class: 'chip lavender' }, 'עודכן: ' + new Date(topic.updatedAt || Date.now()).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })),
-      App.el('span', { class: 'chip sky' }, ctx.rootName ? `מתחיל בעמוד ${startPage} · "${ctx.rootName}"` : `עמוד ${startPage}`),
-      syncChip
+    // ── Word / char count & reading time ─────────────────────────────────
+    const wordCountEl = App.el('span', {});
+    const charCountEl = App.el('span', {});
+    const readTimeEl  = App.el('span', {});
+    function updateWordCount() {
+      const text = editor.innerText || '';
+      const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+      const chars = text.replace(/[\n\r]/g, '').length;
+      const mins  = Math.max(1, Math.round(words / 200));
+      wordCountEl.textContent = words + ' מילים';
+      charCountEl.textContent = chars + ' תווים';
+      readTimeEl.textContent  = '~' + mins + ' דק׳ קריאה';
+    }
+    updateWordCount();
+    editor.addEventListener('input', updateWordCount);
+
+    // ── Status bar ────────────────────────────────────────────────────────
+    const saveDot = App.el('span', { class: 'nb-save-dot' });
+    const syncStatusEl = App.el('span', {}, 'נשמר אוטומטית');
+    // Override syncChip behavior to also update status bar
+    const origUpdateSyncChip = updateSyncChip;
+    function updateSyncChipAndDot(state) {
+      origUpdateSyncChip(state);
+      if (state === 'saving') {
+        saveDot.className = 'nb-save-dot saving';
+        syncStatusEl.textContent = 'שומר…';
+      } else if (state === 'saved') {
+        saveDot.className = 'nb-save-dot';
+        const t = new Date();
+        syncStatusEl.textContent = 'נשמר בענן • ' + String(t.getHours()).padStart(2,'0') + ':' + String(t.getMinutes()).padStart(2,'0');
+      } else if (state === 'error') {
+        saveDot.className = 'nb-save-dot';
+        saveDot.style.background = 'var(--nb-accent-str)';
+        syncStatusEl.textContent = 'לא סונכרן';
+      }
+    }
+    window._nbSyncHook = updateSyncChipAndDot;
+
+    const updatedStr = new Date(topic.updatedAt || Date.now()).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const pageStr = ctx.rootName ? `עמוד ${startPage} · "${ctx.rootName}"` : `עמוד ${startPage}`;
+
+    const statusBar = App.el('div', { class: 'nb-status-bar' }, [
+      App.el('div', { class: 'nb-stat-group' }, [wordCountEl, charCountEl, readTimeEl]),
+      App.el('div', { class: 'nb-stat-group' }, [
+        App.el('span', {}, 'עודכן: ' + updatedStr),
+        App.el('span', {}, pageStr),
+        App.el('span', { style: { display: 'flex', alignItems: 'center', gap: '4px' } }, [saveDot, syncStatusEl])
+      ])
     ]);
 
     // Ribbon is position:sticky — no spacer needed (stays in flow)
     return App.el('div', { class: 'nb-editor-col' }, [
       backBtn || null,
       ribbon,
-      App.el('div', { class: 'card stack' }, [breadcrumb, titleInput, stage, meta])
+      App.el('div', { class: 'card stack' }, [breadcrumb, titleInput, stage]),
+      statusBar
     ]);
   }
 

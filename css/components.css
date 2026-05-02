@@ -1225,3 +1225,235 @@ figure.nb-img.nb-img-dragging { opacity: 0.35; pointer-events: none; }
 /* Focus mode */
 .nb-layout.nb-focus .nb-topics-col { display: none !important; }
 .nb-layout.nb-focus .nb-ribbon     { display: none !important; }
+
+
+/* ============================================================
+   NOTEBOOK WARM VISUAL DESIGN OVERRIDES
+   Applies the warm book palette to the full notebook view
+   All --nb-* variables are already defined in tokens.css
+============================================================ */
+
+/* Page background */
+.nb-layout {
+  background: var(--nb-bg-page);
+}
+
+/* Topics sidebar — warm book palette */
+.nb-topics-col {
+  background: var(--nb-bg-page);
+  border-left: 0.5px solid var(--nb-border-soft);
+  padding: 10px 8px;
+}
+.nb-topics-col .btn {
+  background: var(--nb-bg-tag);
+  border: 0.5px solid var(--nb-border-mid);
+  color: var(--nb-accent-str);
+  font-size: 12px;
+}
+.nb-topics-col .btn:hover {
+  background: var(--nb-bg-active);
+}
+
+/* Topic rows — warm amber active state (replaces lavender/blush) */
+.nb-topic {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--nb-text-2);
+  font-size: 13px;
+}
+.nb-topic:hover {
+  background: var(--nb-bg-hover);
+  border-color: var(--nb-border-soft);
+}
+.nb-topic.active {
+  background: var(--nb-bg-tag);
+  border-color: var(--nb-border-mid);
+  color: var(--nb-accent-str);
+}
+.nb-topic .t-name { color: inherit; }
+.nb-topic .t-icon { font-size: 14px; }
+.nb-topic.nb-drop-before { border-top-color: var(--nb-accent); }
+.nb-topic.nb-drop-after  { border-bottom-color: var(--nb-accent); }
+
+/* Resizer — warm separator */
+.nb-resizer::before {
+  background: var(--nb-border-soft);
+}
+.nb-resizer:hover::before,
+.nb-resizer.dragging::before {
+  background: var(--nb-accent);
+  width: 3px;
+}
+
+/* Editor column — white card, flex column so status bar pins to bottom */
+.nb-editor-col {
+  background: var(--nb-bg-card);
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+.nb-editor-col > .card.stack {
+  flex: 1;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+  background: var(--nb-bg-card);
+}
+
+/* Note meta header area */
+.nb-editor-col .card.stack {
+  border-top: none;
+}
+
+/* Title input — warm Frank Ruhl Libre typography */
+.nb-title {
+  font-family: 'Frank Ruhl Libre', 'Heebo', Georgia, serif !important;
+  font-size: 28px !important;
+  font-weight: 500 !important;
+  color: var(--nb-text-1) !important;
+  letter-spacing: -0.01em !important;
+  border: none;
+  width: 100%;
+  background: transparent;
+  outline: none;
+  padding: 20px 36px 8px;
+  line-height: 1.2;
+}
+.nb-title::placeholder { color: var(--nb-text-4) !important; }
+
+/* Breadcrumb — warm text */
+.nb-editor-col .card.stack > div:first-child {
+  padding: 14px 36px 0;
+  color: var(--nb-text-3);
+  font-size: 12px;
+}
+
+/* Editor body — warm book typography */
+.nb-editor {
+  font-family: 'Frank Ruhl Libre', 'Heebo', Georgia, serif;
+  font-size: 17px;
+  line-height: 1.75;
+  color: var(--nb-text-1);
+  padding: 16px 36px 80px;
+  background: var(--nb-bg-card);
+  background-image: none;
+  min-height: 400px;
+  border-radius: 0;
+  box-shadow: none;
+}
+.nb-editor:empty::before {
+  color: var(--nb-text-4);
+  font-style: italic;
+}
+
+/* Editor element styles — warm palette */
+.nb-editor p,
+.nb-editor div {
+  margin-bottom: 0.4em;
+}
+.nb-editor h1 {
+  font-family: 'Frank Ruhl Libre', Georgia, serif;
+  font-size: 28px;
+  font-weight: 500;
+  color: var(--nb-text-1);
+  margin-top: 0.8em;
+  margin-bottom: 0.25em;
+}
+.nb-editor h2 {
+  font-family: 'Frank Ruhl Libre', Georgia, serif;
+  font-size: 22px;
+  font-weight: 500;
+  color: var(--nb-text-1);
+  margin-top: 0.7em;
+  margin-bottom: 0.2em;
+}
+.nb-editor h3 {
+  font-family: 'Frank Ruhl Libre', Georgia, serif;
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--nb-text-2);
+  margin-top: 0.6em;
+  margin-bottom: 0.2em;
+}
+.nb-editor blockquote {
+  border-right: 3px solid var(--nb-accent-sft);
+  border-left: none;
+  padding: 4px 14px;
+  color: var(--nb-text-2);
+  font-style: italic;
+  background: var(--nb-bg-soft);
+  border-radius: 0 6px 6px 0;
+  margin: 0.5em 0;
+}
+.nb-editor pre {
+  background: var(--nb-bg-soft);
+  color: var(--nb-text-1);
+  border-radius: 6px;
+  padding: 12px 16px;
+  font-size: 14px;
+  direction: ltr;
+  text-align: left;
+  overflow-x: auto;
+}
+.nb-editor a {
+  color: var(--nb-accent);
+  text-decoration: none;
+  border-bottom: 1px solid var(--nb-accent-sft);
+}
+.nb-editor table td,
+.nb-editor table th {
+  border-color: var(--nb-border-soft);
+  padding: 6px 10px;
+}
+.nb-editor table th {
+  background: var(--nb-bg-soft);
+  font-weight: 500;
+}
+.nb-editor hr {
+  border: none;
+  border-top: 1px solid var(--nb-border-soft);
+  margin: 1em 0;
+}
+
+/* Page label (עמוד X) — warm */
+.nb-page-label {
+  color: var(--nb-text-4);
+  background: rgba(250,246,238,0.85);
+  border-color: var(--nb-border-soft);
+}
+
+/* ── Status bar ───────────────────────────────────────────── */
+.nb-status-bar {
+  background: var(--nb-bg-toolbar);
+  border-top: 0.5px solid var(--nb-border-soft);
+  padding: 6px 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  color: var(--nb-text-3);
+  font-family: 'Heebo', system-ui, sans-serif;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.nb-stat-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.nb-save-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--nb-success);
+  margin-left: 4px;
+  transition: all 0.3s;
+  vertical-align: middle;
+}
+.nb-save-dot.saving {
+  background: var(--nb-accent);
+  transform: scale(1.5);
+}
