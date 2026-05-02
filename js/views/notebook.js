@@ -578,9 +578,98 @@
     attachMoodBehaviors(editor, save);
     wrapImagesInEditor(editor);
 
-    // ── Paste: images from clipboard ──────────────────────────────────────
+    // ── Paste handler: Excel/Sheets → table | image → img-wrap ────────────
+    //
+    // Priority order:
+    //  1. text/html with <table>  → clean & insert as editable HTML table
+    //  2. text/plain with tabs    → convert TSV to HTML table
+    //  3. image/*                 → insert as resizable image (existing behaviour)
+    //  4. anything else           → let browser handle normally
+
+    function cleanPastedTable(tableEl) {
+      // Return a clean <table> HTML string with our notebook styling
+      const rows = [...tableEl.querySelectorAll('tr')];
+      if (!rows.length) return null;
+
+      // Detect if first row is a header (all <th>, or Excel often has bold cells)
+      const firstCells = [...rows[0].querySelectorAll('td, th')];
+      const isHeader   = firstCells.every(c => c.tagName === 'TH') ||
+                         firstCells.every(c => /font-weight\s*:\s*(bold|700)/i.test(c.getAttribute('style') || ''));
+
+      const S_TABLE = 'border-collapse:collapse;width:100%;margin:8px 0;';
+      const S_TH    = 'background:#F4ECD8;border:1px solid #D8C9B0;padding:7px 10px;font-weight:600;text-align:start;';
+      const S_TD    = 'border:1px solid #D8C9B0;padding:6px 10px;text-align:start;';
+
+      let html = '<table dir="rtl" style="' + S_TABLE + '"><tbody>';
+      rows.forEach((row, ri) => {
+        html += '<tr>';
+        [...row.querySelectorAll('td, th')].forEach(cell => {
+          const tag  = (ri === 0 && isHeader) ? 'th' : 'td';
+          const sty  = (ri === 0 && isHeader) ? S_TH : S_TD;
+          // Strip inner markup to plain text only (removes Excel spans/divs)
+          const text = (cell.innerText || cell.textContent || '').trim();
+          html += '<' + tag + ' style="' + sty + '">' + text + '</' + tag + '>';
+        });
+        html += '</tr>';
+      });
+      html += '</tbody></table><p dir="rtl"><br></p>';
+      return html;
+    }
+
+    function tsvToTable(tsv) {
+      const S_TABLE = 'border-collapse:collapse;width:100%;margin:8px 0;';
+      const S_TH    = 'background:#F4ECD8;border:1px solid #D8C9B0;padding:7px 10px;font-weight:600;text-align:start;';
+      const S_TD    = 'border:1px solid #D8C9B0;padding:6px 10px;text-align:start;';
+
+      const rows = tsv.split(/\r?\n/).filter(r => r.trim());
+      if (!rows.length) return null;
+
+      let html = '<table dir="rtl" style="' + S_TABLE + '"><tbody>';
+      rows.forEach((row, ri) => {
+        const cells = row.split('\t');
+        const tag   = ri === 0 ? 'th' : 'td';
+        const sty   = ri === 0 ? S_TH : S_TD;
+        html += '<tr>' + cells.map(c =>
+          '<' + tag + ' style="' + sty + '">' + (c.trim() || '&nbsp;') + '</' + tag + '>'
+        ).join('') + '</tr>';
+      });
+      html += '</tbody></table><p dir="rtl"><br></p>';
+      return html;
+    }
+
     editor.addEventListener('paste', (e) => {
-      const items = (e.clipboardData && e.clipboardData.items) || [];
+      const cd    = e.clipboardData;
+      if (!cd) return;
+      const items = Array.from(cd.items || []);
+
+      // 1 ─ HTML with table (Excel, Google Sheets, web tables)
+      const htmlData = cd.getData('text/html');
+      if (htmlData) {
+        const tmp = document.createElement('div');
+        tmp.innerHTML = htmlData;
+        const table = tmp.querySelector('table');
+        if (table) {
+          e.preventDefault();
+          const cleaned = cleanPastedTable(table);
+          if (cleaned) { document.execCommand('insertHTML', false, cleaned); save(); }
+          return;
+        }
+      }
+
+      // 2 ─ Plain TSV text (Excel copy without HTML, or Numbers)
+      const textData = cd.getData('text/plain');
+      if (textData && textData.includes('\t') && textData.trim().split(/\r?\n/).length > 0) {
+        const lines = textData.trim().split(/\r?\n/);
+        // Only treat as table if at least one line has a tab (multi-column)
+        if (lines.some(l => l.includes('\t'))) {
+          e.preventDefault();
+          const tbl = tsvToTable(textData);
+          if (tbl) { document.execCommand('insertHTML', false, tbl); save(); }
+          return;
+        }
+      }
+
+      // 3 ─ Image (plain screenshot, not Excel)
       for (const item of items) {
         if (item.type && item.type.startsWith('image/')) {
           e.preventDefault();
@@ -594,6 +683,7 @@
           return;
         }
       }
+      // 4 ─ anything else: browser default
     });
 
     // ── Drag-and-drop files into editor ──────────────────────────────────
