@@ -727,11 +727,12 @@ self.onmessage = async function(e) {
   var d = e.data;
   if (d.type === 'init') {
     try {
+      var modelName = d.model || 'Xenova/whisper-small';
       var mod = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2');
       var pipeline = mod.pipeline, env = mod.env;
       env.allowLocalModels = false;
       env.useBrowserCache  = false;
-      _pipe = await pipeline('automatic-speech-recognition', 'Xenova/whisper-small', {
+      _pipe = await pipeline('automatic-speech-recognition', modelName, {
         quantized: true,
         progress_callback: function(p) {
           self.postMessage({ type: 'progress', status: p.status, progress: p.progress || 0 });
@@ -745,9 +746,11 @@ self.onmessage = async function(e) {
     try {
       var result = await _pipe(
         { data: d.audio, sampling_rate: 16000 },
-        { language: 'hebrew', task: 'transcribe', chunk_length_s: 30, stride_length_s: 5 }
+        { language: 'hebrew', task: 'transcribe',
+          chunk_length_s: 30, stride_length_s: 5,
+          return_timestamps: true }
       );
-      self.postMessage({ type: 'result', text: result.text });
+      self.postMessage({ type: 'result', text: result.text, chunks: result.chunks || [] });
     } catch(err) {
       self.postMessage({ type: 'error', message: err.message });
     }
@@ -757,13 +760,20 @@ self.onmessage = async function(e) {
 
   var _ww        = null;   // Whisper Worker instance
   var _wwReady   = null;   // null | Promise<void>
+  var _wwModel   = null;   // currently-initialised model name
   var _wwProgCb  = null;   // progress callback
   var _wwDone    = null;   // { resolve, reject }
   var _vtRunning = false;
   var _vtToast   = null;
 
-  function _ensureWhisperWorker() {
-    if (_wwReady) return _wwReady;
+  function _ensureWhisperWorker(model) {
+    model = model || 'Xenova/whisper-small';
+    if (_wwReady && _wwModel === model) return _wwReady;
+    // Different model requested → tear down and re-init
+    if (_ww) { try { _ww.terminate(); } catch(_) {} }
+    _ww = null; _wwReady = null; _wwDone = null;
+    _wwModel = model;
+
     var blob = new Blob([WHISPER_WORKER_SRC], { type: 'text/javascript' });
     _ww = new Worker(URL.createObjectURL(blob));
     _wwReady = new Promise(function(resolve, reject) {
@@ -776,19 +786,22 @@ self.onmessage = async function(e) {
         } else if (d.type === 'error') {
           _wwReady = null;
           try { _ww.terminate(); } catch(_) {}
-          _ww = null;
+          _ww = null; _wwModel = null;
           if (_wwDone) { _wwDone.reject(new Error(d.message)); _wwDone = null; }
           else reject(new Error(d.message));
         } else if (d.type === 'result') {
-          if (_wwDone) { _wwDone.resolve(d.text); _wwDone = null; }
+          if (_wwDone) {
+            _wwDone.resolve({ text: d.text, chunks: d.chunks || [] });
+            _wwDone = null;
+          }
         }
       };
       _ww.onerror = function(err) {
-        _wwReady = null; _ww = null;
+        _wwReady = null; _ww = null; _wwModel = null;
         if (_wwDone) { _wwDone.reject(err); _wwDone = null; }
         else reject(err);
       };
-      _ww.postMessage({ type: 'init' });
+      _ww.postMessage({ type: 'init', model: model });
     });
     return _wwReady;
   }
@@ -798,6 +811,93 @@ self.onmessage = async function(e) {
       _wwDone = { resolve: resolve, reject: reject };
       _ww.postMessage({ type: 'transcribe', audio: audioFloat32 }, [audioFloat32.buffer]);
     });
+  }
+
+  // ── Helpers for advanced-settings panel ──────────────────────────────────
+  // "600" / "10:00" / "01:23:45" / "10m" / "1h2m3s" / "90s" → seconds
+  function _parseTimeInput(str) {
+    if (str == null) return null;
+    var s = String(str).trim();
+    if (!s) return null;
+    if (/^\d+(\.\d+)?$/.test(s)) return parseFloat(s);
+    if (/^(\d+:)?\d+:\d+(\.\d+)?$/.test(s)) {
+      var p = s.split(':').map(parseFloat);
+      if (p.length === 3) return p[0] * 3600 + p[1] * 60 + p[2];
+      if (p.length === 2) return p[0] * 60 + p[1];
+    }
+    var m = s.match(/^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/i);
+    if (m && (m[1] || m[2] || m[3])) {
+      return (parseInt(m[1] || 0, 10)) * 3600 +
+             (parseInt(m[2] || 0, 10)) * 60 +
+             (parseInt(m[3] || 0, 10));
+    }
+    return NaN; // signal "couldn't parse" (vs null = empty)
+  }
+
+  function _formatHMS(seconds) {
+    seconds = Math.max(0, Math.floor(seconds || 0));
+    var h = Math.floor(seconds / 3600);
+    var m = Math.floor((seconds % 3600) / 60);
+    var s = seconds % 60;
+    function p(n) { return n < 10 ? '0' + n : '' + n; }
+    return p(h) + ':' + p(m) + ':' + p(s);
+  }
+
+  function _extractYouTubeId(url) {
+    if (!url) return null;
+    var m = String(url).match(/(?:v=|youtu\.be\/|shorts\/|embed\/)([^&?/#]+)/);
+    return m ? m[1] : null;
+  }
+
+  // Trim a 16kHz Float32 PCM buffer to [startSec, endSec]. null = open.
+  function _trimAudio(audio, startSec, endSec) {
+    var sr = 16000;
+    if ((startSec == null || startSec <= 0) && endSec == null) return audio;
+    var s = startSec ? Math.max(0, Math.floor(startSec * sr)) : 0;
+    var e = endSec   ? Math.min(audio.length, Math.floor(endSec * sr)) : audio.length;
+    if (e <= s) throw new Error('טווח זמן לא חוקי — סיום לפני התחלה');
+    return audio.slice(s, e);
+  }
+
+  // Build interleaved <p> blocks: "⏱ HH:MM:SS - תצלם את המסך" + body.
+  // Groups consecutive Whisper chunks into ~30s paragraphs.
+  function _buildTimestampedHtml(chunks, offsetSec, vidId, fallbackText) {
+    offsetSec = offsetSec || 0;
+    if (!chunks || !chunks.length) {
+      // No timestamps available → fall back to plain paragraphs
+      return (fallbackText || '').trim().split(/\n+/).map(function(p) {
+        var t = p.trim();
+        return t ? '<p style="direction:rtl;text-align:right;font-family:Arial,sans-serif;font-size:14px;line-height:1.9;margin:0 0 10px;unicode-bidi:plaintext;">' + _esc(t) + '</p>' : '';
+      }).join('');
+    }
+    var GROUP_DUR = 30;
+    var groups = [];
+    var cur = null;
+    for (var i = 0; i < chunks.length; i++) {
+      var c = chunks[i];
+      var ts = (c.timestamp && c.timestamp[0] != null) ? c.timestamp[0] : 0;
+      if (!cur) { cur = { startSec: ts, texts: [c.text] }; }
+      else if (ts - cur.startSec < GROUP_DUR) { cur.texts.push(c.text); }
+      else { groups.push(cur); cur = { startSec: ts, texts: [c.text] }; }
+    }
+    if (cur) groups.push(cur);
+
+    return groups.map(function(g) {
+      var abs = g.startSec + offsetSec;
+      var hms = _formatHMS(abs);
+      var stamp;
+      if (vidId) {
+        stamp = '<a href="https://www.youtube.com/watch?v=' + _esc(vidId) +
+                '&t=' + Math.floor(abs) + 's" ' +
+                'style="color:#2d6f9c;text-decoration:none;font-weight:600;">' +
+                '⏱ ' + hms + ' - תצלם את המסך</a>';
+      } else {
+        stamp = '<span style="color:#888;font-weight:600;">⏱ ' + hms + ' - תצלם את המסך</span>';
+      }
+      var body = _esc(g.texts.join('').trim());
+      return '<p style="direction:rtl;text-align:right;font-family:Arial,sans-serif;font-size:14px;line-height:1.9;margin:0 0 14px;unicode-bidi:plaintext;">' +
+             stamp + '<br>' + body + '</p>';
+    }).join('');
   }
 
   // Floating toast for transcription (separate from translation toast)
@@ -875,10 +975,88 @@ self.onmessage = async function(e) {
                borderRadius: 'var(--r-sm)', fontSize: '13px', color: '#2d6f9c', lineHeight: '1.5' }
     }, '🎙 התמלול רץ ברקע · תוכל לנווט בחופשיות · תקבל הודעה כשיסיים');
 
+    // ── Advanced settings panel (collapsible) ─────────────────────────────
+    const modelSel = document.createElement('select');
+    modelSel.style.cssText = 'padding:6px 10px;border:1px solid #d0c080;border-radius:8px;font-size:13px;background:#fffef5;direction:rtl;cursor:pointer;';
+    [
+      { v: 'Xenova/whisper-small',  l: 'small (~150MB · מהיר · איכות סבירה)' },
+      { v: 'Xenova/whisper-medium', l: 'medium (~750MB · איטי · איכות גבוהה)' }
+    ].forEach(function(o) {
+      var opt = document.createElement('option');
+      opt.value = o.v; opt.textContent = o.l;
+      modelSel.appendChild(opt);
+    });
+
+    const startInput = document.createElement('input');
+    startInput.type = 'text';
+    startInput.placeholder = 'MM:SS / HH:MM:SS';
+    startInput.style.cssText = 'padding:6px 10px;border:1px solid #d0c080;border-radius:8px;font-size:13px;background:#fffef5;direction:ltr;text-align:center;width:130px;';
+
+    const endInput = document.createElement('input');
+    endInput.type = 'text';
+    endInput.placeholder = 'MM:SS / HH:MM:SS';
+    endInput.style.cssText = startInput.style.cssText;
+
+    const advPanel = document.createElement('details');
+    advPanel.style.cssText = 'margin-top:12px;border:1px solid var(--line);border-radius:var(--r-sm);background:#fafafa;';
+    advPanel.innerHTML =
+      '<summary style="padding:10px 14px;cursor:pointer;font-size:13px;font-weight:600;color:#555;user-select:none;">⚙️ הגדרות מתקדמות</summary>' +
+      '<div id="vt-adv-body" style="padding:12px 14px 14px;border-top:1px solid var(--line);"></div>';
+    const advBody = advPanel.querySelector('#vt-adv-body');
+
+    function _advRow(labelText, control) {
+      var row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:10px;font-size:13px;';
+      var lbl = document.createElement('span');
+      lbl.style.cssText = 'min-width:90px;color:#555;font-weight:600;';
+      lbl.textContent = labelText;
+      row.appendChild(lbl); row.appendChild(control);
+      return row;
+    }
+    advBody.appendChild(_advRow('מודל', modelSel));
+    advBody.appendChild(_advRow('זמן התחלה', startInput));
+    advBody.appendChild(_advRow('זמן סיום', endInput));
+    var hint = document.createElement('p');
+    hint.style.cssText = 'margin:6px 0 0;font-size:12px;color:#888;line-height:1.5;';
+    hint.innerHTML = 'השאר ריק לתמלול הקובץ המלא · דוגמאות: <code style="background:#eee;padding:1px 5px;border-radius:3px;">10:00</code> <code style="background:#eee;padding:1px 5px;border-radius:3px;">1:23:45</code> <code style="background:#eee;padding:1px 5px;border-radius:3px;">90s</code> <code style="background:#eee;padding:1px 5px;border-radius:3px;">1h2m</code>';
+    advBody.appendChild(hint);
+
+    // Read & validate advanced settings. Returns { model, startSec, endSec, suffix }
+    // or throws an Error with a Hebrew message on bad input.
+    function _readAdvanced() {
+      var model = modelSel.value || 'Xenova/whisper-small';
+      var rawStart = startInput.value.trim();
+      var rawEnd   = endInput.value.trim();
+      var startSec = rawStart ? _parseTimeInput(rawStart) : null;
+      var endSec   = rawEnd   ? _parseTimeInput(rawEnd)   : null;
+      if (Number.isNaN(startSec)) throw new Error('זמן התחלה לא תקין: ' + rawStart);
+      if (Number.isNaN(endSec))   throw new Error('זמן סיום לא תקין: ' + rawEnd);
+      if (startSec != null && endSec != null && startSec >= endSec) {
+        throw new Error('זמן הסיום חייב להיות אחרי זמן ההתחלה');
+      }
+      var suffix = '';
+      if (startSec != null || endSec != null) {
+        var a = startSec != null ? _formatHMS(startSec).replace(/^00:/, '') : '0:00';
+        var b = endSec   != null ? _formatHMS(endSec).replace(/^00:/, '')   : 'סוף';
+        suffix = ' (' + a + '–' + b + ')';
+      }
+      return { model: model, startSec: startSec, endSec: endSec, suffix: suffix };
+    }
+
     // ── Audio file processing ─────────────────────────────────────────────
     async function transcribeFile(file) {
       if (!file || _vtRunning) return;
       if (file.size > MAX_FILE) { statusEl.textContent = 'קובץ גדול מדי — מקסימום 2 GB'; statusEl.style.color = '#c00'; return; }
+
+      // Read advanced settings up-front so validation errors fail fast
+      let adv;
+      try { adv = _readAdvanced(); }
+      catch (err) {
+        statusEl.textContent = err.message;
+        statusEl.style.color = '#c00';
+        _vtShowError(err.message);
+        return;
+      }
 
       _vtRunning = true;
       barFill.style.width    = '3%';
@@ -896,15 +1074,21 @@ self.onmessage = async function(e) {
           const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
           const decoded  = await audioCtx.decodeAudioData(ab);
           const raw      = decoded.getChannelData(0);
-          const audio    = new Float32Array(raw); // copy so we can transfer
+          let   audio    = new Float32Array(raw); // copy so we can transfer
           audioCtx.close();
-          const durationMin = Math.round(decoded.duration / 60);
 
-          // 2. Init Whisper Worker (downloads model ~150 MB first time)
+          // 1b. Trim to advanced range if provided
+          audio = _trimAudio(audio, adv.startSec, adv.endSec);
+          const durationMin = Math.round(audio.length / 16000 / 60);
+          const offsetSec = adv.startSec || 0;
+
+          // 2. Init Whisper Worker (downloads model on first use of a given size)
+          const isMedium = adv.model.indexOf('medium') >= 0;
           _wwProgCb = function(p) {
             if (p.status === 'progress') {
               const pct = Math.round(p.progress || 0);
-              const msg = `מוריד מודל Whisper… ${pct}% — חד-פעמי`;
+              const sizeNote = isMedium ? '~750MB' : '~150MB';
+              const msg = `מוריד מודל Whisper (${sizeNote})… ${pct}% — חד-פעמי`;
               if (document.body.contains(statusEl)) { barFill.style.width = (3 + pct * 0.15) + '%'; statusEl.textContent = msg; }
               _vtShowProgress(3 + pct * 0.15, msg);
             }
@@ -912,22 +1096,22 @@ self.onmessage = async function(e) {
           const initMsg = 'מאתחל מודל Whisper AI…';
           if (document.body.contains(statusEl)) statusEl.textContent = initMsg;
           _vtShowProgress(18, initMsg);
-          await _ensureWhisperWorker();
+          await _ensureWhisperWorker(adv.model);
 
           // 3. Transcribe
           const transMsg = `מתמלל ${durationMin} דקות אודיו ברקע…`;
           if (document.body.contains(statusEl)) { barFill.style.width = '22%'; statusEl.textContent = transMsg; }
           _vtShowProgress(22, transMsg);
 
-          const text = await _whisperTranscribe(audio);
+          const result = await _whisperTranscribe(audio);
+          const text   = result.text;
+          const chunks = result.chunks;
 
           // 4. Build Word .doc
           if (document.body.contains(statusEl)) _vtShowProgress(97, 'מכין קובץ Word…');
-          const baseName  = file.name.replace(/\.[^.]+$/, '');
+          const baseName  = file.name.replace(/\.[^.]+$/, '') + adv.suffix;
           const dateStr   = new Date().toLocaleDateString('he-IL');
-          const paragraphs = text.trim().split(/\n+/).map(function(p) {
-            return p.trim() ? `<p style="direction:rtl;text-align:right;font-family:Arial,sans-serif;font-size:14px;line-height:1.9;margin:0 0 10px;unicode-bidi:plaintext;">${_esc(p.trim())}</p>` : '';
-          }).join('');
+          const paragraphs = _buildTimestampedHtml(chunks, offsetSec, null, text);
 
           const docHtml = [
             `<html xmlns:o='urn:schemas-microsoft-com:office:office'`,
@@ -1021,6 +1205,16 @@ self.onmessage = async function(e) {
       const url = ytInput.value.trim();
       if (!url) { ytInput.focus(); return; }
       if (_vtRunning) return;
+
+      // Read advanced settings up-front so validation errors fail fast
+      let adv;
+      try { adv = _readAdvanced(); }
+      catch (err) {
+        _ytStatus('❌ ' + err.message, '#c00');
+        _vtShowError(err.message);
+        return;
+      }
+
       _vtRunning = true;
       ytBtn.disabled = true;
       ytBtn.textContent = '⏳';
@@ -1032,7 +1226,7 @@ self.onmessage = async function(e) {
           _ytStatus('⏳ מקבל קישור הורדה…');
           _vtShowProgress(3, 'מקבל קישור הורדה מ-YouTube…');
 
-          const vidId = (url.match(/(?:v=|youtu\.be\/)([^&?/#]+)/) || [])[1];
+          const vidId = _extractYouTubeId(url);
           if (!vidId) throw new Error('קישור YouTube לא תקין');
 
           let audioUrl = null;
@@ -1152,34 +1346,40 @@ self.onmessage = async function(e) {
             audio = new Float32Array(decoded.getChannelData(0));
           }
           audioCtx.close();
-          const durationMin = Math.round(decoded.duration / 60);
+
+          // 3b. Trim to advanced range if provided
+          audio = _trimAudio(audio, adv.startSec, adv.endSec);
+          const durationMin = Math.round(audio.length / 16000 / 60);
+          const offsetSec = adv.startSec || 0;
 
           // 4. Init Whisper Worker
+          const isMedium = adv.model.indexOf('medium') >= 0;
           _wwProgCb = function(p) {
             if (p.status === 'progress') {
               var pct = Math.round(p.progress || 0);
-              var msg = 'מוריד מודל Whisper… ' + pct + '% — חד-פעמי';
+              var sizeNote = isMedium ? '~750MB' : '~150MB';
+              var msg = 'מוריד מודל Whisper (' + sizeNote + ')… ' + pct + '% — חד-פעמי';
               _ytStatus('⏳ ' + msg);
               _vtShowProgress(18 + pct * 0.15, msg);
             }
           };
           _ytStatus('⏳ מאתחל מודל Whisper AI…');
           _vtShowProgress(22, 'מאתחל מודל Whisper AI…');
-          await _ensureWhisperWorker();
+          await _ensureWhisperWorker(adv.model);
 
           // 5. Transcribe
           var transMsg = 'מתמלל ' + durationMin + ' דקות ברקע…';
           _ytStatus('⏳ ' + transMsg);
           _vtShowProgress(35, transMsg);
-          var text = await _whisperTranscribe(audio);
+          var result = await _whisperTranscribe(audio);
+          var text   = result.text;
+          var chunks = result.chunks;
 
           // 6. Build Word .doc
           _vtShowProgress(97, 'מכין קובץ Word…');
-          var baseName = 'YouTube_' + (vidId || 'youtube');
+          var baseName = 'YouTube_' + (vidId || 'youtube') + adv.suffix;
           var dateStr  = new Date().toLocaleDateString('he-IL');
-          var paras = text.trim().split(/\n+/).map(function(p) {
-            return p.trim() ? '<p style="direction:rtl;text-align:right;font-family:Arial,sans-serif;font-size:14px;line-height:1.9;margin:0 0 10px;unicode-bidi:plaintext;">' + _esc(p.trim()) + '</p>' : '';
-          }).join('');
+          var paras = _buildTimestampedHtml(chunks, offsetSec, vidId, text);
           var docHtml = [
             '<html xmlns:o="urn:schemas-microsoft-com:office:office"',
             ' xmlns:w="urn:schemas-microsoft-com:office:word"',
@@ -1236,7 +1436,7 @@ self.onmessage = async function(e) {
       App.el('strong', { style: { fontSize: '13px' } }, '🎙 Whisper AI · Web Worker — הדפדפן לא ייחסם'),
       App.el('br', {}),
       App.el('span', { style: { fontSize: '12px', color: 'var(--ink-mute)' } },
-        'גרור קובץ אודיו/וידאו מקומי · מודל ~150MB מוריד פעם אחת · תמלול ממשיך ברקע · ללא עלות')
+        'גרור קובץ אודיו/וידאו מקומי · המודל מוריד פעם אחת · תמלול ממשיך ברקע · חותמות זמן לחיצות בפלט · ללא עלות')
     ]);
 
     return App.el('div', { class: 'card' }, [
@@ -1246,6 +1446,7 @@ self.onmessage = async function(e) {
       ]),
       infoBanner,
       fileInput, zone, statusEl, barTrack, bgBadge,
+      advPanel,
       ytSection
     ]);
   }
