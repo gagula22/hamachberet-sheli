@@ -1240,6 +1240,18 @@ self.onmessage = async function(e) {
             catch(e) { clearTimeout(tid); throw e; }
           }
 
+          function _hostOf(u) {
+            try { return new URL(u).host.replace(/^www\./, ''); } catch(_) { return u; }
+          }
+          function _ytProgress(stepText) {
+            _ytStatus('⏳ ' + stepText);
+            _vtShowProgress(5, stepText);
+          }
+
+          var pipedInst = [
+            'https://pipedapi.kavin.rocks',
+            'https://pipedapi.tokhmi.xyz'
+          ];
           var invInstances = [
             'https://inv.nadeko.net',
             'https://invidious.privacydev.net',
@@ -1249,35 +1261,39 @@ self.onmessage = async function(e) {
             'https://invidious.projectsegfau.lt'
           ];
 
-          // — Method A: Invidious /latest_version?local=true  (GET Range probe)
-          var invItags = ['140', '251', '250', '139'];
-          outerA: for (var ii = 0; ii < invInstances.length; ii++) {
-            for (var ti = 0; ti < invItags.length; ti++) {
-              var candidate = invInstances[ii] + '/latest_version?id=' + vidId +
-                              '&itag=' + invItags[ti] + '&local=true';
-              try {
-                var probe = await _fetchT(candidate,
-                  { method: 'GET', headers: { 'Range': 'bytes=0-1023' } }, 7000);
-                if (probe.ok || probe.status === 206) {
-                  audioUrl = candidate;
-                  console.log('[inv-local] ✓', candidate);
-                  break outerA;
-                }
-              } catch(_iv) { /* CORS/timeout — try next */ }
-            }
+          // — Method 1: Piped (usually fastest & most reliable)
+          for (var pi = 0; pi < pipedInst.length && !audioUrl; pi++) {
+            _ytProgress('מנסה Piped ' + (pi + 1) + '/' + pipedInst.length +
+                        ' (' + _hostOf(pipedInst[pi]) + ')…');
+            try {
+              var pr = await _fetchT(pipedInst[pi] + '/streams/' + vidId, {}, 5000);
+              if (!pr.ok) continue;
+              var pd = await pr.json();
+              if (pd.audioStreams && pd.audioStreams.length) {
+                var ps = pd.audioStreams.sort(function(a,b){
+                  return (parseInt(b.bitrate)||0)-(parseInt(a.bitrate)||0);
+                });
+                var rawUrl = ps[0].url;
+                audioUrl = rawUrl.includes('googlevideo.com')
+                  ? 'https://corsproxy.io/?' + encodeURIComponent(rawUrl)
+                  : rawUrl;
+                console.log('[piped] ✓', _hostOf(pipedInst[pi]));
+              }
+            } catch(ep) { console.warn('[piped]', _hostOf(pipedInst[pi]), ep.message); }
           }
-          if (!audioUrl) errors.push('inv-local: all failed');
+          if (!audioUrl) errors.push('piped: no stream');
 
-          // — Method B: Invidious /api/v1/videos + corsproxy.io wrapper
+          // — Method 2: Invidious /api/v1/videos + corsproxy.io wrapper
           if (!audioUrl) {
-            outerB: for (var ii2 = 0; ii2 < invInstances.length; ii2++) {
+            for (var ii2 = 0; ii2 < invInstances.length && !audioUrl; ii2++) {
+              _ytProgress('מנסה Invidious API ' + (ii2 + 1) + '/' + invInstances.length +
+                          ' (' + _hostOf(invInstances[ii2]) + ')…');
               try {
                 var apiR = await _fetchT(
                   invInstances[ii2] + '/api/v1/videos/' + vidId + '?fields=adaptiveFormats',
-                  {}, 8000);
+                  {}, 5000);
                 if (!apiR.ok) continue;
                 var apiD = await apiR.json();
-                console.log('[inv-api]', invInstances[ii2], apiD);
                 if (apiD.adaptiveFormats && apiD.adaptiveFormats.length) {
                   var audioFmts = apiD.adaptiveFormats.filter(function(f) {
                     return f.type && f.type.startsWith('audio/');
@@ -1286,40 +1302,36 @@ self.onmessage = async function(e) {
                     var bestFmt = audioFmts.sort(function(a,b){
                       return (b.bitrate||0)-(a.bitrate||0);
                     })[0];
-                    // wrap with corsproxy.io to bypass YouTube CDN CORS
                     audioUrl = 'https://corsproxy.io/?' + encodeURIComponent(bestFmt.url);
-                    console.log('[inv-api] proxied:', audioUrl.slice(0,80));
-                    break outerB;
+                    console.log('[inv-api] ✓', _hostOf(invInstances[ii2]));
                   }
                 }
-              } catch(ea) { console.warn('[inv-api]', ea.message); }
+              } catch(ea) { console.warn('[inv-api]', _hostOf(invInstances[ii2]), ea.message); }
             }
             if (!audioUrl) errors.push('inv-api: all failed');
           }
 
-          // — Method C: piped.video + corsproxy.io on stream URL
+          // — Method 3 (last resort): Invidious /latest_version?local=true
           if (!audioUrl) {
-            var pipedInst = ['https://pipedapi.kavin.rocks','https://pipedapi.tokhmi.xyz'];
-            for (var pi = 0; pi < pipedInst.length && !audioUrl; pi++) {
-              try {
-                var pr = await _fetchT(pipedInst[pi] + '/streams/' + vidId, {}, 8000);
-                if (!pr.ok) continue;
-                var pd = await pr.json();
-                console.log('[piped]', pd);
-                if (pd.audioStreams && pd.audioStreams.length) {
-                  var ps = pd.audioStreams.sort(function(a,b){
-                    return (parseInt(b.bitrate)||0)-(parseInt(a.bitrate)||0);
-                  });
-                  var rawUrl = ps[0].url;
-                  // If YouTube CDN URL, wrap with corsproxy
-                  audioUrl = rawUrl.includes('googlevideo.com')
-                    ? 'https://corsproxy.io/?' + encodeURIComponent(rawUrl)
-                    : rawUrl;
-                  console.log('[piped] url:', audioUrl.slice(0,80));
-                }
-              } catch(ep) { console.warn('[piped]', ep.message); }
+            var invItags = ['140', '251'];  // 140=m4a/AAC (best), 251=opus — keep slim
+            outerA: for (var ii = 0; ii < invInstances.length; ii++) {
+              for (var ti = 0; ti < invItags.length; ti++) {
+                _ytProgress('מנסה Invidious-CDN ' + (ii + 1) + '/' + invInstances.length +
+                            ' itag=' + invItags[ti] + ' (' + _hostOf(invInstances[ii]) + ')…');
+                var candidate = invInstances[ii] + '/latest_version?id=' + vidId +
+                                '&itag=' + invItags[ti] + '&local=true';
+                try {
+                  var probe = await _fetchT(candidate,
+                    { method: 'GET', headers: { 'Range': 'bytes=0-1023' } }, 4000);
+                  if (probe.ok || probe.status === 206) {
+                    audioUrl = candidate;
+                    console.log('[inv-local] ✓', _hostOf(invInstances[ii]), 'itag', invItags[ti]);
+                    break outerA;
+                  }
+                } catch(_iv) { /* timeout / CORS — try next */ }
+              }
             }
-            if (!audioUrl) errors.push('piped: no stream');
+            if (!audioUrl) errors.push('inv-local: all failed');
           }
 
           if (!audioUrl) throw new Error('לא הצלחתי לקבל אודיו: ' + errors.join(' | '));
