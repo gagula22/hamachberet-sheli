@@ -1525,6 +1525,76 @@ figure.nb-img.nb-img-dragging { opacity: 0.35; pointer-events: none; }
 }
 .file-attachment:hover .file-remove { display: flex; }
 .file-thumb { width: 24px; height: 24px; object-fit: cover; border-radius: 3px; flex-shrink: 0; }
+.file-hint { font-size: 10px; color: var(--nb-text-4); flex-shrink: 0; margin-inline-end: 4px; }
+
+/* ── Image wrap with corner resize handles ────────────────────────────── */
+.img-wrap {
+  display: inline-block;
+  position: relative;
+  vertical-align: middle;
+  max-width: 640px;
+  margin: 4px 2px;
+}
+.img-wrap img {
+  display: block;
+  max-width: 100%;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.img-wrap.resizing img { user-select: none; pointer-events: none; }
+.img-wrap.resizing { outline: 2px dashed var(--nb-accent); outline-offset: 2px; }
+.img-wrap.selected { outline: 2px solid var(--nb-accent); outline-offset: 3px; }
+.img-resize-handle {
+  position: absolute;
+  width: 16px; height: 16px;
+  background: var(--nb-accent, #B8762A);
+  border: 2px solid white;
+  border-radius: 50%;
+  display: none;
+  z-index: 10;
+  box-shadow: 0 2px 4px rgba(60,40,20,.3);
+}
+.img-resize-handle.br { bottom: -8px; right: -8px; cursor: nwse-resize; }
+.img-resize-handle.bl { bottom: -8px; left: -8px; cursor: nesw-resize; }
+.img-wrap:hover .img-resize-handle,
+.img-wrap.resizing .img-resize-handle { display: block; }
+.img-wrap .img-resize-tip {
+  position: absolute;
+  top: -28px; right: 50%; transform: translateX(50%);
+  background: var(--nb-text-1, #3D2F22);
+  color: var(--nb-bg-card, #fff);
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  display: none;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 11;
+}
+.img-wrap.resizing .img-resize-tip { display: block; }
+
+/* ── Drag-and-drop overlay ────────────────────────────────────────────── */
+.nb-editor.drag-over {
+  background: var(--nb-bg-tag, #FBEEE6) !important;
+  box-shadow: inset 0 0 0 3px var(--nb-accent-sft, #C9826A) !important;
+}
+.nb-drag-overlay {
+  position: fixed;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--nb-bg-card, #fff);
+  border: 1px solid var(--nb-border-mid, #D8C9B0);
+  padding: 14px 28px;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--nb-accent-str, #8C4A2C);
+  z-index: 9999;
+  pointer-events: none;
+  display: none;
+  box-shadow: 0 8px 32px rgba(60,40,20,.18);
+}
+.nb-drag-overlay.show { display: block; }
 
 /* ── Template/Mood overlay ────────────────────────────── */
 .nb-tpl-overlay {

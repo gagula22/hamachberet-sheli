@@ -521,6 +521,107 @@
     editor.addEventListener('input', save);
     Editable.attachImageBehaviors(editor, save);
     attachMoodBehaviors(editor, save);
+    wrapImagesInEditor(editor);
+
+    // ── Paste: images from clipboard ──────────────────────────────────────
+    editor.addEventListener('paste', (e) => {
+      const items = (e.clipboardData && e.clipboardData.items) || [];
+      for (const item of items) {
+        if (item.type && item.type.startsWith('image/')) {
+          e.preventDefault();
+          const file = item.getAsFile();
+          if (file) {
+            const named = (!file.name || file.name === 'image.png')
+              ? new File([file], 'paste-' + Date.now() + '.png', { type: file.type })
+              : file;
+            insertImageFile(named, editor, save);
+          }
+          return;
+        }
+      }
+    });
+
+    // ── Drag-and-drop files into editor ──────────────────────────────────
+    let _dragCounter = 0;
+    const _dragOverlay = document.createElement('div');
+    _dragOverlay.className = 'nb-drag-overlay';
+    _dragOverlay.textContent = '🗂️ שחרר כאן כדי לצרף';
+    document.body.appendChild(_dragOverlay);
+    editor.addEventListener('dragenter', (e) => {
+      if (e.dataTransfer && Array.from(e.dataTransfer.types).includes('Files')) {
+        e.preventDefault();
+        _dragCounter++;
+        editor.classList.add('drag-over');
+        _dragOverlay.classList.add('show');
+      }
+    });
+    editor.addEventListener('dragover', (e) => {
+      if (e.dataTransfer && Array.from(e.dataTransfer.types).includes('Files')) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+      }
+    });
+    editor.addEventListener('dragleave', () => {
+      _dragCounter--;
+      if (_dragCounter <= 0) {
+        _dragCounter = 0;
+        editor.classList.remove('drag-over');
+        _dragOverlay.classList.remove('show');
+      }
+    });
+    editor.addEventListener('drop', (e) => {
+      e.preventDefault();
+      _dragCounter = 0;
+      editor.classList.remove('drag-over');
+      _dragOverlay.classList.remove('show');
+      const files = e.dataTransfer && e.dataTransfer.files;
+      if (!files || !files.length) return;
+      // Position cursor at drop point
+      if (document.caretRangeFromPoint) {
+        const r = document.caretRangeFromPoint(e.clientX, e.clientY);
+        if (r) { const s = window.getSelection(); s.removeAllRanges(); s.addRange(r); }
+      } else if (document.caretPositionFromPoint) {
+        const p = document.caretPositionFromPoint(e.clientX, e.clientY);
+        if (p) { const r = document.createRange(); r.setStart(p.offsetNode, p.offset); r.collapse(true); const s = window.getSelection(); s.removeAllRanges(); s.addRange(r); }
+      }
+      Array.from(files).forEach((file, idx) => {
+        setTimeout(() => {
+          if (file.type && file.type.startsWith('image/')) insertImageFile(file, editor, save);
+          else insertFileAttachment(file, editor, save);
+        }, idx * 80);
+      });
+    });
+
+    // ── Image: click to select, dblclick to open, resize handles ─────────
+    editor.addEventListener('click', (e) => {
+      const wrap = e.target.closest('.img-wrap');
+      if (wrap && !e.target.classList.contains('img-resize-handle')) {
+        editor.querySelectorAll('.img-wrap.selected').forEach(w => { if (w !== wrap) w.classList.remove('selected'); });
+        wrap.classList.add('selected');
+        try {
+          const r = document.createRange(); r.setStartAfter(wrap); r.collapse(true);
+          const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+        } catch (_) {}
+        return;
+      }
+      if (!e.target.closest('.img-wrap')) {
+        editor.querySelectorAll('.img-wrap.selected').forEach(w => w.classList.remove('selected'));
+      }
+    });
+    editor.addEventListener('dblclick', (e) => {
+      const att = e.target.closest('.file-attachment');
+      if (att) { e.preventDefault(); openAttachment(att); return; }
+      if (e.target.tagName === 'IMG' && !e.target.classList.contains('file-thumb')) {
+        e.preventDefault();
+        const w = window.open('', '_blank');
+        if (w) { w.document.write('<!DOCTYPE html><html><body style="margin:0;background:#222;display:flex;align-items:center;justify-content:center;min-height:100vh;"><img src="' + e.target.src + '" style="max-width:100%;max-height:100vh;" /></body></html>'); w.document.close(); }
+      }
+    });
+    editor.addEventListener('mousedown', (e) => {
+      if (e.target.classList.contains('img-resize-handle')) {
+        startImageResize(e, editor, save);
+      }
+    });
 
     // Store doUndo/doRedo so toolbar buttons (built below) can reference them
     editor._doUndo = doUndo;
@@ -534,7 +635,7 @@
 
     const fileInput = App.el('input', { type: 'file', accept: 'image/*', multiple: '', style: { display: 'none' } });
     fileInput.addEventListener('change', () => {
-      Array.from(fileInput.files || []).forEach(f => Editable.insertImageFromFile(f, editor, save));
+      Array.from(fileInput.files || []).forEach(f => insertImageFile(f, editor, save));
       fileInput.value = '';
     });
 
@@ -1221,6 +1322,147 @@
     }, true);
   }
 
+  // ── Image insertion via img-wrap with corner resize handles ──────────────
+  const A4_MAX_W = 640;
+
+  function insertImageFile(file, editor, save) {
+    if (!file || !file.type || !file.type.startsWith('image/')) return;
+    const MAX = 8 * 1024 * 1024;
+    if (file.size > MAX) {
+      if (!confirm('התמונה גדולה (' + _fmtSize(file.size) + '). להמשיך?')) return;
+    }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataUrl = ev.target.result;
+      const probe = new Image();
+      probe.onload = () => {
+        const initialW = Math.min(probe.naturalWidth, A4_MAX_W);
+        const html = '<span class="img-wrap" contenteditable="false">'
+          + '<img src="' + dataUrl + '" alt="" style="width:' + initialW + 'px;height:auto;" />'
+          + '<span class="img-resize-handle br" title="גרור לשינוי גודל"></span>'
+          + '<span class="img-resize-handle bl" title="גרור לשינוי גודל"></span>'
+          + '<span class="img-resize-tip"></span>'
+          + '</span>&nbsp;';
+        editor.focus();
+        document.execCommand('insertHTML', false, html);
+        save();
+        App.toast('תמונה נוספה (' + initialW + 'px)');
+      };
+      probe.onerror = () => {
+        const html = '<span class="img-wrap" contenteditable="false">'
+          + '<img src="' + dataUrl + '" alt="" />'
+          + '<span class="img-resize-handle br"></span>'
+          + '<span class="img-resize-handle bl"></span>'
+          + '<span class="img-resize-tip"></span>'
+          + '</span>&nbsp;';
+        editor.focus();
+        document.execCommand('insertHTML', false, html);
+        save();
+      };
+      probe.src = dataUrl;
+    };
+    reader.onerror = () => App.toast('שגיאה בקריאת הקובץ');
+    reader.readAsDataURL(file);
+  }
+
+  // Wrap plain <img> elements from old saved content with resize handles
+  function wrapImagesInEditor(editor) {
+    editor.querySelectorAll('img').forEach(img => {
+      if (img.classList.contains('file-thumb')) return;
+      if (img.closest('.img-wrap') || img.closest('figure.nb-img')) return;
+      const wrap = document.createElement('span');
+      wrap.className = 'img-wrap';
+      wrap.setAttribute('contenteditable', 'false');
+      if (!img.style.width) {
+        const natW = img.naturalWidth || 0;
+        if (natW > 0) {
+          img.style.width = Math.min(natW, A4_MAX_W) + 'px';
+          img.style.height = 'auto';
+        }
+      }
+      img.parentNode.insertBefore(wrap, img);
+      wrap.appendChild(img);
+      ['br', 'bl'].forEach(pos => {
+        const h = document.createElement('span');
+        h.className = 'img-resize-handle ' + pos;
+        h.title = 'גרור לשינוי גודל';
+        wrap.appendChild(h);
+      });
+      const tip = document.createElement('span');
+      tip.className = 'img-resize-tip';
+      wrap.appendChild(tip);
+    });
+  }
+
+  // Corner handle resize — called on mousedown on .img-resize-handle
+  function startImageResize(e, editor, save) {
+    const handle = e.target;
+    const wrap = handle.closest('.img-wrap');
+    if (!wrap) return;
+    const img = wrap.querySelector('img');
+    if (!img) return;
+    e.preventDefault(); e.stopPropagation();
+    const tip = wrap.querySelector('.img-resize-tip');
+    const isLeft = handle.classList.contains('bl');
+    const startX = e.clientX;
+    const startW = img.offsetWidth || img.naturalWidth || 200;
+    const startH = img.offsetHeight || img.naturalHeight || 150;
+    const aspect = startH > 0 ? startW / startH : 1;
+    document.body.style.cursor = isLeft ? 'nesw-resize' : 'nwse-resize';
+    document.body.style.userSelect = 'none';
+    wrap.classList.add('resizing');
+    if (tip) tip.textContent = startW + 'px';
+    function onMove(ev) {
+      let dx = ev.clientX - startX;
+      if (isLeft) dx = -dx;
+      const newW = Math.max(60, Math.min(A4_MAX_W, Math.round(startW + dx)));
+      img.style.width = newW + 'px';
+      img.style.height = Math.round(newW / aspect) + 'px';
+      if (tip) tip.textContent = newW + 'px' + (newW === A4_MAX_W ? ' (מקס)' : '');
+    }
+    function onUp() {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      wrap.classList.remove('resizing');
+      save();
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }
+
+  // Open a file-attachment card in a new tab (or download if not previewable)
+  function openAttachment(el) {
+    const dataUrl = el.dataset.content;
+    const name = el.dataset.name || 'file';
+    const type = el.dataset.type || '';
+    if (!dataUrl) { App.toast('תוכן הקובץ חסר'); return; }
+    const previewable = type.startsWith('image/') || type === 'application/pdf'
+      || type.startsWith('text/') || type.startsWith('video/') || type.startsWith('audio/');
+    if (previewable) {
+      const w = window.open('', '_blank');
+      if (w) {
+        const safe = name.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        if (type.startsWith('image/'))
+          w.document.write('<!DOCTYPE html><html><body style="margin:0;background:#222;display:flex;align-items:center;justify-content:center;min-height:100vh;"><img src="' + dataUrl + '" alt="' + safe + '" style="max-width:100%;max-height:100vh;"></body></html>');
+        else if (type.startsWith('video/'))
+          w.document.write('<!DOCTYPE html><html><body style="margin:0;background:#222;display:flex;align-items:center;justify-content:center;min-height:100vh;"><video src="' + dataUrl + '" controls autoplay style="max-width:100%;max-height:100vh;"></video></body></html>');
+        else if (type.startsWith('audio/'))
+          w.document.write('<!DOCTYPE html><html><body style="margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#FAF6EE;"><audio src="' + dataUrl + '" controls autoplay></audio></body></html>');
+        else
+          w.document.write('<!DOCTYPE html><html><body style="margin:0;"><iframe src="' + dataUrl + '" style="width:100%;height:100vh;border:none;"></iframe></body></html>');
+        w.document.close();
+        return;
+      }
+    }
+    // Download fallback
+    const a = document.createElement('a');
+    a.href = dataUrl; a.download = name;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    App.toast('הורד: ' + name);
+  }
+
   // ── File attachment (any file type, embedded as card) ────────────────────
   function insertFileAttachment(file, editor, save) {
     const MAX = 5 * 1024 * 1024;
@@ -1242,18 +1484,13 @@
         : `<span class="file-icon">${icon}</span>`;
       const html = `<span class="file-attachment" contenteditable="false"
         data-name="${escName}" data-type="${file.type.replace(/"/g,'')}" data-content="${dataUrl}"
-        title="לחץ פעמיים להורדה">${visual}<span class="file-name">${escName}</span><span class="file-size">${sizeStr}</span><button class="file-remove" title="הסר">×</button></span>&nbsp;`;
+        title="לחץ פעמיים לפתיחה">${visual}<span class="file-name">${escName}</span><span class="file-size">${sizeStr}</span><span class="file-hint">↗</span><button class="file-remove" title="הסר">×</button></span>&nbsp;`;
       editor.focus();
       document.execCommand('insertHTML', false, html);
       // Wire up interactions
       editor.querySelectorAll('.file-attachment:not([data-wired])').forEach(el => {
         el.setAttribute('data-wired', '1');
-        el.addEventListener('dblclick', () => {
-          const a = document.createElement('a');
-          a.href = el.dataset.content;
-          a.download = el.dataset.name;
-          document.body.appendChild(a); a.click(); document.body.removeChild(a);
-        });
+        el.addEventListener('dblclick', (ev) => { ev.preventDefault(); openAttachment(el); });
         const rm = el.querySelector('.file-remove');
         if (rm) rm.addEventListener('click', (e) => { e.stopPropagation(); el.remove(); save(); });
       });
