@@ -1699,6 +1699,42 @@ figure.nb-img.nb-img-dragging { opacity: 0.35; pointer-events: none; }
 }
 .nb-tpl-btn-secondary:hover { color: var(--nb-text-1); }
 
+/* ── Template edit banner ────────────────────────────────────────────── */
+.nb-tpl-edit-banner {
+  background: var(--nb-accent, #B8762A);
+  color: white;
+  padding: 10px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  flex-wrap: wrap;
+  gap: 10px;
+  flex-shrink: 0;
+  font-family: 'Heebo', sans-serif;
+}
+.nb-tpl-edit-banner strong { font-weight: 600; }
+.nb-tpl-banner-save,
+.nb-tpl-banner-cancel {
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 0.5px solid rgba(255,255,255,0.4);
+  font-family: 'Heebo', sans-serif;
+}
+.nb-tpl-banner-cancel {
+  background: rgba(255,255,255,0.2);
+  color: white;
+}
+.nb-tpl-banner-cancel:hover { background: rgba(255,255,255,0.3); }
+.nb-tpl-banner-save {
+  background: white;
+  color: var(--nb-accent-str, #8C4A2C);
+}
+.nb-tpl-banner-save:hover { background: rgba(255,255,255,0.88); }
+
 
 /* ============================================================
    NOTEBOOK STICKY FIX — full-viewport layout, internal scroll
