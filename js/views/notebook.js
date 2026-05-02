@@ -480,6 +480,32 @@
       'data-placeholder': 'התחל לכתוב כאן… אפשר להדביק תמונות או להעלות אותן, ולשנות את גודלן בגרירת הפינה ↘'
     });
     editor.innerHTML = topic.body || '';
+
+    // ── Auto-repair corrupted tables ─────────────────────────────────────
+    // A previous bug added a colgroup with width:0px to all tables at load
+    // time (before render), then set table-layout:fixed — collapsing them.
+    // Detect and remove those colgroups so content is restored correctly.
+    (function repairCorruptedTables() {
+      let fixed = false;
+      editor.querySelectorAll('table').forEach(table => {
+        const cols = [...table.querySelectorAll('col')];
+        if (!cols.length) return;
+        const allZero = cols.every(c => parseInt(c.style.width || '1') === 0);
+        if (allZero && table.style.tableLayout === 'fixed') {
+          table.querySelectorAll('colgroup').forEach(cg => cg.remove());
+          table.style.tableLayout = '';
+          table.style.width = '100%';
+          fixed = true;
+        }
+      });
+      if (fixed) {
+        // Persist the repaired version immediately
+        const clone = editor.cloneNode(true);
+        clone.querySelectorAll('.nb-col-resize-handle').forEach(h => h.remove());
+        updateTopic(topic.id, { body: clone.innerHTML, updatedAt: Date.now() });
+      }
+    })();
+
     restoreMoodBlocks(editor);
 
     const stage = App.el('div', { class: 'nb-stage' }, [editor]);
