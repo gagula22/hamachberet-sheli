@@ -1012,15 +1012,101 @@
       if (!url || !url.trim()) return;
       exec('createLink', url.trim());
     }
-    function insertTable() {
-      const td = 'style="border:1px solid #D8C9B0;padding:6px 10px"';
-      const th = 'style="border:1px solid #D8C9B0;padding:6px 10px;background:#F4ECD8;font-weight:500"';
-      exec('insertHTML',
-        `<table dir="rtl" style="border-collapse:collapse;width:100%;margin:8px 0">` +
-        `<tr><th ${th}>עמודה א</th><th ${th}>עמודה ב</th><th ${th}>עמודה ג</th></tr>` +
-        `<tr><td ${td}>&nbsp;</td><td ${td}>&nbsp;</td><td ${td}>&nbsp;</td></tr>` +
-        `<tr><td ${td}>&nbsp;</td><td ${td}>&nbsp;</td><td ${td}>&nbsp;</td></tr>` +
-        `</table><p dir="rtl"><br></p>`);
+    // ── Table grid picker ────────────────────────────────────────────────
+    function showTablePicker(anchorBtn) {
+      document.getElementById('_nb_tbl_picker')?.remove();
+
+      const MAX_R = 8, MAX_C = 8;
+      let hR = 0, hC = 0;
+
+      const picker = document.createElement('div');
+      picker.id = '_nb_tbl_picker';
+      picker.style.cssText = [
+        'position:fixed',
+        'background:#FFFCF5',
+        'border:1px solid #D8C9B0',
+        'border-radius:10px',
+        'padding:10px 12px 12px',
+        'box-shadow:0 6px 20px rgba(0,0,0,0.13)',
+        'z-index:2000',
+        'user-select:none'
+      ].join(';');
+
+      const rect = anchorBtn.getBoundingClientRect();
+      picker.style.top  = (rect.bottom + 6) + 'px';
+      // Align right edge of picker with button center
+      picker.style.left = Math.max(8, rect.left - 60) + 'px';
+
+      const label = document.createElement('div');
+      label.style.cssText = 'text-align:center;font-size:12px;color:#6B5840;margin-bottom:8px;font-family:Heebo,sans-serif;min-height:18px;';
+      label.textContent = 'גרור לבחירת גודל';
+
+      const grid = document.createElement('div');
+      grid.style.cssText = 'display:grid;grid-template-columns:repeat(8,22px);gap:3px;';
+
+      const cells = [];
+      for (let r = 0; r < MAX_R; r++) {
+        for (let c = 0; c < MAX_C; c++) {
+          const cell = document.createElement('div');
+          cell.style.cssText = 'width:22px;height:22px;border:1.5px solid #E5D8C0;border-radius:3px;background:#F4ECD8;cursor:pointer;box-sizing:border-box;';
+          cell.dataset.r = r;
+          cell.dataset.c = c;
+          cells.push(cell);
+          grid.appendChild(cell);
+        }
+      }
+
+      function updateHighlight(r, c) {
+        hR = r; hC = c;
+        cells.forEach(cell => {
+          const cr = +cell.dataset.r, cc = +cell.dataset.c;
+          const on = cr <= r && cc <= c;
+          cell.style.background     = on ? '#B8762A' : '#F4ECD8';
+          cell.style.borderColor    = on ? '#8C4A2C' : '#E5D8C0';
+        });
+        label.textContent = (r + 1) + ' שורות × ' + (c + 1) + ' עמודות';
+      }
+
+      grid.addEventListener('mousemove', e => {
+        const t = e.target.closest('[data-r]');
+        if (t) updateHighlight(+t.dataset.r, +t.dataset.c);
+      });
+      grid.addEventListener('mouseleave', () => {
+        cells.forEach(c => { c.style.background = '#F4ECD8'; c.style.borderColor = '#E5D8C0'; });
+        label.textContent = 'גרור לבחירת גודל';
+        hR = 0; hC = 0;
+      });
+      grid.addEventListener('click', () => {
+        picker.remove();
+        document.removeEventListener('mousedown', outside);
+        doInsertTable(hR + 1, hC + 1);
+      });
+
+      picker.appendChild(label);
+      picker.appendChild(grid);
+      document.body.appendChild(picker);
+
+      function outside(e) {
+        if (!picker.contains(e.target) && e.target !== anchorBtn) {
+          picker.remove();
+          document.removeEventListener('mousedown', outside);
+        }
+      }
+      setTimeout(() => document.addEventListener('mousedown', outside), 0);
+    }
+
+    function doInsertTable(rows, cols) {
+      const HEB = ['א','ב','ג','ד','ה','ו','ז','ח','ט','י'];
+      const th = 'style="border:1px solid #D8C9B0;padding:6px 10px;background:#F4ECD8;font-weight:500;text-align:start"';
+      const td = 'style="border:1px solid #D8C9B0;padding:6px 10px;min-width:60px"';
+      let html = '<table dir="rtl" style="border-collapse:collapse;width:100%;margin:8px 0"><tbody>';
+      html += '<tr>' + Array.from({length:cols},(_,i)=>`<th ${th}>עמודה ${HEB[i]||i+1}</th>`).join('') + '</tr>';
+      for (let r = 0; r < rows; r++) {
+        html += '<tr>' + Array.from({length:cols},()=>`<td ${td}>&nbsp;</td>`).join('') + '</tr>';
+      }
+      html += '</tbody></table><p dir="rtl"><br></p>';
+      editor.focus();
+      exec('insertHTML', html);
       save();
     }
     function insertCheckboxList() {
@@ -1120,7 +1206,7 @@
           tbBtn('🔗',  'קישור חיצוני',      () => insertLink()),
           tbBtn('🖼️', 'תמונה מהמחשב',   () => fileInput.click()),
           tbBtn('📎',  'צרף קובץ',        () => attachInput.click()),
-          tbBtn('⊞',   'טבלה',            () => insertTable()),
+          tbBtn('⊞',   'טבלה',            (e) => showTablePicker(e.currentTarget)),
           tbBtn('⟦⟧',  'קישור פנימי [[ ]]', () => insertWikiLink()),
           tbBtn('—',   'קו מפריד',        () => { exec('insertHorizontalRule'); save(); })
         ),
