@@ -1125,7 +1125,7 @@
           tbBtn('—',   'קו מפריד',        () => { exec('insertHorizontalRule'); save(); })
         ),
         grp(
-          tbBtn('📄',  'גלריית תבניות', () => openTemplateGallery(editor, save)),
+          tbBtn('📄',  'גלריית תבניות', () => openTemplateGallery(editor, save, topic.id)),
           tbBtn('🎭',  'יומן מצב רוח', () => openMoodModal(editor, save)),
           tbBtn('📌',  'הצמד נושא', () => { const pinned = !topic.pinned; updateTopic(topic.id, { pinned }); App.toast(pinned ? '📌 הוצמד' : 'הוסר מהמוצמדים'); }),
           tbBtn('🎯',  'מצב מיקוד (Escape ליציאה)', () => toggleFocusMode()),
@@ -1565,37 +1565,37 @@
 
   // ── Template gallery modal (full: tabs, built-in, custom, edit, save-current) ──
   const NB_BUILTIN_TEMPLATES = [
-    { id: 'meeting', icon: '🤝', name: 'פגישה', desc: 'משתתפים, סדר יום, החלטות, משימות',
+    { id: 'meeting', icon: '🤝', name: 'פגישה', desc: 'משתתפים, סדר יום, החלטות, משימות', tags: ['פגישה'],
       html: () => `<h2 dir="rtl">🤝 פגישה — ${new Date().toLocaleDateString('he-IL')}</h2><h3 dir="rtl">משתתפים</h3><ul dir="rtl"><li></li></ul><h3 dir="rtl">סדר יום</h3><ol dir="rtl"><li></li></ol><h3 dir="rtl">החלטות</h3><ul dir="rtl"><li></li></ul><h3 dir="rtl">משימות לביצוע</h3><div dir="rtl"><input type="checkbox" /> </div><div dir="rtl"><input type="checkbox" /> </div><h3 dir="rtl">פגישה הבאה</h3><p dir="rtl"></p>` },
-    { id: 'idea', icon: '💡', name: 'רעיון', desc: 'בעיה, פתרון, צעדים ראשונים',
+    { id: 'idea', icon: '💡', name: 'רעיון', desc: 'בעיה, פתרון, צעדים ראשונים', tags: ['רעיון'],
       html: () => `<h2 dir="rtl">💡 רעיון: </h2><h3 dir="rtl">איזו בעיה זה פותר?</h3><p dir="rtl"></p><h3 dir="rtl">הפתרון</h3><p dir="rtl"></p><h3 dir="rtl">למי זה מיועד?</h3><p dir="rtl"></p><h3 dir="rtl">צעדים ראשונים</h3><div dir="rtl"><input type="checkbox" /> אימות הרעיון</div><div dir="rtl"><input type="checkbox" /> מחקר 30 דקות</div><div dir="rtl"><input type="checkbox" /> פרוטוטייפ ראשוני</div><h3 dir="rtl">אתגרים אפשריים</h3><ul dir="rtl"><li></li></ul>` },
-    { id: 'daily', icon: '📅', name: 'יומן יומי', desc: 'מה עשיתי, מה למדתי, מחר',
+    { id: 'daily', icon: '📅', name: 'יומן יומי', desc: 'מה עשיתי, מה למדתי, מחר', tags: ['יומן'],
       html: () => `<h2 dir="rtl">📅 ${new Date().toLocaleDateString('he-IL')}</h2><h3 dir="rtl">מצב רוח &amp; אנרגיה</h3><p dir="rtl">😊😐😔  ·  אנרגיה: ▢▢▢▢▢</p><h3 dir="rtl">מה עשיתי היום</h3><ul dir="rtl"><li></li></ul><h3 dir="rtl">מה למדתי?</h3><p dir="rtl"></p><h3 dir="rtl">3 דברים שאני מודה עליהם</h3><ol dir="rtl"><li></li><li></li><li></li></ol><h3 dir="rtl">למחר</h3><div dir="rtl"><input type="checkbox" /> </div><div dir="rtl"><input type="checkbox" /> </div><div dir="rtl"><input type="checkbox" /> </div>` },
-    { id: 'reading', icon: '📚', name: 'הערות קריאה', desc: 'ספר, ציטוטים, מחשבות',
+    { id: 'reading', icon: '📚', name: 'הערות קריאה', desc: 'ספר, ציטוטים, מחשבות', tags: ['קריאה'],
       html: () => `<h2 dir="rtl">📚 הערות קריאה</h2><p dir="rtl"><strong>שם:</strong> </p><p dir="rtl"><strong>מחבר:</strong> </p><p dir="rtl"><strong>סוגה:</strong>   ·  <strong>דירוג:</strong> ⭐⭐⭐⭐⭐</p><h3 dir="rtl">תקציר במשפט אחד</h3><p dir="rtl"></p><h3 dir="rtl">3 התובנות המרכזיות</h3><ol dir="rtl"><li></li><li></li><li></li></ol><h3 dir="rtl">ציטוטים</h3><blockquote dir="rtl"></blockquote><h3 dir="rtl">איך אני מיישם את זה?</h3><p dir="rtl"></p>` },
-    { id: 'goal', icon: '🎯', name: 'הגדרת מטרה', desc: 'SMART, צעדים, מועד יעד',
+    { id: 'goal', icon: '🎯', name: 'הגדרת מטרה', desc: 'SMART, צעדים, מועד יעד', tags: ['מטרה'],
       html: () => `<h2 dir="rtl">🎯 מטרה: </h2><h3 dir="rtl">למה?</h3><p dir="rtl">למה זה חשוב לי?</p><h3 dir="rtl">SMART</h3><ul dir="rtl"><li><strong>ספציפי:</strong> </li><li><strong>מדיד:</strong> </li><li><strong>בר-השגה:</strong> </li><li><strong>רלוונטי:</strong> </li><li><strong>מוגבל בזמן:</strong> עד </li></ul><h3 dir="rtl">צעדים לביצוע</h3><div dir="rtl"><input type="checkbox" /> </div><div dir="rtl"><input type="checkbox" /> </div><div dir="rtl"><input type="checkbox" /> </div><h3 dir="rtl">איך אדע שהצלחתי?</h3><p dir="rtl"></p><h3 dir="rtl">מה עלול לעצור אותי?</h3><p dir="rtl"></p>` },
-    { id: 'todo', icon: '✅', name: 'רשימת משימות', desc: 'משימות לפי עדיפות',
+    { id: 'todo', icon: '✅', name: 'רשימת משימות', desc: 'משימות לפי עדיפות', tags: ['משימות'],
       html: () => `<h2 dir="rtl">✅ משימות — ${new Date().toLocaleDateString('he-IL')}</h2><h3 dir="rtl">🔥 דחוף וחשוב</h3><div dir="rtl"><input type="checkbox" /> </div><h3 dir="rtl">⭐ חשוב (לא דחוף)</h3><div dir="rtl"><input type="checkbox" /> </div><div dir="rtl"><input type="checkbox" /> </div><h3 dir="rtl">⚡ דחוף (לא חשוב)</h3><div dir="rtl"><input type="checkbox" /> </div><h3 dir="rtl">📋 כשיהיה זמן</h3><div dir="rtl"><input type="checkbox" /> </div>` },
-    { id: 'shopping', icon: '🛒', name: 'רשימת קניות', desc: 'מצרכים מסודרים לפי חנות',
+    { id: 'shopping', icon: '🛒', name: 'רשימת קניות', desc: 'מצרכים מסודרים לפי חנות', tags: ['קניות'],
       html: () => `<h2 dir="rtl">🛒 קניות — ${new Date().toLocaleDateString('he-IL')}</h2><h3 dir="rtl">סופר</h3><div dir="rtl"><input type="checkbox" /> </div><div dir="rtl"><input type="checkbox" /> </div><div dir="rtl"><input type="checkbox" /> </div><h3 dir="rtl">ירקן</h3><div dir="rtl"><input type="checkbox" /> </div><div dir="rtl"><input type="checkbox" /> </div><h3 dir="rtl">מאפייה</h3><div dir="rtl"><input type="checkbox" /> </div><h3 dir="rtl">פארם</h3><div dir="rtl"><input type="checkbox" /> </div>` },
-    { id: 'trip', icon: '✈️', name: 'תכנון טיול', desc: 'יעד, אריזה, יומן יומי',
+    { id: 'trip', icon: '✈️', name: 'תכנון טיול', desc: 'יעד, אריזה, יומן יומי', tags: ['טיול'],
       html: () => `<h2 dir="rtl">✈️ טיול: </h2><p dir="rtl"><strong>יעד:</strong>   ·  <strong>תאריכים:</strong> </p><p dir="rtl"><strong>תקציב משוער:</strong> </p><h3 dir="rtl">טיסות / תחבורה</h3><p dir="rtl"></p><h3 dir="rtl">מלון / לינה</h3><p dir="rtl"></p><h3 dir="rtl">תכנית יומית</h3><p dir="rtl"><strong>יום 1:</strong> </p><p dir="rtl"><strong>יום 2:</strong> </p><p dir="rtl"><strong>יום 3:</strong> </p><h3 dir="rtl">רשימת אריזה</h3><div dir="rtl"><input type="checkbox" /> דרכון / ת.ז.</div><div dir="rtl"><input type="checkbox" /> כרטיסי טיסה</div><div dir="rtl"><input type="checkbox" /> מטענים / מתאמים</div><div dir="rtl"><input type="checkbox" /> ביטוח נסיעות</div><div dir="rtl"><input type="checkbox" /> תרופות</div><h3 dir="rtl">לזכור</h3><ul dir="rtl"><li></li></ul>` },
-    { id: 'budget', icon: '💰', name: 'תקציב חודשי', desc: 'הכנסות והוצאות',
+    { id: 'budget', icon: '💰', name: 'תקציב חודשי', desc: 'הכנסות והוצאות', tags: ['תקציב'],
       html: () => `<h2 dir="rtl">💰 תקציב — </h2><p dir="rtl"><strong>חודש:</strong>   ·  <strong>סטטוס:</strong> </p><h3 dir="rtl">הכנסות</h3><table style="border-collapse:collapse;width:100%"><tr><th style="background:#F4ECD8;border:1px solid #D8C9B0;padding:6px">מקור</th><th style="background:#F4ECD8;border:1px solid #D8C9B0;padding:6px">סכום</th></tr><tr><td style="border:1px solid #D8C9B0;padding:6px"></td><td style="border:1px solid #D8C9B0;padding:6px"></td></tr><tr><td style="border:1px solid #D8C9B0;padding:6px"></td><td style="border:1px solid #D8C9B0;padding:6px"></td></tr></table><h3 dir="rtl">הוצאות</h3><table style="border-collapse:collapse;width:100%"><tr><th style="background:#F4ECD8;border:1px solid #D8C9B0;padding:6px">קטגוריה</th><th style="background:#F4ECD8;border:1px solid #D8C9B0;padding:6px">מתוכנן</th><th style="background:#F4ECD8;border:1px solid #D8C9B0;padding:6px">בפועל</th></tr><tr><td style="border:1px solid #D8C9B0;padding:6px">שכר דירה</td><td style="border:1px solid #D8C9B0;padding:6px"></td><td style="border:1px solid #D8C9B0;padding:6px"></td></tr><tr><td style="border:1px solid #D8C9B0;padding:6px">מזון</td><td style="border:1px solid #D8C9B0;padding:6px"></td><td style="border:1px solid #D8C9B0;padding:6px"></td></tr><tr><td style="border:1px solid #D8C9B0;padding:6px">תחבורה</td><td style="border:1px solid #D8C9B0;padding:6px"></td><td style="border:1px solid #D8C9B0;padding:6px"></td></tr><tr><td style="border:1px solid #D8C9B0;padding:6px">בילויים</td><td style="border:1px solid #D8C9B0;padding:6px"></td><td style="border:1px solid #D8C9B0;padding:6px"></td></tr></table><h3 dir="rtl">תובנות</h3><p dir="rtl"></p>` },
-    { id: 'recipe', icon: '🍳', name: 'מתכון', desc: 'מצרכים והוראות הכנה',
+    { id: 'recipe', icon: '🍳', name: 'מתכון', desc: 'מצרכים והוראות הכנה', tags: ['מתכון'],
       html: () => `<h2 dir="rtl">🍳 </h2><p dir="rtl"><strong>מנות:</strong>   ·  <strong>זמן הכנה:</strong>  דק׳  ·  <strong>זמן בישול:</strong>  דק׳</p><p dir="rtl"><strong>רמת קושי:</strong> ⭐⭐</p><h3 dir="rtl">מצרכים</h3><ul dir="rtl"><li> </li><li> </li><li> </li></ul><h3 dir="rtl">הוראות הכנה</h3><ol dir="rtl"><li></li><li></li><li></li></ol><h3 dir="rtl">טיפים</h3><ul dir="rtl"><li></li></ul><h3 dir="rtl">הערות אישיות</h3><p dir="rtl"></p>` },
-    { id: 'review', icon: '📔', name: 'סיכום שבועי', desc: 'הצלחות, אתגרים, מטרות',
+    { id: 'review', icon: '📔', name: 'סיכום שבועי', desc: 'הצלחות, אתגרים, מטרות', tags: ['סיכום שבועי'],
       html: () => `<h2 dir="rtl">📔 סיכום שבוע — ${new Date().toLocaleDateString('he-IL')}</h2><h3 dir="rtl">⭐ 3 הצלחות השבוע</h3><ol dir="rtl"><li></li><li></li><li></li></ol><h3 dir="rtl">📚 מה למדתי</h3><p dir="rtl"></p><h3 dir="rtl">🌱 איפה התקדמתי</h3><p dir="rtl"></p><h3 dir="rtl">⚠️ אתגרים / תקיעות</h3><p dir="rtl"></p><h3 dir="rtl">🎯 3 מטרות לשבוע הבא</h3><div dir="rtl"><input type="checkbox" /> </div><div dir="rtl"><input type="checkbox" /> </div><div dir="rtl"><input type="checkbox" /> </div><h3 dir="rtl">דירוג כללי לשבוע</h3><p dir="rtl">⭐⭐⭐⭐⭐</p>` },
-    { id: 'project', icon: '💼', name: 'תכנון פרויקט', desc: 'מטרה, אבני דרך, סיכונים',
+    { id: 'project', icon: '💼', name: 'תכנון פרויקט', desc: 'מטרה, אבני דרך, סיכונים', tags: ['פרויקט'],
       html: () => `<h2 dir="rtl">💼 פרויקט: </h2><p dir="rtl"><strong>סטטוס:</strong>  · <strong>תאריך התחלה:</strong>  · <strong>יעד סיום:</strong> </p><h3 dir="rtl">מטרת על</h3><p dir="rtl"></p><h3 dir="rtl">תוצרים מצופים</h3><ul dir="rtl"><li></li></ul><h3 dir="rtl">אבני דרך</h3><div dir="rtl"><input type="checkbox" /> אבן דרך 1 — </div><div dir="rtl"><input type="checkbox" /> אבן דרך 2 — </div><div dir="rtl"><input type="checkbox" /> אבן דרך 3 — </div><h3 dir="rtl">משאבים נדרשים</h3><ul dir="rtl"><li></li></ul><h3 dir="rtl">משימות פתוחות</h3><div dir="rtl"><input type="checkbox" /> </div>` },
-    { id: 'brainstorm', icon: '🧠', name: 'סיעור מוחות', desc: 'רעיונות חופשיים ובחירה',
+    { id: 'brainstorm', icon: '🧠', name: 'סיעור מוחות', desc: 'רעיונות חופשיים ובחירה', tags: ['רעיון'],
       html: () => `<h2 dir="rtl">🧠 סיעור מוחות: </h2><h3 dir="rtl">השאלה / הבעיה</h3><p dir="rtl"></p><h3 dir="rtl">רעיונות (אל תשפוט, רק רשום)</h3><ul dir="rtl"><li></li><li></li><li></li><li></li><li></li><li></li></ul><h3 dir="rtl">3 הטובים ביותר</h3><ol dir="rtl"><li></li><li></li><li></li></ol><h3 dir="rtl">המנצח</h3><p dir="rtl"></p><h3 dir="rtl">צעדים הבאים</h3><div dir="rtl"><input type="checkbox" /> </div>` },
-    { id: 'standup', icon: '💬', name: 'סטנדאפ צוות', desc: 'מה עשיתי, מה אעשה, חסמים',
+    { id: 'standup', icon: '💬', name: 'סטנדאפ צוות', desc: 'מה עשיתי, מה אעשה, חסמים', tags: ['פגישה', 'סטנדאפ'],
       html: () => `<h2 dir="rtl">💬 סטנדאפ — ${new Date().toLocaleDateString('he-IL')}</h2><h3 dir="rtl">מה עשיתי אתמול?</h3><ul dir="rtl"><li></li></ul><h3 dir="rtl">מה אעשה היום?</h3><ul dir="rtl"><li></li></ul><h3 dir="rtl">חסמים?</h3><p dir="rtl"></p><h3 dir="rtl">דברים לשתף עם הצוות</h3><p dir="rtl"></p>` }
   ];
 
-  function openTemplateGallery(editor, save) {
+  function openTemplateGallery(editor, save, topicId) {
     const esc = (s) => String(s).replace(/</g,'&lt;').replace(/>/g,'&gt;');
     const tplUid = () => 'tpl_' + Math.random().toString(36).slice(2,8) + Date.now().toString(36).slice(-4);
     function getCustom() { return Store.get('customTemplates') || []; }
@@ -1701,7 +1701,7 @@
             e.stopPropagation();
             forkBuiltinTemplate(t);
           });
-          card.addEventListener('click', () => applyTemplate(t.html(), t.name));
+          card.addEventListener('click', () => applyTemplate(t.html(), t.name, t.tags || []));
           gridBuiltin.appendChild(card);
         });
       }
@@ -1747,10 +1747,22 @@
       }
     }
 
-    function applyTemplate(html, name) {
+    function applyTemplate(html, name, tags) {
       editor.focus();
       document.execCommand('insertHTML', false, html);
       save();
+      // Auto-add template tags to the current topic (if any)
+      if (tags && tags.length && topicId) {
+        const current = getById(topicId);
+        if (current) {
+          const existing = Array.isArray(current.tags) ? current.tags : [];
+          const merged = [...existing];
+          tags.forEach(t => { if (!merged.includes(t)) merged.push(t); });
+          if (merged.length !== existing.length) {
+            updateTopic(topicId, { tags: merged });
+          }
+        }
+      }
       overlay.remove();
       App.toast('✓ תבנית "' + name + '" הוכנסה');
     }
@@ -1783,7 +1795,7 @@
       setCustom(customs);
       App.toast('💾 נשמרה תבנית: ' + name);
       overlay.remove();
-      setTimeout(() => { openTemplateGallery(editor, save); renderGrids('custom'); }, 200);
+      setTimeout(() => { openTemplateGallery(editor, save, topicId); renderGrids('custom'); }, 200);
     });
 
     tabBuiltin.addEventListener('click', () => renderGrids('builtin'));
