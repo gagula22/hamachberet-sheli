@@ -189,6 +189,18 @@
       ? 'nb-layout nb-mobile nb-panel-' + mobilePanel
       : 'nb-layout';
 
+    // Wire up wiki-link clicks: clicking [[Topic Name]] navigates to that topic
+    window._nbWikiClick = (tid, name) => {
+      if (tid) {
+        const t = getById(tid);
+        if (t) { activeId = tid; rerender(); return; }
+      }
+      // Fallback: fuzzy match by name
+      const found = getTopics().find(t => t.name === name || t.name.includes(name));
+      if (found) { activeId = found.id; rerender(); }
+      else App.toast('לא נמצא נושא בשם "' + name + '"');
+    };
+
     root.append(App.el('div', { class: layoutClass }, [left, resizer, right]));
   }
 
@@ -407,14 +419,6 @@
   }
 
   function buildEditor(topic, backBtn) {
-    const titleInput = App.el('input', {
-      class: 'nb-title',
-      placeholder: 'כותרת הנושא…',
-      value: topic.name || '',
-      onInput: Editable.debounce((e) => updateTopic(topic.id, { name: e.target.value }), 300),
-      onBlur: () => rerender()
-    });
-
     const editor = App.el('div', {
       class: 'nb-editor',
       contenteditable: 'true',
@@ -849,6 +853,21 @@
         '</ul><p dir="rtl"><br></p>');
       save();
     }
+    function insertWikiLink() {
+      const text = prompt('שם הנושא לקישור:');
+      if (!text || !text.trim()) return;
+      const name = text.trim();
+      // find matching topic
+      const target = getTopics().find(t => t.name === name || t.name.includes(name));
+      const tid = target ? target.id : null;
+      const color = 'var(--nb-accent)';
+      exec('insertHTML',
+        `<a class="nb-wiki-link" style="color:${color};border-bottom:1px solid;cursor:pointer;text-decoration:none"` +
+        ` data-wiki="${name}" data-tid="${tid || ''}" onclick="event.preventDefault();` +
+        `(window._nbWikiClick&&window._nbWikiClick('${tid||''}','${name}'))">[[${name}]]</a>`
+      );
+      save();
+    }
 
     // ── Helper: wrap items in a group div ────────────────────────────────
     function grp(...items) { return App.el('div', { class: 'nb-tb-group' }, items.filter(Boolean)); }
@@ -896,10 +915,11 @@
           tbBtn('⇱', 'הזחה החוצה', () => exec('outdent'))
         ),
         grp(
-          tbBtn('🔗',  'קישור',           () => insertLink()),
+          tbBtn('🔗',  'קישור חיצוני',      () => insertLink()),
           tbBtn('🖼️', 'תמונה מהמחשב',   () => fileInput.click()),
           tbBtn('📎',  'צרף קובץ',        () => attachInput.click()),
           tbBtn('⊞',   'טבלה',            () => insertTable()),
+          tbBtn('⟦⟧',  'קישור פנימי [[ ]]', () => insertWikiLink()),
           tbBtn('—',   'קו מפריד',        () => { exec('insertHorizontalRule'); save(); })
         ),
         grp(
@@ -913,7 +933,79 @@
       ])
     ]);
 
-    const breadcrumb = buildBreadcrumb(topic);
+    // ── Note meta header (entity-badge + title + tags) ──────────────────
+    // Entity badge — shows root notebook name in amber
+    const rootAnc = getRootAncestor(topic.id);
+    const badgeIcon = rootAnc ? (rootAnc.icon || '📓') : (topic.icon || '📓');
+    const badgeLabel = rootAnc && rootAnc.id !== topic.id ? rootAnc.name : 'מחברת';
+    const entityBadge = App.el('div', { class: 'nb-entity-badge' }, [
+      App.el('span', {}, badgeIcon + ' ' + badgeLabel)
+    ]);
+
+    // Tag management
+    const topicTags = Array.isArray(topic.tags) ? [...topic.tags] : [];
+    const tagsRow = App.el('div', { class: 'nb-note-tags' });
+    function renderTagsRow() {
+      tagsRow.innerHTML = '';
+      // Date pill (read-only)
+      const dateStr = new Date(topic.createdAt || Date.now()).toLocaleDateString('he-IL', {
+        weekday: 'long', day: 'numeric', month: 'long'
+      });
+      const datePill = App.el('span', { class: 'nb-note-tag nb-date-tag' }, dateStr);
+      tagsRow.appendChild(datePill);
+      // User tags
+      topicTags.forEach((tag, idx) => {
+        const pill = App.el('span', { class: 'nb-note-tag' }, [
+          document.createTextNode(tag),
+          App.el('span', {
+            class: 'nb-tag-x',
+            onClick: (e) => {
+              e.stopPropagation();
+              topicTags.splice(idx, 1);
+              updateTopic(topic.id, { tags: [...topicTags] });
+              renderTagsRow();
+            }
+          }, '×')
+        ]);
+        tagsRow.appendChild(pill);
+      });
+      // Add tag input
+      const tagInput = App.el('input', {
+        class: 'nb-tag-input',
+        placeholder: '+ תגית',
+        onKeydown: (e) => {
+          if (e.key === 'Enter' || e.key === ',') {
+            e.preventDefault();
+            const val = tagInput.value.trim();
+            if (val && !topicTags.includes(val)) {
+              topicTags.push(val);
+              updateTopic(topic.id, { tags: [...topicTags] });
+            }
+            tagInput.value = '';
+            renderTagsRow();
+          } else if (e.key === 'Escape') {
+            tagInput.value = '';
+            tagInput.blur();
+          }
+        }
+      });
+      tagsRow.appendChild(tagInput);
+    }
+    renderTagsRow();
+
+    const titleInput = App.el('input', {
+      class: 'nb-title',
+      placeholder: 'כותרת הנושא…',
+      value: topic.name || '',
+      onInput: Editable.debounce((e) => updateTopic(topic.id, { name: e.target.value }), 300),
+      onBlur: () => rerender()
+    });
+
+    const noteMeta = App.el('div', { class: 'nb-note-meta' }, [
+      entityBadge,
+      titleInput,
+      tagsRow
+    ]);
 
     const startPage = ctx.offset + 1;
 
@@ -984,7 +1076,7 @@
     return App.el('div', { class: 'nb-editor-col' }, [
       backBtn || null,
       ribbon,
-      App.el('div', { class: 'card stack' }, [breadcrumb, titleInput, stage]),
+      App.el('div', { class: 'card stack' }, [noteMeta, stage]),
       statusBar
     ]);
   }
