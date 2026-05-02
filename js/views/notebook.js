@@ -1148,10 +1148,11 @@
       onBlur: () => rerender()
     });
 
+    // Top row: entity badge + date + tags on same line
+    const metaTopRow = App.el('div', { class: 'nb-meta-top-row' }, [entityBadge, tagsRow]);
     const noteMeta = App.el('div', { class: 'nb-note-meta' }, [
-      entityBadge,
-      titleInput,
-      tagsRow
+      metaTopRow,
+      titleInput
     ]);
 
     const startPage = ctx.offset + 1;
@@ -1219,11 +1220,12 @@
       ])
     ]);
 
-    // Ribbon is position:sticky — no spacer needed (stays in flow)
+    // Ribbon + noteMeta share one sticky block so both stay visible while scrolling
+    const stickyHead = App.el('div', { class: 'nb-sticky-head' }, [ribbon, noteMeta]);
     return App.el('div', { class: 'nb-editor-col' }, [
       backBtn || null,
-      ribbon,
-      App.el('div', { class: 'card stack' }, [noteMeta, stage]),
+      stickyHead,
+      App.el('div', { class: 'card stack' }, [stage]),
       statusBar
     ]);
   }
