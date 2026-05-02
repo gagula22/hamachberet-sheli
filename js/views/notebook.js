@@ -587,28 +587,106 @@
     //  4. anything else           → let browser handle normally
 
     function cleanPastedTable(tableEl) {
-      // Return a clean <table> HTML string with our notebook styling
       const rows = [...tableEl.querySelectorAll('tr')];
       if (!rows.length) return null;
 
-      // Detect if first row is a header (all <th>, or Excel often has bold cells)
+      // ── 1. Extract column widths to preserve proportions ────────────────
+      // Excel puts widths in <col width="X"> or as inline style on each <td>
+      const colEls = [...tableEl.querySelectorAll('col')];
+      let rawWidths = [];
+
+      if (colEls.length) {
+        rawWidths = colEls.map(col => {
+          const w = col.getAttribute('width') || col.style.width || '';
+          return parseFloat(w) || 0;
+        });
+      }
+      // Fallback: read from first data row's td attributes / inline styles
+      if (!rawWidths.length || rawWidths.every(w => !w)) {
+        const firstRow = rows[0].querySelectorAll('td, th');
+        rawWidths = [...firstRow].map(cell => {
+          const fromAttr  = parseFloat(cell.getAttribute('width') || 0);
+          const fromStyle = parseFloat((cell.style.width || '').replace(/[^0-9.]/g, '') || 0);
+          return fromAttr || fromStyle || 0;
+        });
+      }
+
+      // Convert to percentage widths (proportional)
+      const totalW   = rawWidths.reduce((s, w) => s + w, 0);
+      const pctWidths = (totalW > 0)
+        ? rawWidths.map(w => +(w / totalW * 100).toFixed(1))
+        : [];
+
+      // ── 2. Detect header row ─────────────────────────────────────────────
       const firstCells = [...rows[0].querySelectorAll('td, th')];
       const isHeader   = firstCells.every(c => c.tagName === 'TH') ||
-                         firstCells.every(c => /font-weight\s*:\s*(bold|700)/i.test(c.getAttribute('style') || ''));
+        firstCells.every(c => /font-weight\s*:\s*(bold|700)/i.test(c.getAttribute('style') || ''));
 
-      const S_TABLE = 'border-collapse:collapse;width:100%;margin:8px 0;';
-      const S_TH    = 'background:#F4ECD8;border:1px solid #D8C9B0;padding:7px 10px;font-weight:600;text-align:start;';
-      const S_TD    = 'border:1px solid #D8C9B0;padding:6px 10px;text-align:start;';
+      // ── 3. Build clean table HTML ────────────────────────────────────────
+      const S_TABLE = 'border-collapse:collapse;width:100%;margin:8px 0;table-layout:fixed;';
+      const S_TH    = 'background:#F4ECD8;border:1px solid #D8C9B0;padding:7px 10px;font-weight:600;text-align:start;overflow-wrap:break-word;';
+      const S_TD    = 'border:1px solid #D8C9B0;padding:6px 10px;text-align:start;overflow-wrap:break-word;';
 
-      let html = '<table dir="rtl" style="' + S_TABLE + '"><tbody>';
+      let html = '<table dir="rtl" style="' + S_TABLE + '">';
+
+      // <colgroup> with percentage widths (drives table-layout:fixed)
+      if (pctWidths.length) {
+        html += '<colgroup>';
+        pctWidths.forEach(pct => { html += '<col style="width:' + pct + '%">'; });
+        html += '</colgroup>';
+      }
+
+      // ── Helper: extract rich cell content (keeps color/bold/italic) ──────
+      function richCellHtml(cell) {
+        const SKIP_COLORS = new Set([
+          'windowtext','black','#000000','#000',
+          'rgb(0,0,0)','rgb(0, 0, 0)','rgba(0,0,0,1)'
+        ]);
+        function walk(node) {
+          if (node.nodeType === 3) { // Text node
+            return node.textContent
+              .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+          }
+          if (node.nodeType !== 1) return '';
+          const tag = node.tagName.toLowerCase();
+          if (['script','style','meta','link','o:p'].includes(tag)) return '';
+          // Block elements — flatten to inline (add space between)
+          if (['p','div','li'].includes(tag)) {
+            return [...node.childNodes].map(walk).join('') + ' ';
+          }
+          if (tag === 'br') return ' ';
+
+          // Collect meaningful styles
+          let sty = '';
+          const cs = node.style || {};
+          const color = cs.color || '';
+          if (color && !SKIP_COLORS.has(color.replace(/\s/g,''))) {
+            sty += 'color:' + color + ';';
+          }
+          const fw = cs.fontWeight || '';
+          const boldByTag = ['b','strong'].includes(tag);
+          if (boldByTag || fw === 'bold' || fw === '700' || parseInt(fw,10) >= 600) {
+            sty += 'font-weight:bold;';
+          }
+          const fi = cs.fontStyle || '';
+          if (['i','em'].includes(tag) || fi === 'italic') sty += 'font-style:italic;';
+          const td = cs.textDecoration || '';
+          if (td && td !== 'none') sty += 'text-decoration:' + td + ';';
+
+          const inner = [...node.childNodes].map(walk).join('');
+          return sty ? '<span style="' + sty + '">' + inner + '</span>' : inner;
+        }
+        return [...cell.childNodes].map(walk).join('').trim();
+      }
+
+      html += '<tbody>';
       rows.forEach((row, ri) => {
         html += '<tr>';
         [...row.querySelectorAll('td, th')].forEach(cell => {
-          const tag  = (ri === 0 && isHeader) ? 'th' : 'td';
-          const sty  = (ri === 0 && isHeader) ? S_TH : S_TD;
-          // Strip inner markup to plain text only (removes Excel spans/divs)
-          const text = (cell.innerText || cell.textContent || '').trim();
-          html += '<' + tag + ' style="' + sty + '">' + text + '</' + tag + '>';
+          const tag     = (ri === 0 && isHeader) ? 'th' : 'td';
+          const sty     = (ri === 0 && isHeader) ? S_TH : S_TD;
+          const content = richCellHtml(cell) || '&nbsp;';
+          html += '<' + tag + ' style="' + sty + '">' + content + '</' + tag + '>';
         });
         html += '</tr>';
       });
