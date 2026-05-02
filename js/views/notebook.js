@@ -1695,32 +1695,22 @@
     editor.querySelectorAll('table').forEach(table => {
       if (table.querySelector('.nb-col-resize-handle')) return; // already attached
 
+      // Only attach to tables that were pasted from Excel/Sheets —
+      // those already have <col> elements + table-layout:fixed.
+      // Never touch manually-inserted tables to avoid breaking their layout.
+      const colEls = [...table.querySelectorAll('col')];
+      if (!colEls.length) return;
+
       const firstRow = table.querySelector('tr');
       if (!firstRow) return;
-
       const cells = [...firstRow.querySelectorAll('th, td')];
-      let colEls   = [...table.querySelectorAll('col')];
-
-      // Ensure a <colgroup> exists so we can resize via col.style.width
-      if (!colEls.length) {
-        const cg = document.createElement('colgroup');
-        cells.forEach(cell => {
-          const col = document.createElement('col');
-          col.style.width = cell.offsetWidth + 'px';
-          cg.appendChild(col);
-        });
-        table.insertBefore(cg, table.firstChild);
-        colEls = [...cg.querySelectorAll('col')];
-        // Switch to fixed layout so col widths take effect
-        table.style.tableLayout = 'fixed';
-      }
 
       cells.forEach((cell, ci) => {
         if (ci >= cells.length - 1) return; // no handle on last column
 
         cell.style.position = 'relative';
         const handle = document.createElement('span');
-        handle.className   = 'nb-col-resize-handle';
+        handle.className       = 'nb-col-resize-handle';
         handle.contentEditable = 'false';
 
         handle.addEventListener('mousedown', (e) => {
@@ -1731,7 +1721,7 @@
           const col        = colEls[ci];
           const colNext    = colEls[ci + 1];
           const startW     = parseInt(col?.style.width)     || cells[ci].offsetWidth;
-          const startNextW = parseInt(colNext?.style.width) || (cells[ci + 1] ? cells[ci + 1].offsetWidth : 0);
+          const startNextW = parseInt(colNext?.style.width) || (cells[ci + 1]?.offsetWidth || 80);
 
           document.body.classList.add('nb-col-resizing');
 
@@ -1739,11 +1729,7 @@
             const dx   = ev.clientX - startX;
             const newW = Math.max(40, startW + dx);
             if (col) col.style.width = newW + 'px';
-            // Don't shrink the next column — allow the table to grow instead
-            if (colNext) {
-              const newNextW = Math.max(40, startNextW - dx);
-              colNext.style.width = newNextW + 'px';
-            }
+            if (colNext) colNext.style.width = Math.max(40, startNextW - dx) + 'px';
           };
 
           const onUp = () => {
