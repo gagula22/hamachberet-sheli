@@ -505,8 +505,15 @@
       }
     }
 
+    // Strip UI-only handles before reading HTML (never saved to disk)
+    function getCleanHTML() {
+      const clone = editor.cloneNode(true);
+      clone.querySelectorAll('.nb-col-resize-handle').forEach(h => h.remove());
+      return clone.innerHTML;
+    }
+
     function saveImmediate() {
-      updateTopic(topic.id, { body: editor.innerHTML, updatedAt: Date.now() });
+      updateTopic(topic.id, { body: getCleanHTML(), updatedAt: Date.now() });
       refreshPageLabels();
     }
     const save = Editable.debounce(saveImmediate, 500);
@@ -517,9 +524,9 @@
     const MAX_UNDO  = 60;
 
     function pushUndo() {
-      const snap = editor.innerHTML;
-      if (_undoPtr >= 0 && _undoStack[_undoPtr] === snap) return; // no change
-      _undoStack.splice(_undoPtr + 1);           // discard forward history
+      const snap = getCleanHTML(); // no handles in snapshots
+      if (_undoPtr >= 0 && _undoStack[_undoPtr] === snap) return;
+      _undoStack.splice(_undoPtr + 1);
       _undoStack.push(snap);
       if (_undoStack.length > MAX_UNDO) _undoStack.shift();
       else _undoPtr++;
@@ -530,6 +537,7 @@
       restoreMoodBlocks(editor);
       Editable.attachImageBehaviors(editor, save);
       attachMoodBehaviors(editor, save);
+      attachTableResizers(editor, save); // re-attach after undo/redo
       saveImmediate();
     }
 
@@ -577,6 +585,7 @@
     Editable.attachImageBehaviors(editor, save);
     attachMoodBehaviors(editor, save);
     wrapImagesInEditor(editor);
+    attachTableResizers(editor, save); // uses RAF internally — safe at load time
 
     // ── Paste: images from clipboard ──────────────────────────────────────
     editor.addEventListener('paste', (e) => {
@@ -1111,6 +1120,7 @@
       html += '</tbody></table><p dir="rtl"><br></p>';
       editor.focus();
       exec('insertHTML', html);
+      attachTableResizers(editor, save); // attach handles to the freshly-inserted table
       save();
     }
     function insertCheckboxList() {
@@ -1575,6 +1585,107 @@
     };
     reader.onerror = () => App.toast('שגיאה בקריאת הקובץ');
     reader.readAsDataURL(file);
+  }
+
+  // ── Table column resize handles ──────────────────────────────────────────
+  // Called on editor load, after undo/redo, and after inserting a new table.
+  // Uses requestAnimationFrame so offsetWidth values are real rendered widths.
+  function attachTableResizers(editorEl, saveFn) {
+    requestAnimationFrame(() => {
+      editorEl.querySelectorAll('table').forEach(table => {
+        _attachResizersToTable(table, saveFn);
+      });
+    });
+  }
+
+  function _attachResizersToTable(table, saveFn) {
+    // Skip if handles already present (e.g. called twice before RAF fires)
+    if (table.querySelector('.nb-col-resize-handle')) return;
+
+    // Ensure word-wrap on every cell (fixes old tables that lack it)
+    table.querySelectorAll('td, th').forEach(cell => {
+      cell.style.wordBreak = 'break-word';
+      cell.style.overflowWrap = 'break-word';
+    });
+    table.style.tableLayout = 'fixed';
+
+    const firstRow = table.querySelector('tr');
+    if (!firstRow) return;
+    const cells = Array.from(firstRow.querySelectorAll('th, td'));
+    if (cells.length < 2) return; // single-column — nothing to resize
+
+    let cg = table.querySelector('colgroup');
+    const existingCols = cg ? Array.from(cg.querySelectorAll('col')) : [];
+
+    // Build/replace colgroup when missing or column count mismatches
+    if (!cg || existingCols.length !== cells.length) {
+      if (cg) cg.remove();
+      const tableW = table.offsetWidth || 1;
+      cg = document.createElement('colgroup');
+      cells.forEach(cell => {
+        const col = document.createElement('col');
+        const pct = Math.max(5, Math.round((cell.offsetWidth / tableW) * 100));
+        col.style.width = pct + '%';
+        cg.appendChild(col);
+      });
+      table.insertBefore(cg, table.firstChild);
+    }
+
+    const cols = Array.from(cg.querySelectorAll('col'));
+    const numCols = cols.length;
+    // RTL tables: dragging the handle right shrinks the column to its right (physical)
+    const isRTL = getComputedStyle(table).direction === 'rtl';
+
+    cells.forEach((cell, i) => {
+      if (i >= numCols - 1) return; // no handle after the last column
+
+      const handle = document.createElement('span');
+      handle.className = 'nb-col-resize-handle';
+      handle.setAttribute('contenteditable', 'false');
+      handle.title = 'גרור לשינוי רוחב עמודה';
+      cell.appendChild(handle);
+
+      handle.addEventListener('mousedown', (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+
+        const tW    = table.offsetWidth || 1;
+        const startX = ev.clientX;
+        const colA   = cols[i];
+        const colB   = cols[i + 1];
+        const sPctA  = parseFloat(colA.style.width) || (100 / numCols);
+        const sPctB  = parseFloat(colB.style.width) || (100 / numCols);
+        const minPct = 5;
+        const maxPctA = sPctA + sPctB - minPct;
+
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+        handle.classList.add('active');
+
+        function onMove(e2) {
+          const dx = e2.clientX - startX;
+          // RTL: separator physical-left belongs to col[i+1]→drag right shrinks col[i]
+          const eff  = isRTL ? -dx : dx;
+          const dPct = (eff / tW) * 100;
+          const newA = Math.max(minPct, Math.min(maxPctA, sPctA + dPct));
+          const newB = sPctA + sPctB - newA;
+          colA.style.width = newA.toFixed(2) + '%';
+          colB.style.width = newB.toFixed(2) + '%';
+        }
+
+        function onUp() {
+          document.removeEventListener('mousemove', onMove);
+          document.removeEventListener('mouseup', onUp);
+          document.body.style.cursor    = '';
+          document.body.style.userSelect = '';
+          handle.classList.remove('active');
+          if (saveFn) saveFn();
+        }
+
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+      });
+    });
   }
 
   // Wrap plain <img> elements from old saved content with resize handles
