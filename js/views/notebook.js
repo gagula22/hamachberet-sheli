@@ -623,16 +623,35 @@
         firstCells.every(c => /font-weight\s*:\s*(bold|700)/i.test(c.getAttribute('style') || ''));
 
       // ── 3. Build clean table HTML ────────────────────────────────────────
-      const S_TABLE = 'border-collapse:collapse;width:100%;margin:8px 0;table-layout:fixed;';
-      const S_TH    = 'background:#F4ECD8;border:1px solid #D8C9B0;padding:7px 10px;font-weight:600;text-align:start;overflow-wrap:break-word;';
-      const S_TD    = 'border:1px solid #D8C9B0;padding:6px 10px;text-align:start;overflow-wrap:break-word;';
+      // Detect source direction — Excel stores columns LTR in its HTML even
+      // for Hebrew sheets, so we preserve that to avoid column-order reversal.
+      const srcDir = tableEl.getAttribute('dir') ||
+                     (tableEl.style && tableEl.style.direction) || 'ltr';
 
-      let html = '<table dir="rtl" style="' + S_TABLE + '">';
+      // Use actual pixel widths so the table can exceed A4 width naturally.
+      // Excel col widths are in "character units" (~8px each); pts from Sheets
+      // are already pixels-ish. We detect by whether rawWidths sum looks like
+      // character units (< 500 total → multiply by 8) or already pixels (> 500).
+      let colPx = [];
+      if (rawWidths.length && totalW > 0) {
+        const factor = totalW < 500 ? 8 : 1; // char-units → px approximation
+        colPx = rawWidths.map(w => Math.round(w * factor));
+      }
+      const tableWidthPx = colPx.reduce((s, w) => s + w, 0);
 
-      // <colgroup> with percentage widths (drives table-layout:fixed)
-      if (pctWidths.length) {
+      const S_TABLE = 'border-collapse:collapse;margin:8px 0;table-layout:fixed;'
+                    + (tableWidthPx > 0 ? 'width:' + tableWidthPx + 'px;' : 'width:100%;');
+      const S_TH    = 'background:#F4ECD8;border:1px solid #D8C9B0;padding:7px 10px;font-weight:600;text-align:start;white-space:pre-wrap;';
+      const S_TD    = 'border:1px solid #D8C9B0;padding:6px 10px;text-align:start;white-space:pre-wrap;';
+
+      // Wrap in a scrollable container so table can exceed A4 width
+      let html = '<div style="overflow-x:auto;max-width:100%;margin:8px 0;">'
+               + '<table dir="' + srcDir + '" style="' + S_TABLE + '">';
+
+      // <colgroup> with pixel widths
+      if (colPx.length) {
         html += '<colgroup>';
-        pctWidths.forEach(pct => { html += '<col style="width:' + pct + '%">'; });
+        colPx.forEach(px => { html += '<col style="width:' + px + 'px">'; });
         html += '</colgroup>';
       }
 
@@ -690,7 +709,7 @@
         });
         html += '</tr>';
       });
-      html += '</tbody></table><p dir="rtl"><br></p>';
+      html += '</tbody></table></div><p dir="rtl"><br></p>';
       return html;
     }
 
