@@ -2079,6 +2079,16 @@ figure.nb-img.nb-img-dragging { opacity: 0.35; pointer-events: none; }
   background: var(--nb-bg-tag);
   color: var(--nb-accent-str, #8C4A2C);
 }
+/* Already-applied tag — greyed out, not clickable */
+.nb-tag-dd-applied {
+  opacity: 0.45;
+  cursor: default;
+}
+.nb-tag-dd-check {
+  margin-inline-end: 4px;
+  color: var(--nb-success, #2D8C4F);
+  font-size: 11px;
+}
 
 /* Wiki link style in editor */
 .nb-wiki-link {

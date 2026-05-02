@@ -1165,20 +1165,20 @@
 
     function showSuggest(filter) {
       const lower = (filter || '').toLowerCase();
-      const suggestions = getAllKnownTags()
-        .filter(t => !topicTags.includes(t))
+      const all = getAllKnownTags()
         .filter(t => !lower || t.toLowerCase().includes(lower))
-        .slice(0, 10);
-      if (!suggestions.length) { hideSuggest(); return; }
+        .slice(0, 12);
+      if (!all.length) { hideSuggest(); return; }
       tagSuggest.innerHTML = '';
-      suggestions.forEach(tag => {
+      all.forEach(tag => {
+        const already = topicTags.includes(tag);
         const item = document.createElement('div');
-        item.className = 'nb-tag-dd-item';
-        item.textContent = '#' + tag;
+        item.className = 'nb-tag-dd-item' + (already ? ' nb-tag-dd-applied' : '');
         item.setAttribute('tabindex', '-1');
+        item.innerHTML = (already ? '<span class="nb-tag-dd-check">✓</span>' : '') + '#' + tag;
         item.addEventListener('mousedown', (e) => {
-          e.preventDefault();  // keep input focus
-          addTag(tag);
+          e.preventDefault();
+          if (!already) addTag(tag);
         });
         tagSuggest.appendChild(item);
       });
