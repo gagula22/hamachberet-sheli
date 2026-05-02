@@ -1878,15 +1878,24 @@
         .filter(Boolean).map((g, i) => `<li dir="rtl">${i + 1}. ${g}</li>`).join('');
       const date = new Date().toLocaleDateString('he-IL');
 
-      const html = `<div dir="rtl" style="background:var(--nb-bg-soft);border:0.5px solid var(--nb-border-soft);border-radius:10px;padding:14px 18px;margin:10px 0">
-<div style="font-size:11px;color:var(--nb-text-3);margin-bottom:8px;font-family:sans-serif">🎭 יומן מצב רוח · ${date}</div>
-<div style="display:flex;flex-wrap:wrap;gap:12px;font-size:13px;margin-bottom:${txt || gratitude ? 10 : 0}px;font-family:sans-serif">
+      const BG   = '#E8F5F8';
+      const BOR  = '#A8D8E8';
+      const LBL  = '#2B6E82';
+      const html = `<div dir="rtl" style="background:${BG};border:1px solid ${BOR};border-radius:12px;padding:16px 20px;margin:12px 0;font-family:'Heebo',sans-serif;">
+<div style="font-size:11px;color:${LBL};margin-bottom:10px;font-weight:600;letter-spacing:0.3px;">🎭 יומן מצב רוח · ${date}</div>
+<div style="display:flex;flex-wrap:wrap;gap:14px;font-size:13px;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid ${BOR};">
   <span><strong>מצב רוח:</strong> ${moodLbl}</span>
   <span><strong>אנרגיה:</strong> ${energyStr}</span>
   <span><strong>שינה:</strong> ${sleepStr}</span>
 </div>
-${txt ? `<div style="font-size:13px;color:var(--nb-text-2);margin-bottom:8px;padding:6px 10px;background:var(--nb-bg-card);border-radius:6px">${txt.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>` : ''}
-${gratitude ? `<div style="font-size:13px"><strong>מודה על:</strong><ol dir="rtl" style="margin:4px 0 0;padding-right:20px">${gratitude}</ol></div>` : ''}
+${txt ? `<div style="margin-bottom:10px;">
+  <div style="font-size:12px;font-weight:600;color:${LBL};margin-bottom:4px;">💭 מה השפיע על מצב הרוח שלי?</div>
+  <div style="font-size:13px;color:#2C4A55;padding:8px 12px;background:rgba(255,255,255,0.65);border-radius:8px;white-space:pre-wrap;">${txt.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
+</div>` : ''}
+${gratitude ? `<div>
+  <div style="font-size:12px;font-weight:600;color:${LBL};margin-bottom:6px;">🙏 3 דברים שאני מודה עליהם</div>
+  <ol dir="rtl" style="margin:0;padding-right:20px;font-size:13px;color:#2C4A55;">${gratitude}</ol>
+</div>` : ''}
 </div><p dir="rtl"><br></p>`;
 
       editor.focus();
