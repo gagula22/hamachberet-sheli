@@ -2074,3 +2074,67 @@ figure.nb-img.nb-img-dragging { opacity: 0.35; pointer-events: none; }
   padding: 0 !important;
   overflow: hidden !important;
 }
+
+/* ============================================================
+   NOTEBOOK: Tag Cloud Sidebar Section
+============================================================ */
+
+/* Section container — separated from topics with a subtle border */
+.nb-tag-cloud-section {
+  border-top: 0.5px solid var(--nb-border-soft);
+  padding-top: 4px;
+  margin-top: 4px;
+}
+
+/* Pills wrapper */
+.nb-tag-cloud-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding: 6px 4px 4px;
+}
+
+/* Individual tag pill */
+.nb-tag-cloud-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--nb-bg-tag);
+  color: var(--nb-text-2);
+  border: 1px solid var(--nb-border-soft);
+  border-radius: 20px;
+  padding: 2px 8px 2px 7px;
+  font-size: 11px;
+  font-family: 'Heebo', sans-serif;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+  user-select: none;
+  white-space: nowrap;
+}
+.nb-tag-cloud-pill:hover {
+  background: var(--nb-bg-active);
+  border-color: var(--nb-border-mid);
+  color: var(--nb-text-1);
+}
+.nb-tag-cloud-pill.active {
+  background: var(--nb-accent);
+  border-color: var(--nb-accent);
+  color: #fff;
+  font-weight: 600;
+}
+.nb-tag-cloud-pill.active .nb-tag-cloud-count {
+  opacity: 0.75;
+}
+
+/* Count badge inside pill */
+.nb-tag-cloud-count {
+  opacity: 0.5;
+  font-size: 10px;
+}
+
+/* Empty state */
+.nb-tag-cloud-empty {
+  font-size: 11px;
+  color: var(--nb-text-4);
+  padding: 2px 4px;
+}

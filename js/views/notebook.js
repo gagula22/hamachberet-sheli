@@ -130,6 +130,7 @@
   let lastRenderedId = null;
   let draggedId = null;
   let mobilePanel = 'topics'; // 'topics' | 'editor'
+  let activeTagFilter = null;  // tag string or null
 
   function isMobile() { return window.innerWidth <= 768; }
 
@@ -154,20 +155,74 @@
       }
     }, '+');
 
-    const topicsEl = App.el('div', { class: 'nb-topics' },
-      topics.length
+    // ── Topics list (supports tag filter) ───────────────────────────────
+    let topicsContent;
+    if (activeTagFilter) {
+      const filtered = topics.filter(t => Array.isArray(t.tags) && t.tags.includes(activeTagFilter));
+      topicsContent = filtered.length
+        ? filtered.map(t => renderRow(t, 0))
+        : [App.el('div', { class: 'empty-state', style: { padding: '24px 8px' } }, 'לא נמצאו נושאים עם תגית זו')];
+    } else {
+      topicsContent = topics.length
         ? renderTree(null, 0)
-        : [App.el('div', { class: 'empty-state', style: { padding: '24px 8px' } }, 'עדיין אין נושאים')]
-    );
+        : [App.el('div', { class: 'empty-state', style: { padding: '24px 8px' } }, 'עדיין אין נושאים')];
+    }
+    const topicsEl = App.el('div', { class: 'nb-topics' }, topicsContent);
+
+    // ── Tag cloud ────────────────────────────────────────────────────────
+    const tagCounts = {};
+    topics.forEach(t => (t.tags || []).forEach(tag => {
+      tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+    }));
+    const sortedTags = Object.entries(tagCounts).sort((a, b) => b[1] - a[1]);
+
+    const tagPillsEl = App.el('div', { class: 'nb-tag-cloud-pills' });
+    if (sortedTags.length === 0) {
+      tagPillsEl.appendChild(
+        App.el('div', { class: 'nb-tag-cloud-empty' }, 'אין תגיות עדיין')
+      );
+    } else {
+      sortedTags.forEach(([tag, count]) => {
+        const isActive = activeTagFilter === tag;
+        const pill = App.el('span', {
+          class: 'nb-tag-cloud-pill' + (isActive ? ' active' : '')
+        }, [
+          document.createTextNode('#' + tag + ' '),
+          App.el('span', { class: 'nb-tag-cloud-count' }, String(count))
+        ]);
+        pill.addEventListener('click', () => {
+          activeTagFilter = isActive ? null : tag;
+          rerender();
+        });
+        tagPillsEl.appendChild(pill);
+      });
+    }
+
+    const clearFilterBtn = activeTagFilter
+      ? App.el('button', {
+          class: 'nb-sidebar-add-btn',
+          title: 'נקה סינון',
+          onClick: () => { activeTagFilter = null; rerender(); }
+        }, '✕')
+      : null;
+
+    const tagCloudSection = App.el('div', { class: 'nb-sidebar-section nb-tag-cloud-section' }, [
+      App.el('div', { class: 'nb-sidebar-title' }, [
+        App.el('span', {}, '🏷️ תגיות'),
+        clearFilterBtn
+      ].filter(Boolean)),
+      tagPillsEl
+    ]);
 
     const left = App.el('div', { class: 'nb-topics-col' }, [
       App.el('div', { class: 'nb-sidebar-section' }, [
         App.el('div', { class: 'nb-sidebar-title' }, [
-          App.el('span', {}, '📚 מחברות'),
+          App.el('span', {}, activeTagFilter ? ('📚 מחברות — #' + activeTagFilter) : '📚 מחברות'),
           addRootBtn
         ]),
         topicsEl
-      ])
+      ]),
+      tagCloudSection
     ]);
 
     // Mobile back button (shown only in editor panel on small screens)
