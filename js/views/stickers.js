@@ -1180,7 +1180,11 @@ self.onmessage = async function(e) {
       if (!_vtRunning) transcribeFile(e.dataTransfer.files[0]);
     });
 
-    // ── YouTube → cobalt → Whisper ────────────────────────────────────────
+    // ── YouTube → cobalt.tools download launcher ──────────────────────────
+    // Public Invidious/Piped/CORS proxies are dead or rate-limited as of 2026.
+    // Instead of trying (and failing) to fetch audio from a static page, we
+    // hand off to cobalt.tools — a maintained downloader site. The user gets
+    // a real audio file, drops it on the zone above, and Whisper does the rest.
     const ytInput = document.createElement('input');
     ytInput.type = 'text';
     ytInput.placeholder = 'הדבק קישור YouTube…';
@@ -1190,7 +1194,7 @@ self.onmessage = async function(e) {
       style: { padding: '8px 18px', background: '#f5c842', border: 'none',
                borderRadius: '8px', fontWeight: 700, fontSize: '13px',
                cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: '0' }
-    }, '🎙 תמלל');
+    }, '⬇ הורד אודיו');
 
     const ytStatusEl = App.el('div', {
       style: { fontSize: '12px', color: 'var(--ink-mute)', marginTop: '8px', lineHeight: '1.55', minHeight: '16px' }
@@ -1201,318 +1205,33 @@ self.onmessage = async function(e) {
       ytStatusEl.style.color = color || 'var(--ink-mute)';
     }
 
-    async function startYtTranscription() {
+    function startYtDownload() {
       const url = ytInput.value.trim();
       if (!url) { ytInput.focus(); return; }
-      if (_vtRunning) return;
-
-      // Read advanced settings up-front so validation errors fail fast
-      let adv;
-      try { adv = _readAdvanced(); }
-      catch (err) {
-        _ytStatus('❌ ' + err.message, '#c00');
-        _vtShowError(err.message);
+      const vidId = _extractYouTubeId(url);
+      if (!vidId) {
+        _ytStatus('❌ קישור YouTube לא תקין', '#c00');
         return;
       }
-
-      _vtRunning = true;
-      ytBtn.disabled = true;
-      ytBtn.textContent = '⏳';
-      bgBadge.style.display = 'block';
-
-      (async function() {
-        try {
-          // 1. Get audio URL — try multiple services
-          _ytStatus('⏳ מקבל קישור הורדה…');
-          _vtShowProgress(3, 'מקבל קישור הורדה מ-YouTube…');
-
-          const vidId = _extractYouTubeId(url);
-          if (!vidId) throw new Error('קישור YouTube לא תקין');
-
-          // Race captions + ALL audio providers in parallel.
-          // First success wins. Captions are usually fastest and skip Whisper entirely.
-          let winnerLabel = '';
-          let audioUrl = null;
-          let captionsResult = null;     // { chunks, text, lang } if captions won
-
-          function _hostOf(u) {
-            try { return new URL(u).host.replace(/^www\./, ''); } catch(_) { return u; }
-          }
-
-          var pipedInst = [
-            'https://pipedapi.kavin.rocks',
-            'https://pipedapi.tokhmi.xyz',
-            'https://pipedapi.adminforge.de',
-            'https://api.piped.private.coffee',
-            'https://pipedapi.r4fo.com',
-            'https://pipedapi.ducks.party',
-            'https://pipedapi.nosebs.ru'
-          ];
-          var invInstances = [
-            'https://inv.nadeko.net',
-            'https://invidious.privacydev.net',
-            'https://iv.datura.network',
-            'https://yt.cdaut.de',
-            'https://invidious.nerdvpn.de',
-            'https://invidious.projectsegfau.lt',
-            'https://invidious.fdn.fr',
-            'https://invidious.lunar.icu'
-          ];
-
-          async function _tryPiped(host, signal) {
-            var r = await fetch(host + '/streams/' + vidId, { signal: signal });
-            if (!r.ok) throw new Error('http ' + r.status);
-            var d = await r.json();
-            if (!d.audioStreams || !d.audioStreams.length) throw new Error('no audio streams');
-            var ps = d.audioStreams.slice().sort(function(a,b){
-              return (parseInt(b.bitrate)||0) - (parseInt(a.bitrate)||0);
-            });
-            var raw = ps[0].url;
-            return raw.indexOf('googlevideo.com') >= 0
-              ? 'https://corsproxy.io/?' + encodeURIComponent(raw)
-              : raw;
-          }
-
-          async function _tryInvApi(host, signal) {
-            var r = await fetch(host + '/api/v1/videos/' + vidId + '?fields=adaptiveFormats',
-                                { signal: signal });
-            if (!r.ok) throw new Error('http ' + r.status);
-            var d = await r.json();
-            if (!d.adaptiveFormats || !d.adaptiveFormats.length) throw new Error('no formats');
-            var aud = d.adaptiveFormats.filter(function(f){ return f.type && f.type.indexOf('audio/') === 0; });
-            if (!aud.length) throw new Error('no audio formats');
-            var best = aud.sort(function(a,b){ return (b.bitrate||0) - (a.bitrate||0); })[0];
-            return 'https://corsproxy.io/?' + encodeURIComponent(best.url);
-          }
-
-          async function _tryInvCdn(host, signal) {
-            var u = host + '/latest_version?id=' + vidId + '&itag=140&local=true';
-            var r = await fetch(u, { signal: signal, method: 'GET',
-                                     headers: { 'Range': 'bytes=0-1023' } });
-            if (!(r.ok || r.status === 206)) throw new Error('http ' + r.status);
-            return u;
-          }
-
-          // YouTube auto-captions fallback — bypasses audio + Whisper entirely.
-          async function _tryYtCaptions(signal) {
-            var pageProxy = 'https://corsproxy.io/?' +
-              encodeURIComponent('https://www.youtube.com/watch?v=' + vidId + '&hl=iw');
-            var r = await fetch(pageProxy, { signal: signal });
-            if (!r.ok) throw new Error('page http ' + r.status);
-            var html = await r.text();
-            var m = html.match(/"captionTracks":(\[[^\]]+\])/);
-            if (!m) throw new Error('no captionTracks');
-            var tracks;
-            try { tracks = JSON.parse(m[1].replace(/\\u0026/g, '&')); }
-            catch (_) { throw new Error('parse captionTracks'); }
-            if (!tracks.length) throw new Error('no tracks');
-
-            // Prefer Hebrew explicit, then any Hebrew (incl. ASR), then any ASR, else first
-            var pick = tracks.find(function(t){ return (t.languageCode === 'iw' || t.languageCode === 'he') && t.kind !== 'asr'; })
-                    || tracks.find(function(t){ return t.languageCode === 'iw' || t.languageCode === 'he'; })
-                    || tracks.find(function(t){ return t.kind === 'asr'; })
-                    || tracks[0];
-            if (!pick || !pick.baseUrl) throw new Error('no usable track');
-
-            var trackUrl = pick.baseUrl.replace(/\\u0026/g, '&').replace(/\\\//g, '/').replace(/&fmt=[^&]*/, '');
-            var tr = await fetch('https://corsproxy.io/?' + encodeURIComponent(trackUrl), { signal: signal });
-            if (!tr.ok) throw new Error('transcript http ' + tr.status);
-            var xml = await tr.text();
-
-            var re = /<text\s+start="([\d.]+)"\s+dur="([\d.]+)"[^>]*>([\s\S]*?)<\/text>/g;
-            var chunks = [];
-            var mm;
-            while ((mm = re.exec(xml)) !== null) {
-              var start = parseFloat(mm[1]);
-              var dur   = parseFloat(mm[2]);
-              var t = mm[3]
-                .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
-                .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&#10;/g, ' ')
-                .replace(/<[^>]+>/g, '').trim();
-              if (t) chunks.push({ timestamp: [start, start + dur], text: ' ' + t });
-            }
-            if (!chunks.length) throw new Error('empty transcript');
-            return {
-              chunks: chunks,
-              text: chunks.map(function(c){ return c.text; }).join('').trim(),
-              lang: pick.languageCode + (pick.kind === 'asr' ? ' (אוטומטי)' : '')
-            };
-          }
-
-          var raceCtrl = new AbortController();
-          var raceTimer = setTimeout(function(){ raceCtrl.abort(); }, 9000);
-          var attempts = [];
-
-          // Captions attempt — wins skip Whisper entirely
-          attempts.push(_tryYtCaptions(raceCtrl.signal).then(function(c){
-            return { kind: 'captions', captions: c, label: 'YouTube-Captions:' + c.lang };
-          }));
-          pipedInst.forEach(function(h){
-            attempts.push(_tryPiped(h, raceCtrl.signal).then(function(u){
-              return { kind: 'audio', url: u, label: 'Piped:' + _hostOf(h) };
-            }));
-          });
-          invInstances.forEach(function(h){
-            attempts.push(_tryInvApi(h, raceCtrl.signal).then(function(u){
-              return { kind: 'audio', url: u, label: 'Invidious-API:' + _hostOf(h) };
-            }));
-            attempts.push(_tryInvCdn(h, raceCtrl.signal).then(function(u){
-              return { kind: 'audio', url: u, label: 'Invidious-CDN:' + _hostOf(h) };
-            }));
-          });
-
-          _ytStatus('⏳ מנסה כתוביות + ' + (attempts.length - 1) + ' פרוקסים במקביל…');
-          _vtShowProgress(5, 'מנסה כתוביות אוטומטיות + ' + (attempts.length - 1) + ' פרוקסי אודיו במקביל…');
-
-          try {
-            var winner = await Promise.any(attempts);
-            winnerLabel = winner.label;
-            if (winner.kind === 'captions') {
-              captionsResult = winner.captions;
-              console.log('[YT] captions won:', winnerLabel);
-            } else {
-              audioUrl = winner.url;
-              console.log('[YT] audio won:', winnerLabel);
-            }
-          } catch (e) {
-            throw new Error('כל הפרוקסים נכשלו (' +
-                            pipedInst.length + ' Piped + ' +
-                            (invInstances.length * 2) + ' Invidious + כתוביות אוטומטיות). ' +
-                            'הסרטון אולי פרטי/מוגבל ובלי כתוביות, או שכל השרתים הציבוריים למטה כרגע.');
-          } finally {
-            clearTimeout(raceTimer);
-            raceCtrl.abort();   // cancel slower attempts
-          }
-
-          // ── Branch: captions path skips audio download + Whisper ──────────
-          var text;
-          var chunks;
-          var offsetSec = adv.startSec || 0;
-          var docTitleSrc;
-
-          if (captionsResult) {
-            _ytStatus('✓ כתוביות ' + captionsResult.lang + ' · בונה מסמך…');
-            _vtShowProgress(85, 'מצאתי כתוביות אוטומטיות מ-YouTube · בונה מסמך…');
-            // Filter chunks by start/end if user set a range (timestamps are absolute)
-            chunks = captionsResult.chunks.filter(function(c){
-              var s = c.timestamp[0];
-              if (adv.startSec != null && s < adv.startSec) return false;
-              if (adv.endSec   != null && s > adv.endSec)   return false;
-              return true;
-            });
-            // Re-rebase to start of clipped range so offsetSec adds back correctly
-            if (offsetSec) {
-              chunks = chunks.map(function(c){
-                return { timestamp: [c.timestamp[0] - offsetSec, c.timestamp[1] - offsetSec], text: c.text };
-              });
-            }
-            text = chunks.map(function(c){ return c.text; }).join('').trim();
-            docTitleSrc = 'תמלול עברית · YouTube auto-captions · ' + captionsResult.lang;
-          } else {
-            // 2. Download audio blob
-            _ytStatus('✓ מצאתי דרך ' + winnerLabel + ' · מוריד אודיו…');
-            _vtShowProgress(10, 'מוריד אודיו (' + winnerLabel + ')…');
-            const audioRes = await fetch(audioUrl);
-            if (!audioRes.ok) throw new Error('שגיאה בהורדת האודיו (' + audioRes.status + ')');
-            const ab = await audioRes.arrayBuffer();
-
-            // 3. Decode to 16kHz mono Float32Array
-            _ytStatus('⏳ מפענח אודיו…');
-            _vtShowProgress(18, 'מפענח אודיו…');
-            const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
-            const decoded  = await audioCtx.decodeAudioData(ab.slice(0));
-            const nCh = decoded.numberOfChannels;
-            let audio;
-            if (nCh > 1) {
-              const c0 = decoded.getChannelData(0), c1 = decoded.getChannelData(1);
-              audio = new Float32Array(c0.length);
-              for (var i = 0; i < c0.length; i++) audio[i] = (c0[i] + c1[i]) * 0.5;
-            } else {
-              audio = new Float32Array(decoded.getChannelData(0));
-            }
-            audioCtx.close();
-
-            // 3b. Trim to advanced range if provided
-            audio = _trimAudio(audio, adv.startSec, adv.endSec);
-            const durationMin = Math.round(audio.length / 16000 / 60);
-
-            // 4. Init Whisper Worker
-            const isMedium = adv.model.indexOf('medium') >= 0;
-            _wwProgCb = function(p) {
-              if (p.status === 'progress') {
-                var pct = Math.round(p.progress || 0);
-                var sizeNote = isMedium ? '~750MB' : '~150MB';
-                var msg = 'מוריד מודל Whisper (' + sizeNote + ')… ' + pct + '% — חד-פעמי';
-                _ytStatus('⏳ ' + msg);
-                _vtShowProgress(18 + pct * 0.15, msg);
-              }
-            };
-            _ytStatus('⏳ מאתחל מודל Whisper AI…');
-            _vtShowProgress(22, 'מאתחל מודל Whisper AI…');
-            await _ensureWhisperWorker(adv.model);
-
-            // 5. Transcribe
-            var transMsg = 'מתמלל ' + durationMin + ' דקות ברקע…';
-            _ytStatus('⏳ ' + transMsg);
-            _vtShowProgress(35, transMsg);
-            var result = await _whisperTranscribe(audio);
-            text   = result.text;
-            chunks = result.chunks;
-            docTitleSrc = 'תמלול עברית · Whisper AI';
-          }
-
-          // 6. Build Word .doc
-          _vtShowProgress(97, 'מכין קובץ Word…');
-          var baseName = 'YouTube_' + (vidId || 'youtube') + adv.suffix;
-          var dateStr  = new Date().toLocaleDateString('he-IL');
-          var paras = _buildTimestampedHtml(chunks, offsetSec, vidId, text);
-          var docHtml = [
-            '<html xmlns:o="urn:schemas-microsoft-com:office:office"',
-            ' xmlns:w="urn:schemas-microsoft-com:office:word"',
-            ' xmlns="http://www.w3.org/TR/REC-html40">',
-            '<head><meta charset="utf-8"><title>' + _esc(baseName) + '</title>',
-            '<style>body{font-family:Arial,sans-serif;padding:36px;max-width:820px;direction:rtl;}',
-            'p{unicode-bidi:plaintext;}</style></head>',
-            '<body dir="rtl">',
-            '<h1 style="font-size:22px;margin-bottom:4px;direction:rtl;text-align:right;">' + _esc(baseName) + '</h1>',
-            '<p style="font-size:11px;color:#999;margin:0 0 28px;direction:ltr;text-align:left;">' + _esc(docTitleSrc) + ' · ' + dateStr + '</p>',
-            '<hr style="border:none;border-top:1px solid #e0e0e0;margin-bottom:24px;">',
-            paras, '</body></html>'
-          ].join('');
-          var blob    = new Blob(['﻿', docHtml], { type: 'application/msword' });
-          var blobUrl = URL.createObjectURL(blob);
-          var dlName  = baseName + '_תמלול.doc';
-
-          bgBadge.style.display = 'none';
-          var doneNote = captionsResult
-            ? '✅ תמלול הושלם (כתוביות ' + captionsResult.lang + ') · ' + Math.round(text.split(/\s+/).length) + ' מילים'
-            : '✅ תמלול הושלם · ' + Math.round(text.split(/\s+/).length) + ' מילים';
-          _ytStatus(doneNote, '#2d7a2d');
-          _vtShowDone(dlName, blobUrl);
-
-        } catch(e) {
-          bgBadge.style.display = 'none';
-          _ytStatus('❌ ' + e.message, '#c00');
-          _vtShowError(e.message);
-          console.error('[YouTube Transcriber]', e);
-        } finally {
-          _vtRunning = false;
-          ytBtn.disabled = false;
-          ytBtn.textContent = '🎙 תמלל';
-        }
-      })();
+      // cobalt.tools accepts the source URL as a hash fragment and pre-fills the
+      // input. The user just clicks "Audio → MP3 → Download" once it loads.
+      const cobaltUrl = 'https://cobalt.tools/#' + encodeURIComponent(url);
+      window.open(cobaltUrl, '_blank', 'noopener,noreferrer');
+      _ytStatus('✓ נפתחה כרטיסייה חדשה ב-cobalt.tools · הורד את הקובץ וגרור אותו לתיבה למעלה',
+                '#2d7a2d');
     }
 
-    ytBtn.addEventListener('click', startYtTranscription);
-    ytInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') startYtTranscription(); });
+    ytBtn.addEventListener('click', startYtDownload);
+    ytInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') startYtDownload(); });
+
 
     const ytSection = App.el('div', {
       style: { marginTop: '18px', paddingTop: '16px', borderTop: '1px solid var(--line)' }
     }, [
       App.el('div', { style: { fontWeight: 600, fontSize: '13px', marginBottom: '4px' } },
-        '▶️  תמלול YouTube'),
+        '⬇️  הורדת אודיו מ-YouTube'),
       App.el('div', { style: { fontSize: '12px', color: 'var(--ink-mute)', marginBottom: '10px', lineHeight: '1.5' } },
-        'הדבק קישור YouTube → לחץ "תמלל" → האודיו יוריד ויתומלל ב-Whisper AI ברקע'),
+        'הדבק קישור YouTube → לחץ "הורד" → ייפתח cobalt.tools בכרטיסייה חדשה. בחר Audio → MP3 → הורד את הקובץ → גרור אותו לתיבה למעלה לתמלול.'),
       App.el('div', { style: { display: 'flex', gap: '8px', alignItems: 'center' } },
         [ytInput, ytBtn]),
       ytStatusEl
