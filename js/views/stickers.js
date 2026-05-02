@@ -1229,10 +1229,11 @@ self.onmessage = async function(e) {
           const vidId = _extractYouTubeId(url);
           if (!vidId) throw new Error('קישור YouTube לא תקין');
 
-          // Race ALL providers in parallel — first one to respond wins.
-          // Sequential fallbacks were burning 1-3 minutes against dead instances.
-          let audioUrl = null;
+          // Race captions + ALL audio providers in parallel.
+          // First success wins. Captions are usually fastest and skip Whisper entirely.
           let winnerLabel = '';
+          let audioUrl = null;
+          let captionsResult = null;     // { chunks, text, lang } if captions won
 
           function _hostOf(u) {
             try { return new URL(u).host.replace(/^www\./, ''); } catch(_) { return u; }
@@ -1292,92 +1293,173 @@ self.onmessage = async function(e) {
             return u;
           }
 
+          // YouTube auto-captions fallback — bypasses audio + Whisper entirely.
+          async function _tryYtCaptions(signal) {
+            var pageProxy = 'https://corsproxy.io/?' +
+              encodeURIComponent('https://www.youtube.com/watch?v=' + vidId + '&hl=iw');
+            var r = await fetch(pageProxy, { signal: signal });
+            if (!r.ok) throw new Error('page http ' + r.status);
+            var html = await r.text();
+            var m = html.match(/"captionTracks":(\[[^\]]+\])/);
+            if (!m) throw new Error('no captionTracks');
+            var tracks;
+            try { tracks = JSON.parse(m[1].replace(/\\u0026/g, '&')); }
+            catch (_) { throw new Error('parse captionTracks'); }
+            if (!tracks.length) throw new Error('no tracks');
+
+            // Prefer Hebrew explicit, then any Hebrew (incl. ASR), then any ASR, else first
+            var pick = tracks.find(function(t){ return (t.languageCode === 'iw' || t.languageCode === 'he') && t.kind !== 'asr'; })
+                    || tracks.find(function(t){ return t.languageCode === 'iw' || t.languageCode === 'he'; })
+                    || tracks.find(function(t){ return t.kind === 'asr'; })
+                    || tracks[0];
+            if (!pick || !pick.baseUrl) throw new Error('no usable track');
+
+            var trackUrl = pick.baseUrl.replace(/\\u0026/g, '&').replace(/\\\//g, '/').replace(/&fmt=[^&]*/, '');
+            var tr = await fetch('https://corsproxy.io/?' + encodeURIComponent(trackUrl), { signal: signal });
+            if (!tr.ok) throw new Error('transcript http ' + tr.status);
+            var xml = await tr.text();
+
+            var re = /<text\s+start="([\d.]+)"\s+dur="([\d.]+)"[^>]*>([\s\S]*?)<\/text>/g;
+            var chunks = [];
+            var mm;
+            while ((mm = re.exec(xml)) !== null) {
+              var start = parseFloat(mm[1]);
+              var dur   = parseFloat(mm[2]);
+              var t = mm[3]
+                .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+                .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&#10;/g, ' ')
+                .replace(/<[^>]+>/g, '').trim();
+              if (t) chunks.push({ timestamp: [start, start + dur], text: ' ' + t });
+            }
+            if (!chunks.length) throw new Error('empty transcript');
+            return {
+              chunks: chunks,
+              text: chunks.map(function(c){ return c.text; }).join('').trim(),
+              lang: pick.languageCode + (pick.kind === 'asr' ? ' (אוטומטי)' : '')
+            };
+          }
+
           var raceCtrl = new AbortController();
-          var raceTimer = setTimeout(function(){ raceCtrl.abort(); }, 8000);
+          var raceTimer = setTimeout(function(){ raceCtrl.abort(); }, 9000);
           var attempts = [];
+
+          // Captions attempt — wins skip Whisper entirely
+          attempts.push(_tryYtCaptions(raceCtrl.signal).then(function(c){
+            return { kind: 'captions', captions: c, label: 'YouTube-Captions:' + c.lang };
+          }));
           pipedInst.forEach(function(h){
             attempts.push(_tryPiped(h, raceCtrl.signal).then(function(u){
-              return { url: u, label: 'Piped:' + _hostOf(h) };
+              return { kind: 'audio', url: u, label: 'Piped:' + _hostOf(h) };
             }));
           });
           invInstances.forEach(function(h){
             attempts.push(_tryInvApi(h, raceCtrl.signal).then(function(u){
-              return { url: u, label: 'Invidious-API:' + _hostOf(h) };
+              return { kind: 'audio', url: u, label: 'Invidious-API:' + _hostOf(h) };
             }));
             attempts.push(_tryInvCdn(h, raceCtrl.signal).then(function(u){
-              return { url: u, label: 'Invidious-CDN:' + _hostOf(h) };
+              return { kind: 'audio', url: u, label: 'Invidious-CDN:' + _hostOf(h) };
             }));
           });
 
-          _ytStatus('⏳ מנסה ' + attempts.length + ' פרוקסים במקביל…');
-          _vtShowProgress(5, 'מנסה ' + attempts.length + ' פרוקסים במקביל (Piped + Invidious)…');
+          _ytStatus('⏳ מנסה כתוביות + ' + (attempts.length - 1) + ' פרוקסים במקביל…');
+          _vtShowProgress(5, 'מנסה כתוביות אוטומטיות + ' + (attempts.length - 1) + ' פרוקסי אודיו במקביל…');
 
           try {
             var winner = await Promise.any(attempts);
-            audioUrl    = winner.url;
             winnerLabel = winner.label;
-            console.log('[YT] winner:', winnerLabel);
+            if (winner.kind === 'captions') {
+              captionsResult = winner.captions;
+              console.log('[YT] captions won:', winnerLabel);
+            } else {
+              audioUrl = winner.url;
+              console.log('[YT] audio won:', winnerLabel);
+            }
           } catch (e) {
-            // AggregateError → all attempts failed/timed out
             throw new Error('כל הפרוקסים נכשלו (' +
                             pipedInst.length + ' Piped + ' +
-                            (invInstances.length * 2) + ' Invidious). הסרטון אולי פרטי/מוגבל, ' +
-                            'או שכל השרתים הציבוריים למטה כרגע. נסה שוב בעוד דקה או הורד ידנית.');
+                            (invInstances.length * 2) + ' Invidious + כתוביות אוטומטיות). ' +
+                            'הסרטון אולי פרטי/מוגבל ובלי כתוביות, או שכל השרתים הציבוריים למטה כרגע.');
           } finally {
             clearTimeout(raceTimer);
             raceCtrl.abort();   // cancel slower attempts
           }
 
-          // 2. Download audio blob
-          _ytStatus('✓ מצאתי דרך ' + winnerLabel + ' · מוריד אודיו…');
-          _vtShowProgress(10, 'מוריד אודיו (' + winnerLabel + ')…');
-          const audioRes = await fetch(audioUrl);
-          if (!audioRes.ok) throw new Error('שגיאה בהורדת האודיו (' + audioRes.status + ')');
-          const ab = await audioRes.arrayBuffer();
+          // ── Branch: captions path skips audio download + Whisper ──────────
+          var text;
+          var chunks;
+          var offsetSec = adv.startSec || 0;
+          var docTitleSrc;
 
-          // 3. Decode to 16kHz mono Float32Array
-          _ytStatus('⏳ מפענח אודיו…');
-          _vtShowProgress(18, 'מפענח אודיו…');
-          const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
-          const decoded  = await audioCtx.decodeAudioData(ab.slice(0));
-          const nCh = decoded.numberOfChannels;
-          let audio;
-          if (nCh > 1) {
-            const c0 = decoded.getChannelData(0), c1 = decoded.getChannelData(1);
-            audio = new Float32Array(c0.length);
-            for (var i = 0; i < c0.length; i++) audio[i] = (c0[i] + c1[i]) * 0.5;
-          } else {
-            audio = new Float32Array(decoded.getChannelData(0));
-          }
-          audioCtx.close();
-
-          // 3b. Trim to advanced range if provided
-          audio = _trimAudio(audio, adv.startSec, adv.endSec);
-          const durationMin = Math.round(audio.length / 16000 / 60);
-          const offsetSec = adv.startSec || 0;
-
-          // 4. Init Whisper Worker
-          const isMedium = adv.model.indexOf('medium') >= 0;
-          _wwProgCb = function(p) {
-            if (p.status === 'progress') {
-              var pct = Math.round(p.progress || 0);
-              var sizeNote = isMedium ? '~750MB' : '~150MB';
-              var msg = 'מוריד מודל Whisper (' + sizeNote + ')… ' + pct + '% — חד-פעמי';
-              _ytStatus('⏳ ' + msg);
-              _vtShowProgress(18 + pct * 0.15, msg);
+          if (captionsResult) {
+            _ytStatus('✓ כתוביות ' + captionsResult.lang + ' · בונה מסמך…');
+            _vtShowProgress(85, 'מצאתי כתוביות אוטומטיות מ-YouTube · בונה מסמך…');
+            // Filter chunks by start/end if user set a range (timestamps are absolute)
+            chunks = captionsResult.chunks.filter(function(c){
+              var s = c.timestamp[0];
+              if (adv.startSec != null && s < adv.startSec) return false;
+              if (adv.endSec   != null && s > adv.endSec)   return false;
+              return true;
+            });
+            // Re-rebase to start of clipped range so offsetSec adds back correctly
+            if (offsetSec) {
+              chunks = chunks.map(function(c){
+                return { timestamp: [c.timestamp[0] - offsetSec, c.timestamp[1] - offsetSec], text: c.text };
+              });
             }
-          };
-          _ytStatus('⏳ מאתחל מודל Whisper AI…');
-          _vtShowProgress(22, 'מאתחל מודל Whisper AI…');
-          await _ensureWhisperWorker(adv.model);
+            text = chunks.map(function(c){ return c.text; }).join('').trim();
+            docTitleSrc = 'תמלול עברית · YouTube auto-captions · ' + captionsResult.lang;
+          } else {
+            // 2. Download audio blob
+            _ytStatus('✓ מצאתי דרך ' + winnerLabel + ' · מוריד אודיו…');
+            _vtShowProgress(10, 'מוריד אודיו (' + winnerLabel + ')…');
+            const audioRes = await fetch(audioUrl);
+            if (!audioRes.ok) throw new Error('שגיאה בהורדת האודיו (' + audioRes.status + ')');
+            const ab = await audioRes.arrayBuffer();
 
-          // 5. Transcribe
-          var transMsg = 'מתמלל ' + durationMin + ' דקות ברקע…';
-          _ytStatus('⏳ ' + transMsg);
-          _vtShowProgress(35, transMsg);
-          var result = await _whisperTranscribe(audio);
-          var text   = result.text;
-          var chunks = result.chunks;
+            // 3. Decode to 16kHz mono Float32Array
+            _ytStatus('⏳ מפענח אודיו…');
+            _vtShowProgress(18, 'מפענח אודיו…');
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+            const decoded  = await audioCtx.decodeAudioData(ab.slice(0));
+            const nCh = decoded.numberOfChannels;
+            let audio;
+            if (nCh > 1) {
+              const c0 = decoded.getChannelData(0), c1 = decoded.getChannelData(1);
+              audio = new Float32Array(c0.length);
+              for (var i = 0; i < c0.length; i++) audio[i] = (c0[i] + c1[i]) * 0.5;
+            } else {
+              audio = new Float32Array(decoded.getChannelData(0));
+            }
+            audioCtx.close();
+
+            // 3b. Trim to advanced range if provided
+            audio = _trimAudio(audio, adv.startSec, adv.endSec);
+            const durationMin = Math.round(audio.length / 16000 / 60);
+
+            // 4. Init Whisper Worker
+            const isMedium = adv.model.indexOf('medium') >= 0;
+            _wwProgCb = function(p) {
+              if (p.status === 'progress') {
+                var pct = Math.round(p.progress || 0);
+                var sizeNote = isMedium ? '~750MB' : '~150MB';
+                var msg = 'מוריד מודל Whisper (' + sizeNote + ')… ' + pct + '% — חד-פעמי';
+                _ytStatus('⏳ ' + msg);
+                _vtShowProgress(18 + pct * 0.15, msg);
+              }
+            };
+            _ytStatus('⏳ מאתחל מודל Whisper AI…');
+            _vtShowProgress(22, 'מאתחל מודל Whisper AI…');
+            await _ensureWhisperWorker(adv.model);
+
+            // 5. Transcribe
+            var transMsg = 'מתמלל ' + durationMin + ' דקות ברקע…';
+            _ytStatus('⏳ ' + transMsg);
+            _vtShowProgress(35, transMsg);
+            var result = await _whisperTranscribe(audio);
+            text   = result.text;
+            chunks = result.chunks;
+            docTitleSrc = 'תמלול עברית · Whisper AI';
+          }
 
           // 6. Build Word .doc
           _vtShowProgress(97, 'מכין קובץ Word…');
@@ -1393,7 +1475,7 @@ self.onmessage = async function(e) {
             'p{unicode-bidi:plaintext;}</style></head>',
             '<body dir="rtl">',
             '<h1 style="font-size:22px;margin-bottom:4px;direction:rtl;text-align:right;">' + _esc(baseName) + '</h1>',
-            '<p style="font-size:11px;color:#999;margin:0 0 28px;direction:ltr;text-align:left;">תמלול עברית · Whisper AI · ' + dateStr + '</p>',
+            '<p style="font-size:11px;color:#999;margin:0 0 28px;direction:ltr;text-align:left;">' + _esc(docTitleSrc) + ' · ' + dateStr + '</p>',
             '<hr style="border:none;border-top:1px solid #e0e0e0;margin-bottom:24px;">',
             paras, '</body></html>'
           ].join('');
@@ -1402,7 +1484,10 @@ self.onmessage = async function(e) {
           var dlName  = baseName + '_תמלול.doc';
 
           bgBadge.style.display = 'none';
-          _ytStatus('✅ תמלול הושלם · ' + Math.round(text.split(/\s+/).length) + ' מילים', '#2d7a2d');
+          var doneNote = captionsResult
+            ? '✅ תמלול הושלם (כתוביות ' + captionsResult.lang + ') · ' + Math.round(text.split(/\s+/).length) + ' מילים'
+            : '✅ תמלול הושלם · ' + Math.round(text.split(/\s+/).length) + ' מילים';
+          _ytStatus(doneNote, '#2d7a2d');
           _vtShowDone(dlName, blobUrl);
 
         } catch(e) {
