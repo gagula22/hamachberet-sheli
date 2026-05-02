@@ -480,32 +480,6 @@
       'data-placeholder': 'התחל לכתוב כאן… אפשר להדביק תמונות או להעלות אותן, ולשנות את גודלן בגרירת הפינה ↘'
     });
     editor.innerHTML = topic.body || '';
-
-    // ── Auto-repair corrupted tables ─────────────────────────────────────
-    // A previous bug added a colgroup with width:0px to all tables at load
-    // time (before render), then set table-layout:fixed — collapsing them.
-    // Detect and remove those colgroups so content is restored correctly.
-    (function repairCorruptedTables() {
-      let fixed = false;
-      editor.querySelectorAll('table').forEach(table => {
-        const cols = [...table.querySelectorAll('col')];
-        if (!cols.length) return;
-        const allZero = cols.every(c => parseInt(c.style.width || '1') === 0);
-        if (allZero && table.style.tableLayout === 'fixed') {
-          table.querySelectorAll('colgroup').forEach(cg => cg.remove());
-          table.style.tableLayout = '';
-          table.style.width = '100%';
-          fixed = true;
-        }
-      });
-      if (fixed) {
-        // Persist the repaired version immediately
-        const clone = editor.cloneNode(true);
-        clone.querySelectorAll('.nb-col-resize-handle').forEach(h => h.remove());
-        updateTopic(topic.id, { body: clone.innerHTML, updatedAt: Date.now() });
-      }
-    })();
-
     restoreMoodBlocks(editor);
 
     const stage = App.el('div', { class: 'nb-stage' }, [editor]);
@@ -531,15 +505,8 @@
       }
     }
 
-    // Strip resize handles before reading HTML (handles are UI-only, not data)
-    function getCleanHTML() {
-      const clone = editor.cloneNode(true);
-      clone.querySelectorAll('.nb-col-resize-handle').forEach(h => h.remove());
-      return clone.innerHTML;
-    }
-
     function saveImmediate() {
-      updateTopic(topic.id, { body: getCleanHTML(), updatedAt: Date.now() });
+      updateTopic(topic.id, { body: editor.innerHTML, updatedAt: Date.now() });
       refreshPageLabels();
     }
     const save = Editable.debounce(saveImmediate, 500);
@@ -550,7 +517,7 @@
     const MAX_UNDO  = 60;
 
     function pushUndo() {
-      const snap = getCleanHTML(); // save without handles so undo is clean
+      const snap = editor.innerHTML;
       if (_undoPtr >= 0 && _undoStack[_undoPtr] === snap) return; // no change
       _undoStack.splice(_undoPtr + 1);           // discard forward history
       _undoStack.push(snap);
@@ -563,7 +530,6 @@
       restoreMoodBlocks(editor);
       Editable.attachImageBehaviors(editor, save);
       attachMoodBehaviors(editor, save);
-      attachTableResizers(editor, save);
       saveImmediate();
     }
 
@@ -611,201 +577,10 @@
     Editable.attachImageBehaviors(editor, save);
     attachMoodBehaviors(editor, save);
     wrapImagesInEditor(editor);
-    attachTableResizers(editor, save);   // column resize handles for existing tables
 
-    // ── Paste handler: Excel/Sheets → table | image → img-wrap ────────────
-    //
-    // Priority order:
-    //  1. text/html with <table>  → clean & insert as editable HTML table
-    //  2. text/plain with tabs    → convert TSV to HTML table
-    //  3. image/*                 → insert as resizable image (existing behaviour)
-    //  4. anything else           → let browser handle normally
-
-    function cleanPastedTable(tableEl) {
-      const rows = [...tableEl.querySelectorAll('tr')];
-      if (!rows.length) return null;
-
-      // ── 1. Extract column widths to preserve proportions ────────────────
-      // Excel puts widths in <col width="X"> or as inline style on each <td>
-      const colEls = [...tableEl.querySelectorAll('col')];
-      let rawWidths = [];
-
-      if (colEls.length) {
-        rawWidths = colEls.map(col => {
-          const w = col.getAttribute('width') || col.style.width || '';
-          return parseFloat(w) || 0;
-        });
-      }
-      // Fallback: read from first data row's td attributes / inline styles
-      if (!rawWidths.length || rawWidths.every(w => !w)) {
-        const firstRow = rows[0].querySelectorAll('td, th');
-        rawWidths = [...firstRow].map(cell => {
-          const fromAttr  = parseFloat(cell.getAttribute('width') || 0);
-          const fromStyle = parseFloat((cell.style.width || '').replace(/[^0-9.]/g, '') || 0);
-          return fromAttr || fromStyle || 0;
-        });
-      }
-
-      // Convert to percentage widths (proportional)
-      const totalW   = rawWidths.reduce((s, w) => s + w, 0);
-      const pctWidths = (totalW > 0)
-        ? rawWidths.map(w => +(w / totalW * 100).toFixed(1))
-        : [];
-
-      // ── 2. Detect header row ─────────────────────────────────────────────
-      const firstCells = [...rows[0].querySelectorAll('td, th')];
-      const isHeader   = firstCells.every(c => c.tagName === 'TH') ||
-        firstCells.every(c => /font-weight\s*:\s*(bold|700)/i.test(c.getAttribute('style') || ''));
-
-      // ── 3. Build clean table HTML ────────────────────────────────────────
-      // Detect source direction — Excel stores columns LTR in its HTML even
-      // for Hebrew sheets, so we preserve that to avoid column-order reversal.
-      const srcDir = tableEl.getAttribute('dir') ||
-                     (tableEl.style && tableEl.style.direction) || 'ltr';
-
-      // Use actual pixel widths so the table can exceed A4 width naturally.
-      // Excel col widths are in "character units" (~8px each); pts from Sheets
-      // are already pixels-ish. We detect by whether rawWidths sum looks like
-      // character units (< 500 total → multiply by 8) or already pixels (> 500).
-      let colPx = [];
-      if (rawWidths.length && totalW > 0) {
-        const factor = totalW < 500 ? 8 : 1; // char-units → px approximation
-        colPx = rawWidths.map(w => Math.round(w * factor));
-      }
-      const tableWidthPx = colPx.reduce((s, w) => s + w, 0);
-
-      const S_TABLE = 'border-collapse:collapse;margin:8px 0;table-layout:fixed;'
-                    + (tableWidthPx > 0 ? 'width:' + tableWidthPx + 'px;' : 'width:100%;');
-      const S_TH    = 'background:#F4ECD8;border:1px solid #D8C9B0;padding:7px 10px;font-weight:600;text-align:start;white-space:pre-wrap;';
-      const S_TD    = 'border:1px solid #D8C9B0;padding:6px 10px;text-align:start;white-space:pre-wrap;';
-
-      // Wrap in a scrollable container so table can exceed A4 width
-      let html = '<div style="overflow-x:auto;max-width:100%;margin:8px 0;">'
-               + '<table dir="' + srcDir + '" style="' + S_TABLE + '">';
-
-      // <colgroup> with pixel widths
-      if (colPx.length) {
-        html += '<colgroup>';
-        colPx.forEach(px => { html += '<col style="width:' + px + 'px">'; });
-        html += '</colgroup>';
-      }
-
-      // ── Helper: extract rich cell content (keeps color/bold/italic) ──────
-      function richCellHtml(cell) {
-        const SKIP_COLORS = new Set([
-          'windowtext','black','#000000','#000',
-          'rgb(0,0,0)','rgb(0, 0, 0)','rgba(0,0,0,1)'
-        ]);
-        function walk(node) {
-          if (node.nodeType === 3) { // Text node
-            return node.textContent
-              .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-          }
-          if (node.nodeType !== 1) return '';
-          const tag = node.tagName.toLowerCase();
-          if (['script','style','meta','link','o:p'].includes(tag)) return '';
-          // Block elements — flatten to inline (add space between)
-          if (['p','div','li'].includes(tag)) {
-            return [...node.childNodes].map(walk).join('') + ' ';
-          }
-          if (tag === 'br') return ' ';
-
-          // Collect meaningful styles
-          let sty = '';
-          const cs = node.style || {};
-          const color = cs.color || '';
-          if (color && !SKIP_COLORS.has(color.replace(/\s/g,''))) {
-            sty += 'color:' + color + ';';
-          }
-          const fw = cs.fontWeight || '';
-          const boldByTag = ['b','strong'].includes(tag);
-          if (boldByTag || fw === 'bold' || fw === '700' || parseInt(fw,10) >= 600) {
-            sty += 'font-weight:bold;';
-          }
-          const fi = cs.fontStyle || '';
-          if (['i','em'].includes(tag) || fi === 'italic') sty += 'font-style:italic;';
-          const td = cs.textDecoration || '';
-          if (td && td !== 'none') sty += 'text-decoration:' + td + ';';
-
-          const inner = [...node.childNodes].map(walk).join('');
-          return sty ? '<span style="' + sty + '">' + inner + '</span>' : inner;
-        }
-        return [...cell.childNodes].map(walk).join('').trim();
-      }
-
-      html += '<tbody>';
-      rows.forEach((row, ri) => {
-        html += '<tr>';
-        [...row.querySelectorAll('td, th')].forEach(cell => {
-          const tag     = (ri === 0 && isHeader) ? 'th' : 'td';
-          const sty     = (ri === 0 && isHeader) ? S_TH : S_TD;
-          const content = richCellHtml(cell) || '&nbsp;';
-          html += '<' + tag + ' style="' + sty + '">' + content + '</' + tag + '>';
-        });
-        html += '</tr>';
-      });
-      html += '</tbody></table></div><p dir="rtl"><br></p>';
-      return html;
-    }
-
-    function tsvToTable(tsv) {
-      const S_TABLE = 'border-collapse:collapse;width:100%;margin:8px 0;';
-      const S_TH    = 'background:#F4ECD8;border:1px solid #D8C9B0;padding:7px 10px;font-weight:600;text-align:start;';
-      const S_TD    = 'border:1px solid #D8C9B0;padding:6px 10px;text-align:start;';
-
-      const rows = tsv.split(/\r?\n/).filter(r => r.trim());
-      if (!rows.length) return null;
-
-      let html = '<table dir="rtl" style="' + S_TABLE + '"><tbody>';
-      rows.forEach((row, ri) => {
-        const cells = row.split('\t');
-        const tag   = ri === 0 ? 'th' : 'td';
-        const sty   = ri === 0 ? S_TH : S_TD;
-        html += '<tr>' + cells.map(c =>
-          '<' + tag + ' style="' + sty + '">' + (c.trim() || '&nbsp;') + '</' + tag + '>'
-        ).join('') + '</tr>';
-      });
-      html += '</tbody></table><p dir="rtl"><br></p>';
-      return html;
-    }
-
+    // ── Paste: images from clipboard ──────────────────────────────────────
     editor.addEventListener('paste', (e) => {
-      const cd    = e.clipboardData;
-      if (!cd) return;
-      const items = Array.from(cd.items || []);
-
-      // 1 ─ HTML with table (Excel, Google Sheets, web tables)
-      const htmlData = cd.getData('text/html');
-      if (htmlData) {
-        const tmp = document.createElement('div');
-        tmp.innerHTML = htmlData;
-        const table = tmp.querySelector('table');
-        if (table) {
-          e.preventDefault();
-          const cleaned = cleanPastedTable(table);
-          if (cleaned) {
-            document.execCommand('insertHTML', false, cleaned);
-            save();
-            requestAnimationFrame(() => attachTableResizers(editor, save));
-          }
-          return;
-        }
-      }
-
-      // 2 ─ Plain TSV text (Excel copy without HTML, or Numbers)
-      const textData = cd.getData('text/plain');
-      if (textData && textData.includes('\t') && textData.trim().split(/\r?\n/).length > 0) {
-        const lines = textData.trim().split(/\r?\n/);
-        // Only treat as table if at least one line has a tab (multi-column)
-        if (lines.some(l => l.includes('\t'))) {
-          e.preventDefault();
-          const tbl = tsvToTable(textData);
-          if (tbl) { document.execCommand('insertHTML', false, tbl); save(); }
-          return;
-        }
-      }
-
-      // 3 ─ Image (plain screenshot, not Excel)
+      const items = (e.clipboardData && e.clipboardData.items) || [];
       for (const item of items) {
         if (item.type && item.type.startsWith('image/')) {
           e.preventDefault();
@@ -819,7 +594,6 @@
           return;
         }
       }
-      // 4 ─ anything else: browser default
     });
 
     // ── Drag-and-drop files into editor ──────────────────────────────────
@@ -1711,67 +1485,6 @@
     };
     reader.onerror = () => App.toast('שגיאה בקריאת הקובץ');
     reader.readAsDataURL(file);
-  }
-
-  // ── Table column resizing ────────────────────────────────────────────────
-  // Adds a draggable handle on the right border of every non-last cell in
-  // the first row of each table. Handles are stripped before saving so they
-  // never pollute the stored HTML.
-  function attachTableResizers(editor, save) {
-    editor.querySelectorAll('table').forEach(table => {
-      if (table.querySelector('.nb-col-resize-handle')) return; // already attached
-
-      // Only attach to tables that were pasted from Excel/Sheets —
-      // those already have <col> elements + table-layout:fixed.
-      // Never touch manually-inserted tables to avoid breaking their layout.
-      const colEls = [...table.querySelectorAll('col')];
-      if (!colEls.length) return;
-
-      const firstRow = table.querySelector('tr');
-      if (!firstRow) return;
-      const cells = [...firstRow.querySelectorAll('th, td')];
-
-      cells.forEach((cell, ci) => {
-        if (ci >= cells.length - 1) return; // no handle on last column
-
-        cell.style.position = 'relative';
-        const handle = document.createElement('span');
-        handle.className       = 'nb-col-resize-handle';
-        handle.contentEditable = 'false';
-
-        handle.addEventListener('mousedown', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-
-          const startX     = e.clientX;
-          const col        = colEls[ci];
-          const colNext    = colEls[ci + 1];
-          const startW     = parseInt(col?.style.width)     || cells[ci].offsetWidth;
-          const startNextW = parseInt(colNext?.style.width) || (cells[ci + 1]?.offsetWidth || 80);
-
-          document.body.classList.add('nb-col-resizing');
-
-          const onMove = (ev) => {
-            const dx   = ev.clientX - startX;
-            const newW = Math.max(40, startW + dx);
-            if (col) col.style.width = newW + 'px';
-            if (colNext) colNext.style.width = Math.max(40, startNextW - dx) + 'px';
-          };
-
-          const onUp = () => {
-            document.body.classList.remove('nb-col-resizing');
-            document.removeEventListener('mousemove', onMove);
-            document.removeEventListener('mouseup', onUp);
-            save();
-          };
-
-          document.addEventListener('mousemove', onMove);
-          document.addEventListener('mouseup', onUp);
-        });
-
-        cell.appendChild(handle);
-      });
-    });
   }
 
   // Wrap plain <img> elements from old saved content with resize handles
