@@ -1688,3 +1688,132 @@ figure.nb-img.nb-img-dragging { opacity: 0.35; pointer-events: none; }
   height: 100% !important;
   align-self: stretch !important;
 }
+
+
+/* ============================================================
+   SIDEBAR EXACT REDESIGN — matches the template's sb-item style
+   Topics list looks like a clean notebook list (no card borders,
+   no drag handles, count badge visible, actions on hover)
+============================================================ */
+
+/* Flat list item — replaces the old bordered card */
+.nb-topic {
+  background: transparent !important;
+  border: none !important;
+  padding: 5px 8px !important;
+  border-radius: 6px !important;
+  color: var(--nb-text-2) !important;
+  cursor: pointer !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  font-size: 13px !important;
+  position: relative !important;
+  user-select: none !important;
+  transition: background 0.12s !important;
+  min-height: 30px !important;
+}
+.nb-topic:hover {
+  background: var(--nb-bg-hover) !important;
+}
+.nb-topic.active {
+  background: var(--nb-bg-tag) !important;
+  color: var(--nb-accent-str) !important;
+  font-weight: 500 !important;
+}
+
+/* Drag handle — hidden (keep event listeners, just invisible) */
+.nb-topic .t-drag { display: none !important; }
+
+/* Chevron */
+.nb-topic .t-chevron {
+  width: 14px !important;
+  height: 14px !important;
+  font-size: 8px !important;
+  color: var(--nb-text-4) !important;
+  flex-shrink: 0 !important;
+  border-radius: 3px !important;
+  display: grid !important;
+  place-items: center !important;
+  transition: transform 180ms !important;
+}
+.nb-topic .t-chevron.expanded { transform: rotate(90deg) !important; }
+.nb-topic .t-chevron.spacer  { visibility: hidden !important; }
+.nb-topic .t-chevron:hover:not(.spacer) { background: var(--nb-bg-active) !important; }
+
+/* Icon */
+.nb-topic .t-icon { font-size: 14px !important; flex-shrink: 0 !important; }
+
+/* Name */
+.nb-topic .t-name {
+  flex: 1 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  text-align: start !important;
+  font-family: 'Heebo', sans-serif !important;
+}
+
+/* Count badge — visible by default, hides on hover */
+.nb-topic .t-count {
+  margin-inline-start: auto !important;
+  color: var(--nb-text-4) !important;
+  font-size: 11px !important;
+  font-family: 'Heebo', sans-serif !important;
+  flex-shrink: 0 !important;
+}
+
+/* Old action buttons — hidden (replaced by t-actions) */
+.nb-topic .t-action { display: none !important; }
+
+/* Actions div — hidden by default, shown on hover */
+.nb-topic .t-actions {
+  display: none !important;
+  margin-inline-start: auto !important;
+  gap: 2px !important;
+  align-items: center !important;
+  flex-shrink: 0 !important;
+}
+.nb-topic:hover .t-actions  { display: flex !important; }
+.nb-topic:hover .t-count    { display: none !important; }
+
+/* Action buttons inside the actions group */
+.t-act-btn {
+  width: 18px !important;
+  height: 18px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 3px !important;
+  font-size: 11px !important;
+  color: var(--nb-text-3) !important;
+  cursor: pointer !important;
+  background: transparent !important;
+  border: none !important;
+  line-height: 1 !important;
+  padding: 0 !important;
+}
+.t-act-btn:hover { background: var(--nb-bg-active) !important; color: var(--nb-text-1) !important; }
+.t-act-btn.danger:hover { background: #FAE0E0 !important; color: #B5453F !important; }
+
+/* Drop indicator lines */
+.nb-topic.nb-drop-before { border-top: 2px solid var(--nb-accent) !important; }
+.nb-topic.nb-drop-after  { border-bottom: 2px solid var(--nb-accent) !important; }
+.nb-topic.nb-drop-inside { background: var(--nb-bg-tag) !important; }
+
+/* Sidebar title row */
+.nb-sidebar-title {
+  font-size: 10px !important;
+  letter-spacing: 0.5px !important;
+  text-transform: uppercase !important;
+  color: var(--nb-text-4) !important;
+  padding: 0 4px 6px !important;
+  margin-bottom: 2px !important;
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  border-bottom: 0.5px solid var(--nb-border-soft) !important;
+}
+
+/* Topics padding at the top */
+.nb-topics { padding-top: 4px !important; }

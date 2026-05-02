@@ -160,28 +160,15 @@
         : [App.el('div', { class: 'empty-state', style: { padding: '24px 8px' } }, 'עדיין אין נושאים')]
     );
 
-    const pinnedTopics = topics.filter(t => t.pinned);
-
-    const smartSection = pinnedTopics.length
-      ? App.el('div', { class: 'nb-sidebar-section' }, [
-          App.el('div', { class: 'nb-sidebar-title' }, '📌 מוצמדים'),
-          ...pinnedTopics.map(p => App.el('div', {
-            class: 'nb-sb-smart' + (p.id === activeId ? ' active' : ''),
-            onClick: () => { activeId = p.id; rerender(); }
-          }, [App.el('span', {}, p.icon || '📌'), App.el('span', {}, ' ' + p.name)]))
-        ])
-      : null;
-
     const left = App.el('div', { class: 'nb-topics-col' }, [
       App.el('div', { class: 'nb-sidebar-section' }, [
         App.el('div', { class: 'nb-sidebar-title' }, [
-          App.el('span', {}, '📚 נושאים'),
+          App.el('span', {}, '📚 מחברות'),
           addRootBtn
         ]),
         topicsEl
-      ]),
-      smartSection
-    ].filter(Boolean));
+      ])
+    ]);
 
     // Mobile back button (shown only in editor panel on small screens)
     const backBtn = App.el('button', {
@@ -271,23 +258,14 @@
       }
     }, '▶');
 
-    const row = App.el('div', {
-      class: 'nb-topic' + (t.id === activeId ? ' active' : ''),
-      style: { paddingInlineStart: (10 + depth * 18) + 'px' },
-      onClick: (e) => {
-        if (e.target.closest('.t-action') || e.target.closest('.t-chevron') || e.target.closest('.t-drag')) return;
-        activeId = t.id;
-        if (isMobile()) mobilePanel = 'editor';
-        rerender();
-      }
-    }, [
-      App.el('span', { class: 't-drag', title: 'גרור לשינוי סדר' }, '⠿'),
-      chevron,
-      App.el('span', { class: 't-icon' }, t.icon || '📓'),
-      App.el('span', {
-        class: 't-name',
-        title: 'לחיצה כפולה לשינוי שם',
-        onDblclick: (e) => {
+    const childCount = getChildren(t.id).length;
+    const countBadge = App.el('span', { class: 't-count' }, childCount > 0 ? String(childCount) : '');
+
+    const actionsDiv = App.el('div', { class: 't-actions' }, [
+      App.el('button', {
+        class: 't-act-btn',
+        title: 'שינוי שם',
+        onClick: (e) => {
           e.stopPropagation();
           const newName = prompt('שם הנושא:', t.name);
           if (newName !== null && newName.trim() && newName.trim() !== t.name) {
@@ -295,18 +273,18 @@
             rerender();
           }
         }
-      }, t.name),
+      }, '✏️'),
       App.el('button', {
-        class: 't-action',
+        class: 't-act-btn',
         title: 'תת-נושא חדש',
         onClick: (e) => {
           e.stopPropagation();
           const child = createTopic(t.id);
           if (child) { activeId = child.id; rerender(); }
         }
-      }, '＋'),
+      }, '+'),
       App.el('button', {
-        class: 't-action',
+        class: 't-act-btn danger',
         title: 'מחיקה',
         onClick: (e) => {
           e.stopPropagation();
@@ -314,6 +292,23 @@
           rerender();
         }
       }, '✕')
+    ]);
+
+    const row = App.el('div', {
+      class: 'nb-topic' + (t.id === activeId ? ' active' : ''),
+      style: { paddingInlineStart: (8 + depth * 18) + 'px' },
+      onClick: (e) => {
+        if (e.target.closest('.t-act-btn') || e.target.closest('.t-chevron')) return;
+        activeId = t.id;
+        if (isMobile()) mobilePanel = 'editor';
+        rerender();
+      }
+    }, [
+      chevron,
+      App.el('span', { class: 't-icon' }, t.icon || '📓'),
+      App.el('span', { class: 't-name' }, t.name),
+      countBadge,
+      actionsDiv
     ]);
 
     row.setAttribute('draggable', 'true');
