@@ -146,12 +146,13 @@
     }
 
     const addRootBtn = App.el('button', {
-      class: 'btn btn-soft',
+      class: 'nb-sidebar-add-btn',
+      title: 'נושא חדש',
       onClick: () => {
         const t = createTopic(null);
         if (t) { activeId = t.id; if (isMobile()) mobilePanel = 'editor'; rerender(); }
       }
-    }, '+ נושא חדש');
+    }, '+');
 
     const topicsEl = App.el('div', { class: 'nb-topics' },
       topics.length
@@ -159,7 +160,28 @@
         : [App.el('div', { class: 'empty-state', style: { padding: '24px 8px' } }, 'עדיין אין נושאים')]
     );
 
-    const left = App.el('div', { class: 'stack nb-topics-col' }, [addRootBtn, topicsEl]);
+    const pinnedTopics = topics.filter(t => t.pinned);
+
+    const smartSection = pinnedTopics.length
+      ? App.el('div', { class: 'nb-sidebar-section' }, [
+          App.el('div', { class: 'nb-sidebar-title' }, '📌 מוצמדים'),
+          ...pinnedTopics.map(p => App.el('div', {
+            class: 'nb-sb-smart' + (p.id === activeId ? ' active' : ''),
+            onClick: () => { activeId = p.id; rerender(); }
+          }, [App.el('span', {}, p.icon || '📌'), App.el('span', {}, ' ' + p.name)]))
+        ])
+      : null;
+
+    const left = App.el('div', { class: 'nb-topics-col' }, [
+      App.el('div', { class: 'nb-sidebar-section' }, [
+        App.el('div', { class: 'nb-sidebar-title' }, [
+          App.el('span', {}, '📚 נושאים'),
+          addRootBtn
+        ]),
+        topicsEl
+      ]),
+      smartSection
+    ].filter(Boolean));
 
     // Mobile back button (shown only in editor panel on small screens)
     const backBtn = App.el('button', {
@@ -511,6 +533,14 @@
     fileInput.addEventListener('change', () => {
       Array.from(fileInput.files || []).forEach(f => Editable.insertImageFromFile(f, editor, save));
       fileInput.value = '';
+    });
+
+    // Separate attachment input — any file type, embedded as card
+    const attachInput = App.el('input', { type: 'file', style: { display: 'none' } });
+    attachInput.addEventListener('change', () => {
+      const f = attachInput.files && attachInput.files[0];
+      if (f) insertFileAttachment(f, editor, save);
+      attachInput.value = '';
     });
 
     try { document.execCommand('styleWithCSS', false, true); } catch {}
@@ -873,18 +903,18 @@
         grp(
           tbBtn('🔗',  'קישור',           () => insertLink()),
           tbBtn('🖼️', 'תמונה מהמחשב',   () => fileInput.click()),
-          tbBtn('📎',  'צרף קובץ',        () => fileInput.click()),
+          tbBtn('📎',  'צרף קובץ',        () => attachInput.click()),
           tbBtn('⊞',   'טבלה',            () => insertTable()),
           tbBtn('—',   'קו מפריד',        () => { exec('insertHorizontalRule'); save(); })
         ),
         grp(
-          tbBtn('📄',  'תבנית', () => App.toast('תבניות — בקרוב!')),
-          tbBtn('🎭',  'הוסף יומן מצב רוח', () => insertMoodBlock(editor, save)),
+          tbBtn('📄',  'גלריית תבניות', () => openTemplateGallery(editor, save)),
+          tbBtn('🎭',  'יומן מצב רוח', () => openMoodModal(editor, save)),
           tbBtn('📌',  'הצמד נושא', () => { const pinned = !topic.pinned; updateTopic(topic.id, { pinned }); App.toast(pinned ? '📌 הוצמד' : 'הוסר מהמוצמדים'); }),
           tbBtn('🎯',  'מצב מיקוד (Escape ליציאה)', () => toggleFocusMode()),
           exportWrap
         ),
-        fileInput
+        fileInput, attachInput
       ])
     ]);
 
@@ -1056,6 +1086,235 @@
         if (block) { block.dataset.note = e.target.value; save(); }
       }
     }, true);
+  }
+
+  // ── File attachment (any file type, embedded as card) ────────────────────
+  function insertFileAttachment(file, editor, save) {
+    const MAX = 5 * 1024 * 1024;
+    if (file.size > MAX && !confirm('הקובץ גדול (' + _fmtSize(file.size) + '). להמשיך?')) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataUrl = String(ev.target.result);
+      const icon = file.type.startsWith('image/') ? '🖼️'
+        : file.type.includes('pdf') ? '📕'
+        : (file.type.includes('word') || file.name.endsWith('.doc') || file.name.endsWith('.docx')) ? '📄'
+        : (file.type.includes('excel') || file.name.endsWith('.xls') || file.name.endsWith('.xlsx')) ? '📊'
+        : file.type.includes('video') ? '🎬'
+        : file.type.includes('audio') ? '🎵'
+        : '📎';
+      const sizeStr = _fmtSize(file.size);
+      const escName = file.name.replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+      const visual = file.type.startsWith('image/')
+        ? `<img class="file-thumb" src="${dataUrl}" alt="" />`
+        : `<span class="file-icon">${icon}</span>`;
+      const html = `<span class="file-attachment" contenteditable="false"
+        data-name="${escName}" data-type="${file.type.replace(/"/g,'')}" data-content="${dataUrl}"
+        title="לחץ פעמיים להורדה">${visual}<span class="file-name">${escName}</span><span class="file-size">${sizeStr}</span><button class="file-remove" title="הסר">×</button></span>&nbsp;`;
+      editor.focus();
+      document.execCommand('insertHTML', false, html);
+      // Wire up interactions
+      editor.querySelectorAll('.file-attachment:not([data-wired])').forEach(el => {
+        el.setAttribute('data-wired', '1');
+        el.addEventListener('dblclick', () => {
+          const a = document.createElement('a');
+          a.href = el.dataset.content;
+          a.download = el.dataset.name;
+          document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        });
+        const rm = el.querySelector('.file-remove');
+        if (rm) rm.addEventListener('click', (e) => { e.stopPropagation(); el.remove(); save(); });
+      });
+      save();
+      App.toast('📎 צורף: ' + file.name);
+    };
+    reader.onerror = () => App.toast('שגיאה בקריאת הקובץ');
+    reader.readAsDataURL(file);
+  }
+  function _fmtSize(b) {
+    if (b < 1024) return b + ' B';
+    if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
+    return (b / 1048576).toFixed(1) + ' MB';
+  }
+
+  // ── Template gallery modal ────────────────────────────────────────────────
+  function openTemplateGallery(editor, save) {
+    const TODAY = new Date().toLocaleDateString('he-IL');
+    const TEMPLATES = [
+      { icon: '🤝', name: 'פגישה',         desc: 'משתתפים, סדר יום, החלטות',
+        html: () => `<h2 dir="rtl">🤝 פגישה — ${TODAY}</h2>\n<h3 dir="rtl">משתתפים</h3><ul dir="rtl"><li></li></ul>\n<h3 dir="rtl">סדר יום</h3><ol dir="rtl"><li></li></ol>\n<h3 dir="rtl">החלטות</h3><ul dir="rtl"><li></li></ul>\n<h3 dir="rtl">משימות</h3><ul dir="rtl" style="list-style:none;padding-right:4px"><li><input type="checkbox"> </li><li><input type="checkbox"> </li></ul>` },
+      { icon: '📅', name: 'יומן יומי',     desc: 'מה עשיתי, למדתי, מחר',
+        html: () => `<h2 dir="rtl">📅 ${TODAY}</h2>\n<h3 dir="rtl">מצב רוח & אנרגיה</h3><p dir="rtl">😊😐😔  ·  אנרגיה: ⭐⭐⭐</p>\n<h3 dir="rtl">מה עשיתי היום</h3><ul dir="rtl"><li></li></ul>\n<h3 dir="rtl">מה למדתי?</h3><p dir="rtl"></p>\n<h3 dir="rtl">3 דברים שאני מודה עליהם</h3><ol dir="rtl"><li></li><li></li><li></li></ol>\n<h3 dir="rtl">למחר</h3><ul dir="rtl" style="list-style:none;padding-right:4px"><li><input type="checkbox"> </li><li><input type="checkbox"> </li></ul>` },
+      { icon: '💡', name: 'רעיון',          desc: 'בעיה, פתרון, צעדים',
+        html: () => `<h2 dir="rtl">💡 רעיון: </h2>\n<h3 dir="rtl">איזו בעיה זה פותר?</h3><p dir="rtl"></p>\n<h3 dir="rtl">הפתרון</h3><p dir="rtl"></p>\n<h3 dir="rtl">צעדים ראשונים</h3><ul dir="rtl" style="list-style:none;padding-right:4px"><li><input type="checkbox"> אימות הרעיון</li><li><input type="checkbox"> מחקר 30 דקות</li></ul>` },
+      { icon: '🎯', name: 'מטרה',           desc: 'SMART, צעדים, יעד',
+        html: () => `<h2 dir="rtl">🎯 מטרה: </h2>\n<h3 dir="rtl">למה זה חשוב לי?</h3><p dir="rtl"></p>\n<h3 dir="rtl">SMART</h3><ul dir="rtl"><li><strong>ספציפי:</strong> </li><li><strong>מדיד:</strong> </li><li><strong>מועד:</strong> עד </li></ul>\n<h3 dir="rtl">צעדים</h3><ul dir="rtl" style="list-style:none;padding-right:4px"><li><input type="checkbox"> </li><li><input type="checkbox"> </li></ul>` },
+      { icon: '✅', name: 'משימות',         desc: 'רשימה לפי עדיפות',
+        html: () => `<h2 dir="rtl">✅ משימות — ${TODAY}</h2>\n<h3 dir="rtl">🔥 דחוף וחשוב</h3><ul dir="rtl" style="list-style:none;padding-right:4px"><li><input type="checkbox"> </li></ul>\n<h3 dir="rtl">⭐ חשוב (לא דחוף)</h3><ul dir="rtl" style="list-style:none;padding-right:4px"><li><input type="checkbox"> </li><li><input type="checkbox"> </li></ul>\n<h3 dir="rtl">📋 כשיהיה זמן</h3><ul dir="rtl" style="list-style:none;padding-right:4px"><li><input type="checkbox"> </li></ul>` },
+      { icon: '📚', name: 'הערות קריאה',   desc: 'ספר, ציטוטים, מחשבות',
+        html: () => `<h2 dir="rtl">📚 הערות קריאה</h2>\n<p dir="rtl"><strong>שם:</strong>  ·  <strong>מחבר:</strong>  ·  <strong>דירוג:</strong> ⭐⭐⭐⭐⭐</p>\n<h3 dir="rtl">תקציר</h3><p dir="rtl"></p>\n<h3 dir="rtl">3 תובנות מרכזיות</h3><ol dir="rtl"><li></li><li></li><li></li></ol>\n<h3 dir="rtl">ציטוטים</h3><blockquote dir="rtl"></blockquote>\n<h3 dir="rtl">איך אני מיישם?</h3><p dir="rtl"></p>` },
+      { icon: '🛒', name: 'קניות',          desc: 'רשימת קניות מסודרת',
+        html: () => `<h2 dir="rtl">🛒 קניות — ${TODAY}</h2>\n<h3 dir="rtl">סופר</h3><ul dir="rtl" style="list-style:none;padding-right:4px"><li><input type="checkbox"> </li><li><input type="checkbox"> </li></ul>\n<h3 dir="rtl">ירקן</h3><ul dir="rtl" style="list-style:none;padding-right:4px"><li><input type="checkbox"> </li></ul>\n<h3 dir="rtl">מאפייה</h3><ul dir="rtl" style="list-style:none;padding-right:4px"><li><input type="checkbox"> </li></ul>` },
+      { icon: '🍳', name: 'מתכון',          desc: 'מצרכים והוראות',
+        html: () => `<h2 dir="rtl">🍳 </h2>\n<p dir="rtl"><strong>מנות:</strong>   ·  <strong>זמן:</strong>  דק׳</p>\n<h3 dir="rtl">מצרכים</h3><ul dir="rtl"><li> </li><li> </li></ul>\n<h3 dir="rtl">הוראות הכנה</h3><ol dir="rtl"><li></li><li></li></ol>\n<h3 dir="rtl">הערות</h3><p dir="rtl"></p>` },
+      { icon: '💰', name: 'תקציב',          desc: 'הכנסות והוצאות',
+        html: () => `<h2 dir="rtl">💰 תקציב — </h2>\n<h3 dir="rtl">הכנסות</h3><table style="border-collapse:collapse;width:100%"><tr><th style="border:1px solid #D8C9B0;padding:6px;background:#F4ECD8">מקור</th><th style="border:1px solid #D8C9B0;padding:6px;background:#F4ECD8">סכום</th></tr><tr><td style="border:1px solid #D8C9B0;padding:6px"> </td><td style="border:1px solid #D8C9B0;padding:6px"> </td></tr></table>\n<h3 dir="rtl">הוצאות</h3><table style="border-collapse:collapse;width:100%"><tr><th style="border:1px solid #D8C9B0;padding:6px;background:#F4ECD8">קטגוריה</th><th style="border:1px solid #D8C9B0;padding:6px;background:#F4ECD8">סכום</th></tr><tr><td style="border:1px solid #D8C9B0;padding:6px">שכר דירה</td><td style="border:1px solid #D8C9B0;padding:6px"> </td></tr><tr><td style="border:1px solid #D8C9B0;padding:6px">מזון</td><td style="border:1px solid #D8C9B0;padding:6px"> </td></tr></table>` },
+      { icon: '✈️', name: 'תכנון טיול',    desc: 'יעד, אריזה, יומן יומי',
+        html: () => `<h2 dir="rtl">✈️ טיול: </h2>\n<p dir="rtl"><strong>יעד:</strong>   ·  <strong>תאריכים:</strong> </p>\n<h3 dir="rtl">לינה / תחבורה</h3><p dir="rtl"></p>\n<h3 dir="rtl">תכנית יומית</h3><p dir="rtl"><strong>יום 1:</strong> </p><p dir="rtl"><strong>יום 2:</strong> </p>\n<h3 dir="rtl">רשימת אריזה</h3><ul dir="rtl" style="list-style:none;padding-right:4px"><li><input type="checkbox"> דרכון / ת.ז.</li><li><input type="checkbox"> כרטיסי טיסה</li><li><input type="checkbox"> ביטוח נסיעות</li><li><input type="checkbox"> תרופות</li></ul>` }
+    ];
+
+    const overlay = document.createElement('div');
+    overlay.className = 'nb-tpl-overlay';
+    const modal = document.createElement('div');
+    modal.className = 'nb-tpl-modal';
+
+    const head = document.createElement('div');
+    head.className = 'nb-tpl-head';
+    const headTitle = document.createElement('h3');
+    headTitle.textContent = '📄 בחר תבנית';
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'nb-tpl-close';
+    closeBtn.textContent = '×';
+    closeBtn.onclick = () => overlay.remove();
+    head.appendChild(headTitle);
+    head.appendChild(closeBtn);
+
+    const grid = document.createElement('div');
+    grid.className = 'nb-tpl-grid';
+
+    TEMPLATES.forEach(t => {
+      const card = document.createElement('div');
+      card.className = 'nb-tpl-card';
+      card.innerHTML = `<span class="nb-tpl-icon">${t.icon}</span><div class="nb-tpl-name">${t.name}</div><div class="nb-tpl-desc">${t.desc}</div>`;
+      card.addEventListener('click', () => {
+        editor.focus();
+        document.execCommand('insertHTML', false, t.html());
+        save();
+        overlay.remove();
+        App.toast('✓ תבנית "' + t.name + '" הוכנסה');
+      });
+      grid.appendChild(card);
+    });
+
+    modal.appendChild(head);
+    modal.appendChild(grid);
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+    document.addEventListener('keydown', function escClose(e) {
+      if (e.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', escClose); }
+    });
+  }
+
+  // ── Mood journal modal ────────────────────────────────────────────────────
+  function openMoodModal(editor, save) {
+    const overlay = document.createElement('div');
+    overlay.className = 'nb-tpl-overlay';
+    const modal = document.createElement('div');
+    modal.className = 'nb-tpl-modal nb-mood-modal';
+
+    modal.innerHTML = `
+<div class="nb-tpl-head">
+  <h3>🎭 רישום מצב רוח</h3>
+  <button class="nb-tpl-close" id="_moodX">×</button>
+</div>
+<div class="nb-mood-section">
+  <span class="nb-mood-label">איך אני מרגיש עכשיו?</span>
+  <div class="nb-mood-emojis">
+    <span class="nb-mood-emoji" data-mood="great">😄<div class="nb-mood-tip">מצוין</div></span>
+    <span class="nb-mood-emoji" data-mood="good">😊<div class="nb-mood-tip">טוב</div></span>
+    <span class="nb-mood-emoji" data-mood="okay">😐<div class="nb-mood-tip">בסדר</div></span>
+    <span class="nb-mood-emoji" data-mood="bad">😟<div class="nb-mood-tip">לא טוב</div></span>
+    <span class="nb-mood-emoji" data-mood="awful">😢<div class="nb-mood-tip">גרוע</div></span>
+  </div>
+</div>
+<div class="nb-mood-section">
+  <span class="nb-mood-label">⚡ רמת אנרגיה</span>
+  <div class="nb-mood-stars" id="_energyS">
+    <span class="nb-mood-star" data-val="1">★</span><span class="nb-mood-star" data-val="2">★</span>
+    <span class="nb-mood-star" data-val="3">★</span><span class="nb-mood-star" data-val="4">★</span>
+    <span class="nb-mood-star" data-val="5">★</span>
+  </div>
+</div>
+<div class="nb-mood-section">
+  <span class="nb-mood-label">😴 איכות שינה אתמול</span>
+  <div class="nb-mood-stars" id="_sleepS">
+    <span class="nb-mood-star" data-val="1">★</span><span class="nb-mood-star" data-val="2">★</span>
+    <span class="nb-mood-star" data-val="3">★</span><span class="nb-mood-star" data-val="4">★</span>
+    <span class="nb-mood-star" data-val="5">★</span>
+  </div>
+</div>
+<div class="nb-mood-section">
+  <span class="nb-mood-label">💭 מה השפיע על מצב הרוח שלי?</span>
+  <textarea class="nb-mood-textarea" id="_moodTxt" placeholder="כל מה שמתחשק לרשום..."></textarea>
+</div>
+<div class="nb-mood-section">
+  <span class="nb-mood-label">🙏 3 דברים שאני מודה עליהם</span>
+  <input class="nb-mood-input" id="_g1" placeholder="1." /><input class="nb-mood-input" id="_g2" placeholder="2." /><input class="nb-mood-input" id="_g3" placeholder="3." />
+</div>
+<div class="nb-tpl-actions">
+  <button class="nb-tpl-btn-primary" id="_moodSave">💾 שמור ביומן</button>
+  <button class="nb-tpl-btn-secondary" id="_moodCancel">ביטול</button>
+</div>`;
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    modal.querySelector('#_moodX').onclick      = () => overlay.remove();
+    modal.querySelector('#_moodCancel').onclick = () => overlay.remove();
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+    let selectedMood = '';
+    let energyRating = 0;
+    let sleepRating  = 0;
+
+    modal.querySelectorAll('.nb-mood-emoji').forEach(el => {
+      el.addEventListener('click', () => {
+        modal.querySelectorAll('.nb-mood-emoji').forEach(e2 => e2.classList.remove('selected'));
+        el.classList.add('selected');
+        selectedMood = el.dataset.mood;
+      });
+    });
+
+    function setupStars(groupId, onPick) {
+      const stars = modal.querySelectorAll('#' + groupId + ' .nb-mood-star');
+      stars.forEach(s => {
+        s.addEventListener('click', () => {
+          const v = parseInt(s.dataset.val);
+          onPick(v);
+          stars.forEach(s2 => s2.classList.toggle('lit', parseInt(s2.dataset.val) <= v));
+        });
+      });
+    }
+    setupStars('_energyS', v => { energyRating = v; });
+    setupStars('_sleepS',  v => { sleepRating  = v; });
+
+    modal.querySelector('#_moodSave').addEventListener('click', () => {
+      const LABELS = { great: 'מצוין 😄', good: 'טוב 😊', okay: 'בסדר 😐', bad: 'לא טוב 😟', awful: 'גרוע 😢' };
+      const moodLbl  = LABELS[selectedMood] || '—';
+      const energyStr = energyRating ? '★'.repeat(energyRating) + '☆'.repeat(5 - energyRating) : '—';
+      const sleepStr  = sleepRating  ? '★'.repeat(sleepRating)  + '☆'.repeat(5 - sleepRating)  : '—';
+      const txt = modal.querySelector('#_moodTxt').value;
+      const gratitude = [modal.querySelector('#_g1').value, modal.querySelector('#_g2').value, modal.querySelector('#_g3').value]
+        .filter(Boolean).map((g, i) => `<li dir="rtl">${i + 1}. ${g}</li>`).join('');
+      const date = new Date().toLocaleDateString('he-IL');
+
+      const html = `<div dir="rtl" style="background:var(--nb-bg-soft);border:0.5px solid var(--nb-border-soft);border-radius:10px;padding:14px 18px;margin:10px 0">
+<div style="font-size:11px;color:var(--nb-text-3);margin-bottom:8px;font-family:sans-serif">🎭 יומן מצב רוח · ${date}</div>
+<div style="display:flex;flex-wrap:wrap;gap:12px;font-size:13px;margin-bottom:${txt || gratitude ? 10 : 0}px;font-family:sans-serif">
+  <span><strong>מצב רוח:</strong> ${moodLbl}</span>
+  <span><strong>אנרגיה:</strong> ${energyStr}</span>
+  <span><strong>שינה:</strong> ${sleepStr}</span>
+</div>
+${txt ? `<div style="font-size:13px;color:var(--nb-text-2);margin-bottom:8px;padding:6px 10px;background:var(--nb-bg-card);border-radius:6px">${txt.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>` : ''}
+${gratitude ? `<div style="font-size:13px"><strong>מודה על:</strong><ol dir="rtl" style="margin:4px 0 0;padding-right:20px">${gratitude}</ol></div>` : ''}
+</div><p dir="rtl"><br></p>`;
+
+      editor.focus();
+      document.execCommand('insertHTML', false, html);
+      save();
+      overlay.remove();
+      App.toast('🎭 נרשם ביומן מצב הרוח');
+    });
   }
 
   function insertMoodBlock(editor, save) {

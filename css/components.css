@@ -1457,3 +1457,174 @@ figure.nb-img.nb-img-dragging { opacity: 0.35; pointer-events: none; }
   background: var(--nb-accent);
   transform: scale(1.5);
 }
+
+
+/* ============================================================
+   NOTEBOOK FEATURE STYLES — sidebar sections, file cards,
+   template gallery, mood modal
+============================================================ */
+
+/* ── Sidebar sections ─────────────────────────────────── */
+.nb-sidebar-section { margin-bottom: 18px; }
+.nb-sidebar-title {
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--nb-text-4);
+  padding: 0 4px;
+  margin-bottom: 6px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: 'Heebo', sans-serif;
+}
+.nb-sidebar-add-btn {
+  width: 18px; height: 18px;
+  border-radius: 4px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; color: var(--nb-text-3);
+  cursor: pointer; background: transparent; border: none; line-height: 1;
+}
+.nb-sidebar-add-btn:hover { background: var(--nb-bg-active); color: var(--nb-accent); }
+.nb-sb-smart {
+  padding: 5px 8px; border-radius: 6px;
+  color: var(--nb-text-2); cursor: pointer;
+  font-size: 13px; display: flex; align-items: center; gap: 6px;
+  font-family: 'Heebo', sans-serif;
+}
+.nb-sb-smart:hover { background: var(--nb-bg-hover); }
+.nb-sb-smart.active { background: var(--nb-bg-tag); color: var(--nb-accent-str); font-weight: 500; }
+
+/* ── File attachment card ─────────────────────────────── */
+.file-attachment {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 12px;
+  background: var(--nb-bg-soft);
+  border: 0.5px solid var(--nb-border-soft);
+  border-radius: 10px;
+  margin: 2px 4px;
+  cursor: pointer; user-select: none;
+  font-family: 'Heebo', system-ui, sans-serif;
+  font-size: 13px; color: var(--nb-text-1);
+  transition: all 0.15s;
+  position: relative; vertical-align: middle;
+  max-width: 100%;
+}
+.file-attachment:hover { background: var(--nb-bg-hover); border-color: var(--nb-border-mid); }
+.file-icon { font-size: 18px; flex-shrink: 0; }
+.file-name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px; }
+.file-size { font-size: 11px; color: var(--nb-text-3); flex-shrink: 0; }
+.file-remove {
+  display: none;
+  position: absolute; top: -7px; left: -7px;
+  background: #B5453F; color: white;
+  border-radius: 50%; width: 18px; height: 18px;
+  font-size: 12px; align-items: center; justify-content: center;
+  cursor: pointer; line-height: 1; text-align: center;
+  border: none;
+}
+.file-attachment:hover .file-remove { display: flex; }
+.file-thumb { width: 24px; height: 24px; object-fit: cover; border-radius: 3px; flex-shrink: 0; }
+
+/* ── Template/Mood overlay ────────────────────────────── */
+.nb-tpl-overlay {
+  position: fixed; inset: 0;
+  background: rgba(30,20,10,.48);
+  z-index: 400;
+  display: grid; place-items: center;
+  animation: fadeIn 150ms ease-out;
+}
+.nb-tpl-modal {
+  background: var(--nb-bg-card);
+  border-radius: 14px;
+  padding: 22px 22px 18px;
+  width: 92%; max-width: 640px;
+  max-height: 86vh;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 12px 48px rgba(60,40,20,.22);
+}
+.nb-tpl-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 14px; flex-shrink: 0;
+}
+.nb-tpl-head h3 {
+  font-family: 'Frank Ruhl Libre', Georgia, serif;
+  font-size: 20px; font-weight: 500; color: var(--nb-text-1);
+}
+.nb-tpl-close {
+  width: 28px; height: 28px; border-radius: 50%;
+  font-size: 20px; color: var(--nb-text-3); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  background: transparent; border: none;
+}
+.nb-tpl-close:hover { background: var(--nb-bg-hover); color: var(--nb-text-1); }
+.nb-tpl-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 8px; overflow-y: auto; padding: 2px;
+}
+.nb-tpl-card {
+  background: var(--nb-bg-page);
+  border: 0.5px solid var(--nb-border-soft);
+  border-radius: 10px; padding: 14px 10px;
+  cursor: pointer; transition: all 0.15s;
+  text-align: center; user-select: none;
+}
+.nb-tpl-card:hover { background: var(--nb-bg-tag); border-color: var(--nb-accent-sft); transform: translateY(-1px); }
+.nb-tpl-icon { font-size: 28px; display: block; margin-bottom: 6px; line-height: 1; }
+.nb-tpl-name { font-weight: 500; font-size: 13px; color: var(--nb-text-1); margin-bottom: 3px; }
+.nb-tpl-desc { font-size: 10px; color: var(--nb-text-3); line-height: 1.45; }
+
+/* ── Mood modal (extends tpl-modal) ─────────────────────── */
+.nb-mood-modal { max-width: 480px; overflow-y: auto; }
+.nb-mood-section { margin-bottom: 14px; flex-shrink: 0; }
+.nb-mood-label { font-size: 13px; color: var(--nb-text-2); margin-bottom: 8px; display: block; font-weight: 500; }
+.nb-mood-emojis { display: flex; gap: 6px; justify-content: space-between; }
+.nb-mood-emoji {
+  font-size: 26px; cursor: pointer;
+  padding: 7px 8px; border-radius: 10px;
+  background: var(--nb-bg-page);
+  border: 0.5px solid var(--nb-border-soft);
+  transition: all 0.15s; user-select: none;
+  flex: 1; text-align: center; position: relative;
+}
+.nb-mood-emoji:hover { background: var(--nb-bg-hover); }
+.nb-mood-emoji.selected { background: var(--nb-bg-tag); border-color: var(--nb-accent); transform: scale(1.08); }
+.nb-mood-tip {
+  position: absolute; bottom: -4px; left: 50%; transform: translateX(-50%);
+  font-size: 8px; color: var(--nb-text-3); white-space: nowrap; pointer-events: none;
+}
+.nb-mood-stars { display: flex; gap: 6px; }
+.nb-mood-star { font-size: 22px; color: var(--nb-border-mid); cursor: pointer; transition: all 0.1s; user-select: none; }
+.nb-mood-star.lit { color: var(--nb-accent); }
+.nb-mood-star:hover { color: var(--nb-accent-sft); }
+.nb-mood-textarea {
+  width: 100%; padding: 8px 10px;
+  background: var(--nb-bg-page);
+  border: 0.5px solid var(--nb-border-soft);
+  border-radius: 6px; font-size: 13px;
+  resize: vertical; font-family: inherit; min-height: 56px;
+  color: var(--nb-text-1); display: block;
+}
+.nb-mood-textarea:focus { border-color: var(--nb-accent); outline: none; }
+.nb-mood-input {
+  width: 100%; height: 32px; padding: 0 10px;
+  background: var(--nb-bg-page);
+  border: 0.5px solid var(--nb-border-soft);
+  border-radius: 6px; font-size: 13px; margin-bottom: 4px;
+  font-family: inherit; color: var(--nb-text-1); display: block;
+}
+.nb-mood-input:focus { border-color: var(--nb-accent); outline: none; }
+.nb-tpl-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; flex-shrink: 0; }
+.nb-tpl-btn-primary {
+  background: var(--nb-accent); color: white;
+  padding: 8px 18px; border-radius: 8px;
+  font-size: 13px; font-weight: 500; border: none; cursor: pointer;
+}
+.nb-tpl-btn-primary:hover { background: var(--nb-accent-str); }
+.nb-tpl-btn-secondary {
+  color: var(--nb-text-3); padding: 8px 14px;
+  font-size: 13px; border: none; cursor: pointer; background: transparent;
+}
+.nb-tpl-btn-secondary:hover { color: var(--nb-text-1); }
