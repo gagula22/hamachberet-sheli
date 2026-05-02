@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>📚 כל דוחות Wyckoff</title>
+<style>
+  body { font-family: 'Segoe UI', 'Arial Hebrew', Arial, sans-serif; direction: rtl; text-align: right; background: #f7f8fa; color: #222; max-width: 900px; margin: 0 auto; padding: 24px; }
+  h1 { color: #0a7; border-bottom: 3px solid #0a7; padding-bottom: 8px; }
+  .report-card { background: white; padding: 16px 20px; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.06); margin: 12px 0; border-right: 4px solid #d4a017; transition: all 0.2s; }
+  .report-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.12); }
+  .report-card a { color: #0a4; text-decoration: none; font-size: 17px; font-weight: 600; }
+  .report-card .meta { color: #666; font-size: 13px; margin-top: 4px; }
+  .latest-badge { display: inline-block; background: #0a7; color: white; padding: 2px 8px; border-radius: 4px; font-size: 11px; margin-inline-end: 6px; }
+  .empty { text-align: center; color: #999; padding: 40px; }
+</style>
+</head>
+<body>
+  <h1>📚 דוחות Wyckoff — היסטוריה</h1>
+  <p>רשימת כל דוחות הניתוח שנוצרו עד היום, ממוינים מהחדש לישן.</p>
+
+  <div id="reports-list">
+    <div class="empty">⏳ טוען רשימת דוחות...</div>
+  </div>
+
+  <script>
+    // List of known reports — extends each time a new one is generated
+    const reports = [
+      { file: 'latest.html', title: 'דוח אחרון (latest)', date: 'מתעדכן עם כל ריצה', latest: true },
+      { file: 'report-2026-05-01.html', title: 'BTCUSDT.P — 1 במאי 2026', date: '2026-05-01' },
+    ];
+
+    const list = document.getElementById('reports-list');
+    list.innerHTML = '';
+    if (reports.length === 0) {
+      list.innerHTML = '<div class="empty">עדיין אין דוחות. הרץ את "🚀 Run Wyckoff Analysis" משולחן העבודה.</div>';
+    } else {
+      reports.forEach(r => {
+        const card = document.createElement('div');
+        card.className = 'report-card';
+        card.innerHTML = `
+          ${r.latest ? '<span class="latest-badge">⭐ אחרון</span>' : ''}
+          <a href="${r.file}">📊 ${r.title}</a>
+          <div class="meta">📅 ${r.date}</div>
+        `;
+        list.appendChild(card);
+      });
+    }
+  </script>
+</body>
+</html>
