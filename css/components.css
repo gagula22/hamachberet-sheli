@@ -1070,3 +1070,158 @@ figure.nb-img.nb-img-dragging { opacity: 0.35; pointer-events: none; }
   /* ── Empty state ── */
   .empty-state { padding: var(--sp-6) var(--sp-3); font-size: 14px; }
 }
+
+/* ==========================================================
+   NOTEBOOK RIBBON TOOLBAR  (replaces .nb-toolbar)
+   All --nb-* variables are defined in tokens.css
+========================================================== */
+
+/* Ribbon container */
+.nb-ribbon {
+  background: var(--nb-bg-toolbar);
+  border-bottom: 0.5px solid var(--nb-border-soft);
+  padding: 3px 10px;
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 6;
+}
+.nb-ribbon-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 0;
+  flex-wrap: wrap;
+}
+
+/* Group separator */
+.nb-tb-group {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding: 0 5px;
+  border-left: 0.5px solid var(--nb-border-soft);
+}
+.nb-tb-group:first-child { border-left: none; padding-right: 0; }
+.nb-tb-group:last-child  { border-left: none; }
+
+/* Icon button */
+.nb-tb-btn {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  color: var(--nb-text-2);
+  font-size: 13px;
+  transition: background 0.12s;
+  cursor: pointer;
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  font-family: inherit;
+}
+.nb-tb-btn:hover  { background: var(--nb-bg-hover); color: var(--nb-text-1); }
+.nb-tb-btn.active { background: var(--nb-bg-active); color: var(--nb-accent-str); }
+.nb-tb-btn-wide   { width: auto; padding: 0 8px; font-size: 12px; white-space: nowrap; }
+
+/* Select dropdowns */
+.nb-tb-select {
+  height: 28px;
+  padding: 0 6px;
+  border-radius: 5px;
+  font-size: 12px;
+  color: var(--nb-text-1);
+  background: transparent;
+  border: 0.5px solid transparent;
+  cursor: pointer;
+  font-family: inherit;
+}
+.nb-tb-select:hover  { background: var(--nb-bg-hover); }
+.nb-tb-select:focus  { border-color: var(--nb-border-mid); background: var(--nb-bg-card); outline: none; }
+.nb-style-sel { min-width: 105px; }
+.nb-font-sel  { min-width: 125px; }
+.nb-size-sel  { width: 50px; }
+
+/* Color picker button (ribbon variant) */
+.nb-tb-color-wrap {
+  width: 28px;
+  height: 28px;
+  border-radius: 5px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  font-family: inherit;
+  padding: 0;
+}
+.nb-tb-color-wrap:hover { background: var(--nb-bg-hover); }
+.nb-tb-color-wrap .nb-color-swatch {
+  width: 16px;
+  height: 3px;
+  border-radius: 1px;
+  display: block;
+  margin-top: 1px;
+}
+
+/* Direction toggle button */
+.nb-tb-dir {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 9px;
+  height: 28px;
+  border-radius: 5px;
+  background: var(--nb-bg-tag);
+  color: var(--nb-accent-str);
+  font-weight: 500;
+  font-size: 12px;
+  border: 0.5px solid var(--nb-border-mid);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-family: inherit;
+}
+.nb-tb-dir:hover { background: var(--nb-bg-active); }
+
+/* Export dropdown */
+.nb-export-wrap { position: relative; }
+.nb-export-dd {
+  position: absolute;
+  top: calc(100% + 3px);
+  left: 0;
+  background: #fff;
+  border: 0.5px solid var(--nb-border-mid);
+  border-radius: 8px;
+  padding: 5px;
+  box-shadow: 0 6px 20px rgba(60,40,20,.14);
+  width: 185px;
+  z-index: 600;
+  display: none;
+}
+.nb-export-dd.open { display: block; }
+.nb-export-dd-item {
+  padding: 7px 10px;
+  border-radius: 5px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--nb-text-1);
+}
+.nb-export-dd-item:hover { background: var(--nb-bg-tag); color: var(--nb-accent-str); }
+.nb-export-dd-icon {
+  width: 20px; height: 20px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--nb-bg-soft); border-radius: 4px; font-size: 12px;
+}
+
+/* Focus mode */
+.nb-layout.nb-focus .nb-topics-col { display: none !important; }
+.nb-layout.nb-focus .nb-ribbon     { display: none !important; }

@@ -676,37 +676,216 @@
       save();
     });
 
-    const toolbar = App.el('div', { class: 'nb-toolbar' }, [
-      tool('↩', 'בטל (Ctrl+Z)',     () => editor._doUndo?.()),
-      tool('↪', 'שחזר (Ctrl+Y)',    () => editor._doRedo?.()),
-      sep(),
-      fontSel,
-      sizeSel,
-      sep(),
-      tool('B', 'מודגש', () => exec('bold'), { style: { fontWeight: '700' } }),
-      tool('I', 'נטוי', () => exec('italic'), { style: { fontStyle: 'italic' } }),
-      tool('U', 'קו תחתון', () => exec('underline'), { style: { textDecoration: 'underline' } }),
-      sep(),
-      colorInput,
-      hilightInput,
-      sep(),
-      tool('⇥', 'יישור לימין', () => exec('justifyRight')),
-      tool('≡', 'יישור למרכז', () => exec('justifyCenter')),
-      tool('⇤', 'יישור לשמאל', () => exec('justifyLeft')),
-      tool('☰', 'מיושר משני הצדדים', () => exec('justifyFull')),
-      sep(),
-      tool('H1', 'כותרת גדולה', () => exec('formatBlock', 'H1')),
-      tool('H2', 'כותרת', () => exec('formatBlock', 'H2')),
-      sep(),
-      tool('1.', 'רשימה ממוספרת', () => exec('insertOrderedList')),
-      sep(),
-      tool('🖼️', 'הוסף תמונה', () => fileInput.click()),
-      tool('🎭', 'הוסף יומן מצב רוח', () => insertMoodBlock(editor, save)),
-      tool('🧹', 'נקה עיצוב', () => exec('removeFormat')),
-      sep(),
-      tool('📄', 'יצוא PDF', () => showExportDialog(topic, editor, 'pdf')),
-      tool('📝', 'יצוא Word', () => showExportDialog(topic, editor, 'word')),
-      fileInput
+    // ── Block-style select (new) ─────────────────────────────────────────
+    const BLOCK_STYLES = [
+      { v: 'p',          label: 'פסקה רגילה' },
+      { v: 'h1',         label: 'כותרת 1' },
+      { v: 'h2',         label: 'כותרת 2' },
+      { v: 'h3',         label: 'כותרת 3' },
+      { v: 'blockquote', label: 'ציטוט' },
+      { v: 'pre',        label: 'קוד' }
+    ];
+    const blockStyleSel = App.el('select', {
+      class: 'nb-tb-select nb-style-sel',
+      title: 'סגנון בלוק',
+      onChange: (e) => {
+        exec('formatBlock', e.target.value === 'p' ? '<p>' : e.target.value);
+      }
+    }, BLOCK_STYLES.map(s => App.el('option', { value: s.v }, s.label)));
+
+    // ── Ribbon font / size selects with new classes ──────────────────────
+    const fontSelR = App.el('select', {
+      class: 'nb-tb-select nb-font-sel',
+      title: 'גופן',
+      onChange: (e) => {
+        const v = e.target.value;
+        if (!v) return;
+        applyToSelection(s => { s.fontFamily = v; });
+        e.target.value = '';
+      }
+    }, FONTS.map(f => App.el('option', { value: f.v }, f.label)));
+
+    const SIZES_R = ['גודל','10','12','13','14','16','18','20','24','28','32','40','48'];
+    const sizeSelR = App.el('select', {
+      class: 'nb-tb-select nb-size-sel',
+      title: 'גודל גופן',
+      onChange: (e) => {
+        const v = e.target.value;
+        if (v === 'גודל') return;
+        applyToSelection(s => { s.fontSize = v + 'px'; });
+        e.target.value = 'גודל';
+      }
+    }, SIZES_R.map(s => App.el('option', { value: s }, s)));
+
+    // ── Color pickers (reuse makeColorPicker, ribbon styling) ────────────
+    const colorInputR   = makeColorPicker('A',  'צבע טקסט', '#3D2F22', (hex) => { exec('foreColor', hex); });
+    const hilightInputR = makeColorPicker('🖍', 'צבע הדגשה', '#FFF3C4', (hex) => {
+      editor.focus();
+      if (!document.execCommand('hiliteColor', false, hex))
+        document.execCommand('backColor', false, hex);
+      save();
+    });
+    colorInputR.className   = 'nb-color-btn nb-tb-color-wrap';
+    hilightInputR.className = 'nb-color-btn nb-tb-color-wrap';
+
+    // ── Direction toggle ─────────────────────────────────────────────────
+    let _curDir = 'rtl';
+    const dirLabel = document.createElement('span');
+    dirLabel.textContent = 'עברית';
+    const dirIcon = document.createElement('span');
+    dirIcon.style.cssText = 'font-family:monospace;font-size:13px;font-weight:700';
+    dirIcon.textContent = '→';
+    const dirBtn = document.createElement('button');
+    dirBtn.className = 'nb-tb-dir';
+    dirBtn.title = 'כיוון פסקה (Ctrl+Shift+→/←)';
+    dirBtn.appendChild(dirIcon);
+    dirBtn.appendChild(dirLabel);
+    dirBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      _curDir = _curDir === 'rtl' ? 'ltr' : 'rtl';
+      editor.focus();
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount) {
+        let block = sel.getRangeAt(0).startContainer;
+        while (block && block !== editor) {
+          if (block.nodeType === 1 && /^(P|H[1-6]|LI|BLOCKQUOTE|PRE|DIV)$/.test(block.nodeName)) break;
+          block = block.parentNode;
+        }
+        if (block && block !== editor) {
+          block.dir = _curDir;
+          block.style.textAlign = _curDir === 'rtl' ? 'right' : 'left';
+        }
+      }
+      dirLabel.textContent = _curDir === 'rtl' ? 'עברית' : 'English';
+      dirIcon.textContent  = _curDir === 'rtl' ? '→' : '←';
+      save();
+    });
+
+    // ── Export dropdown ──────────────────────────────────────────────────
+    const exportDD  = document.createElement('div');
+    exportDD.className = 'nb-export-dd';
+    [
+      { label: 'Word (.doc)', icon: '📄', action: () => showExportDialog(topic, editor, 'word') },
+      { label: 'PDF (להדפסה)', icon: '🖨️', action: () => showExportDialog(topic, editor, 'pdf') }
+    ].forEach(({ label, icon, action }) => {
+      const item = document.createElement('div');
+      item.className = 'nb-export-dd-item';
+      item.innerHTML = `<span class="nb-export-dd-icon">${icon}</span><span>${label}</span>`;
+      item.addEventListener('click', (e) => { e.stopPropagation(); exportDD.classList.remove('open'); action(); });
+      exportDD.appendChild(item);
+    });
+    const exportWrap = document.createElement('div');
+    exportWrap.className = 'nb-export-wrap';
+    const exportBtn = document.createElement('button');
+    exportBtn.className = 'nb-tb-btn nb-tb-btn-wide';
+    exportBtn.title = 'ייצוא';
+    exportBtn.textContent = '⤓ ייצוא ▾';
+    exportBtn.addEventListener('click', (e) => { e.stopPropagation(); exportDD.classList.toggle('open'); });
+    exportWrap.appendChild(exportBtn);
+    exportWrap.appendChild(exportDD);
+    document.addEventListener('click', () => exportDD.classList.remove('open'), { passive: true });
+
+    // ── Focus mode ───────────────────────────────────────────────────────
+    function toggleFocusMode() {
+      const layout = document.querySelector('.nb-layout');
+      if (!layout) return;
+      const on = layout.classList.toggle('nb-focus');
+      App.toast(on ? '🎯 מצב מיקוד — לחץ Escape ליציאה' : '↩ יצאת ממצב מיקוד');
+    }
+    editor.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Escape') {
+        const layout = document.querySelector('.nb-layout');
+        if (layout && layout.classList.contains('nb-focus')) { ev.preventDefault(); toggleFocusMode(); }
+      }
+    });
+
+    // ── Insert helpers ───────────────────────────────────────────────────
+    function insertLink() {
+      const url = prompt('כתובת הקישור (https://…):');
+      if (!url || !url.trim()) return;
+      exec('createLink', url.trim());
+    }
+    function insertTable() {
+      const td = 'style="border:1px solid #D8C9B0;padding:6px 10px"';
+      const th = 'style="border:1px solid #D8C9B0;padding:6px 10px;background:#F4ECD8;font-weight:500"';
+      exec('insertHTML',
+        `<table dir="rtl" style="border-collapse:collapse;width:100%;margin:8px 0">` +
+        `<tr><th ${th}>עמודה א</th><th ${th}>עמודה ב</th><th ${th}>עמודה ג</th></tr>` +
+        `<tr><td ${td}>&nbsp;</td><td ${td}>&nbsp;</td><td ${td}>&nbsp;</td></tr>` +
+        `<tr><td ${td}>&nbsp;</td><td ${td}>&nbsp;</td><td ${td}>&nbsp;</td></tr>` +
+        `</table><p dir="rtl"><br></p>`);
+      save();
+    }
+    function insertCheckboxList() {
+      exec('insertHTML',
+        '<ul dir="rtl" style="list-style:none;padding-right:4px">' +
+        '<li><input type="checkbox"> פריט ראשון</li>' +
+        '<li><input type="checkbox"> פריט שני</li>' +
+        '</ul><p dir="rtl"><br></p>');
+      save();
+    }
+
+    // ── Helper: wrap items in a group div ────────────────────────────────
+    function grp(...items) { return App.el('div', { class: 'nb-tb-group' }, items.filter(Boolean)); }
+
+    // ── Helper: toolbar button ────────────────────────────────────────────
+    function tbBtn(label, title, onClick, extra = {}) {
+      return App.el('button', { class: 'nb-tb-btn', title, onClick, ...extra }, label);
+    }
+
+    // ── Build the 2-row ribbon ───────────────────────────────────────────
+    const ribbon = App.el('div', { class: 'nb-ribbon' }, [
+      // Row 1: save/undo | block-style | font/size | B/I/U/S | colors | direction
+      App.el('div', { class: 'nb-ribbon-row' }, [
+        grp(
+          tbBtn('💾', 'שמור (Ctrl+S)', () => { saveImmediate(); App.toast('✓ נשמר'); }),
+          tbBtn('↩', 'בטל (Ctrl+Z)',   () => editor._doUndo?.()),
+          tbBtn('↪', 'שחזר (Ctrl+Y)', () => editor._doRedo?.())
+        ),
+        grp(blockStyleSel),
+        grp(fontSelR, sizeSelR),
+        grp(
+          tbBtn('B', 'מודגש (Ctrl+B)', () => exec('bold'),         { style: { fontWeight: '700' } }),
+          tbBtn('I', 'נטוי (Ctrl+I)',   () => exec('italic'),       { style: { fontStyle: 'italic', fontFamily: 'Georgia' } }),
+          tbBtn('U', 'קו תחתון',        () => exec('underline'),    { style: { textDecoration: 'underline' } }),
+          tbBtn('S', 'קו חוצה',         () => exec('strikeThrough'),{ style: { textDecoration: 'line-through' } })
+        ),
+        grp(colorInputR, hilightInputR),
+        grp(dirBtn)
+      ]),
+      // Row 2: align | lists | indent | insert | actions/export
+      App.el('div', { class: 'nb-ribbon-row' }, [
+        grp(
+          tbBtn('→', 'יישור לימין', () => exec('justifyRight')),
+          tbBtn('≡', 'מרכז',        () => exec('justifyCenter')),
+          tbBtn('←', 'יישור לשמאל',() => exec('justifyLeft')),
+          tbBtn('☰', 'מלא',          () => exec('justifyFull'))
+        ),
+        grp(
+          tbBtn('•',  'תבליטים',       () => exec('insertUnorderedList')),
+          tbBtn('1.', 'ממוספרת',        () => exec('insertOrderedList')),
+          tbBtn('☑', 'רשימת משימות',  () => insertCheckboxList())
+        ),
+        grp(
+          tbBtn('⇲', 'הזחה פנימה', () => exec('indent')),
+          tbBtn('⇱', 'הזחה החוצה', () => exec('outdent'))
+        ),
+        grp(
+          tbBtn('🔗',  'קישור',           () => insertLink()),
+          tbBtn('🖼️', 'תמונה מהמחשב',   () => fileInput.click()),
+          tbBtn('📎',  'צרף קובץ',        () => fileInput.click()),
+          tbBtn('⊞',   'טבלה',            () => insertTable()),
+          tbBtn('—',   'קו מפריד',        () => { exec('insertHorizontalRule'); save(); })
+        ),
+        grp(
+          tbBtn('📄',  'תבנית', () => App.toast('תבניות — בקרוב!')),
+          tbBtn('🎭',  'הוסף יומן מצב רוח', () => insertMoodBlock(editor, save)),
+          tbBtn('📌',  'הצמד נושא', () => { const pinned = !topic.pinned; updateTopic(topic.id, { pinned }); App.toast(pinned ? '📌 הוצמד' : 'הוסר מהמוצמדים'); }),
+          tbBtn('🎯',  'מצב מיקוד (Escape ליציאה)', () => toggleFocusMode()),
+          exportWrap
+        ),
+        fileInput
+      ])
     ]);
 
     const breadcrumb = buildBreadcrumb(topic);
@@ -732,10 +911,10 @@
       syncChip
     ]);
 
-    // Toolbar is position:sticky — no spacer needed (stays in flow)
+    // Ribbon is position:sticky — no spacer needed (stays in flow)
     return App.el('div', { class: 'nb-editor-col' }, [
       backBtn || null,
-      toolbar,
+      ribbon,
       App.el('div', { class: 'card stack' }, [breadcrumb, titleInput, stage, meta])
     ]);
   }

@@ -40,6 +40,26 @@
 
   --sidebar-w: 260px;
   --topbar-h: 116px;
+
+  /* ── Notebook ribbon theme (warm book palette) ── */
+  --nb-bg-page:    #FAF6EE;
+  --nb-bg-card:    #FFFFFF;
+  --nb-bg-soft:    #F4ECD8;
+  --nb-bg-hover:   #F0E8D8;
+  --nb-bg-active:  #E8DDC8;
+  --nb-bg-toolbar: #FFFCF5;
+  --nb-bg-tag:     #FBEEE6;
+  --nb-border-soft:#E5D8C0;
+  --nb-border-mid: #D8C9B0;
+  --nb-border-str: #B8A88C;
+  --nb-text-1:     #3D2F22;
+  --nb-text-2:     #6B5840;
+  --nb-text-3:     #8B7B6A;
+  --nb-text-4:     #A8957D;
+  --nb-accent:     #B8762A;
+  --nb-accent-str: #8C4A2C;
+  --nb-accent-sft: #C9826A;
+  --nb-success:    #2D8C4F;
 }
 
 * { box-sizing: border-box; }
