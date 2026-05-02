@@ -2042,6 +2042,44 @@ figure.nb-img.nb-img-dragging { opacity: 0.35; pointer-events: none; }
 }
 .nb-tag-input::placeholder { color: var(--nb-text-4); }
 
+/* Tag input wrapper — provides positioning context for dropdown */
+.nb-tag-input-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Tag autocomplete dropdown */
+.nb-tag-dropdown {
+  display: none;
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 150px;
+  background: var(--nb-bg-card, #fff);
+  border: 1px solid var(--nb-border-mid);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+  z-index: 200;
+  overflow: hidden;
+  padding: 4px 0;
+}
+.nb-tag-dd-item {
+  padding: 6px 12px;
+  font-size: 12px;
+  font-family: 'Heebo', sans-serif;
+  color: var(--nb-text-2);
+  cursor: pointer;
+  white-space: nowrap;
+  outline: none;
+  transition: background 0.1s;
+}
+.nb-tag-dd-item:hover,
+.nb-tag-dd-item:focus {
+  background: var(--nb-bg-tag);
+  color: var(--nb-accent-str, #8C4A2C);
+}
+
 /* Wiki link style in editor */
 .nb-wiki-link {
   color: var(--nb-accent) !important;

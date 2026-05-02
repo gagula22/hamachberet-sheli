@@ -1144,18 +1144,102 @@
       App.el('span', {}, badgeIcon + ' ' + badgeLabel)
     ]);
 
-    // Tag management
+    // ── Tag management with autocomplete dropdown ────────────────────────
     const topicTags = Array.isArray(topic.tags) ? [...topic.tags] : [];
     const tagsRow = App.el('div', { class: 'nb-note-tags' });
-    function renderTagsRow() {
-      tagsRow.innerHTML = '';
-      // Date pill (read-only)
-      const dateStr = new Date(topic.createdAt || Date.now()).toLocaleDateString('he-IL', {
+
+    // Persistent input + dropdown (survive pill re-renders)
+    const tagSuggest = App.el('div', { class: 'nb-tag-dropdown' });
+    const tagInput   = App.el('input', { class: 'nb-tag-input', placeholder: '+ תגית', type: 'text' });
+    const tagWrap    = App.el('div',   { class: 'nb-tag-input-wrap' }, [tagInput, tagSuggest]);
+
+    function getAllKnownTags() {
+      const counts = {};
+      getTopics().forEach(t => (t.tags || []).forEach(tag => {
+        counts[tag] = (counts[tag] || 0) + 1;
+      }));
+      return Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([t]) => t);
+    }
+
+    function hideSuggest() { tagSuggest.style.display = 'none'; }
+
+    function showSuggest(filter) {
+      const lower = (filter || '').toLowerCase();
+      const suggestions = getAllKnownTags()
+        .filter(t => !topicTags.includes(t))
+        .filter(t => !lower || t.toLowerCase().includes(lower))
+        .slice(0, 10);
+      if (!suggestions.length) { hideSuggest(); return; }
+      tagSuggest.innerHTML = '';
+      suggestions.forEach(tag => {
+        const item = document.createElement('div');
+        item.className = 'nb-tag-dd-item';
+        item.textContent = '#' + tag;
+        item.setAttribute('tabindex', '-1');
+        item.addEventListener('mousedown', (e) => {
+          e.preventDefault();  // keep input focus
+          addTag(tag);
+        });
+        tagSuggest.appendChild(item);
+      });
+      tagSuggest.style.display = 'block';
+    }
+
+    function addTag(tag) {
+      const t = tag.trim();
+      if (t && !topicTags.includes(t)) {
+        topicTags.push(t);
+        updateTopic(topic.id, { tags: [...topicTags] });
+      }
+      tagInput.value = '';
+      hideSuggest();
+      renderTagPills();
+    }
+
+    tagInput.addEventListener('focus', () => showSuggest(tagInput.value.trim()));
+    tagInput.addEventListener('input', () => showSuggest(tagInput.value.trim()));
+    tagInput.addEventListener('blur',  () => setTimeout(hideSuggest, 160));
+    tagInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ',') {
+        e.preventDefault();
+        const val = tagInput.value.trim();
+        if (val) addTag(val); else hideSuggest();
+      } else if (e.key === 'Escape') {
+        tagInput.value = '';
+        hideSuggest();
+        tagInput.blur();
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        const first = tagSuggest.querySelector('.nb-tag-dd-item');
+        if (first) first.focus();
+      }
+    });
+    tagSuggest.addEventListener('keydown', (e) => {
+      const items = [...tagSuggest.querySelectorAll('.nb-tag-dd-item')];
+      const idx   = items.indexOf(document.activeElement);
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        (items[idx + 1] || tagInput).focus();
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (idx <= 0) tagInput.focus(); else items[idx - 1].focus();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        const tag = (document.activeElement.textContent || '').replace(/^#/, '');
+        if (tag) { addTag(tag); tagInput.focus(); }
+      } else if (e.key === 'Escape') {
+        hideSuggest();
+        tagInput.focus();
+      }
+    });
+
+    function renderTagPills() {
+      // Remove everything except tagWrap, then re-insert pills before it
+      Array.from(tagsRow.children).forEach(ch => { if (ch !== tagWrap) ch.remove(); });
+      const dateStr  = new Date(topic.createdAt || Date.now()).toLocaleDateString('he-IL', {
         weekday: 'long', day: 'numeric', month: 'long'
       });
-      const datePill = App.el('span', { class: 'nb-note-tag nb-date-tag' }, dateStr);
-      tagsRow.appendChild(datePill);
-      // User tags
+      tagsRow.insertBefore(App.el('span', { class: 'nb-note-tag nb-date-tag' }, dateStr), tagWrap);
       topicTags.forEach((tag, idx) => {
         const pill = App.el('span', { class: 'nb-note-tag' }, [
           document.createTextNode(tag),
@@ -1165,35 +1249,16 @@
               e.stopPropagation();
               topicTags.splice(idx, 1);
               updateTopic(topic.id, { tags: [...topicTags] });
-              renderTagsRow();
+              renderTagPills();
             }
           }, '×')
         ]);
-        tagsRow.appendChild(pill);
+        tagsRow.insertBefore(pill, tagWrap);
       });
-      // Add tag input
-      const tagInput = App.el('input', {
-        class: 'nb-tag-input',
-        placeholder: '+ תגית',
-        onKeydown: (e) => {
-          if (e.key === 'Enter' || e.key === ',') {
-            e.preventDefault();
-            const val = tagInput.value.trim();
-            if (val && !topicTags.includes(val)) {
-              topicTags.push(val);
-              updateTopic(topic.id, { tags: [...topicTags] });
-            }
-            tagInput.value = '';
-            renderTagsRow();
-          } else if (e.key === 'Escape') {
-            tagInput.value = '';
-            tagInput.blur();
-          }
-        }
-      });
-      tagsRow.appendChild(tagInput);
     }
-    renderTagsRow();
+
+    tagsRow.appendChild(tagWrap);
+    renderTagPills();
 
     const titleInput = App.el('input', {
       class: 'nb-title',
