@@ -505,8 +505,15 @@
       }
     }
 
+    // Strip resize handles before reading HTML (handles are UI-only, not data)
+    function getCleanHTML() {
+      const clone = editor.cloneNode(true);
+      clone.querySelectorAll('.nb-col-resize-handle').forEach(h => h.remove());
+      return clone.innerHTML;
+    }
+
     function saveImmediate() {
-      updateTopic(topic.id, { body: editor.innerHTML, updatedAt: Date.now() });
+      updateTopic(topic.id, { body: getCleanHTML(), updatedAt: Date.now() });
       refreshPageLabels();
     }
     const save = Editable.debounce(saveImmediate, 500);
@@ -517,7 +524,7 @@
     const MAX_UNDO  = 60;
 
     function pushUndo() {
-      const snap = editor.innerHTML;
+      const snap = getCleanHTML(); // save without handles so undo is clean
       if (_undoPtr >= 0 && _undoStack[_undoPtr] === snap) return; // no change
       _undoStack.splice(_undoPtr + 1);           // discard forward history
       _undoStack.push(snap);
@@ -530,6 +537,7 @@
       restoreMoodBlocks(editor);
       Editable.attachImageBehaviors(editor, save);
       attachMoodBehaviors(editor, save);
+      attachTableResizers(editor, save);
       saveImmediate();
     }
 
@@ -577,6 +585,7 @@
     Editable.attachImageBehaviors(editor, save);
     attachMoodBehaviors(editor, save);
     wrapImagesInEditor(editor);
+    attachTableResizers(editor, save);   // column resize handles for existing tables
 
     // ── Paste handler: Excel/Sheets → table | image → img-wrap ────────────
     //
@@ -748,7 +757,11 @@
         if (table) {
           e.preventDefault();
           const cleaned = cleanPastedTable(table);
-          if (cleaned) { document.execCommand('insertHTML', false, cleaned); save(); }
+          if (cleaned) {
+            document.execCommand('insertHTML', false, cleaned);
+            save();
+            requestAnimationFrame(() => attachTableResizers(editor, save));
+          }
           return;
         }
       }
@@ -1672,6 +1685,81 @@
     };
     reader.onerror = () => App.toast('שגיאה בקריאת הקובץ');
     reader.readAsDataURL(file);
+  }
+
+  // ── Table column resizing ────────────────────────────────────────────────
+  // Adds a draggable handle on the right border of every non-last cell in
+  // the first row of each table. Handles are stripped before saving so they
+  // never pollute the stored HTML.
+  function attachTableResizers(editor, save) {
+    editor.querySelectorAll('table').forEach(table => {
+      if (table.querySelector('.nb-col-resize-handle')) return; // already attached
+
+      const firstRow = table.querySelector('tr');
+      if (!firstRow) return;
+
+      const cells = [...firstRow.querySelectorAll('th, td')];
+      let colEls   = [...table.querySelectorAll('col')];
+
+      // Ensure a <colgroup> exists so we can resize via col.style.width
+      if (!colEls.length) {
+        const cg = document.createElement('colgroup');
+        cells.forEach(cell => {
+          const col = document.createElement('col');
+          col.style.width = cell.offsetWidth + 'px';
+          cg.appendChild(col);
+        });
+        table.insertBefore(cg, table.firstChild);
+        colEls = [...cg.querySelectorAll('col')];
+        // Switch to fixed layout so col widths take effect
+        table.style.tableLayout = 'fixed';
+      }
+
+      cells.forEach((cell, ci) => {
+        if (ci >= cells.length - 1) return; // no handle on last column
+
+        cell.style.position = 'relative';
+        const handle = document.createElement('span');
+        handle.className   = 'nb-col-resize-handle';
+        handle.contentEditable = 'false';
+
+        handle.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+
+          const startX     = e.clientX;
+          const col        = colEls[ci];
+          const colNext    = colEls[ci + 1];
+          const startW     = parseInt(col?.style.width)     || cells[ci].offsetWidth;
+          const startNextW = parseInt(colNext?.style.width) || (cells[ci + 1] ? cells[ci + 1].offsetWidth : 0);
+
+          document.body.classList.add('nb-col-resizing');
+
+          const onMove = (ev) => {
+            const dx   = ev.clientX - startX;
+            const newW = Math.max(40, startW + dx);
+            if (col) col.style.width = newW + 'px';
+            // Don't shrink the next column — allow the table to grow instead
+            if (colNext) {
+              const newNextW = Math.max(40, startNextW - dx);
+              colNext.style.width = newNextW + 'px';
+            }
+          };
+
+          const onUp = () => {
+            document.body.classList.remove('nb-col-resizing');
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+            save();
+          };
+
+          document.addEventListener('mousemove', onMove);
+          document.addEventListener('mouseup', onUp);
+        });
+
+        cell.appendChild(handle);
+      });
+    });
   }
 
   // Wrap plain <img> elements from old saved content with resize handles

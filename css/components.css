@@ -2124,6 +2124,35 @@ figure.nb-img.nb-img-dragging { opacity: 0.35; pointer-events: none; }
 }
 
 /* ============================================================
+   NOTEBOOK: Table column resize handle
+============================================================ */
+.nb-col-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 10;
+  background: transparent;
+  user-select: none;
+}
+.nb-col-resize-handle:hover {
+  background: var(--nb-accent, #B8762A);
+  opacity: 0.35;
+  border-radius: 2px;
+}
+/* Prevent text selection while dragging */
+body.nb-col-resizing {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+body.nb-col-resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+/* ============================================================
    NOTEBOOK: Tag Cloud Sidebar Section
 ============================================================ */
 
