@@ -1628,3 +1628,63 @@ figure.nb-img.nb-img-dragging { opacity: 0.35; pointer-events: none; }
   font-size: 13px; border: none; cursor: pointer; background: transparent;
 }
 .nb-tpl-btn-secondary:hover { color: var(--nb-text-1); }
+
+
+/* ============================================================
+   NOTEBOOK STICKY FIX — full-viewport layout, internal scroll
+   When .nb-layout is present, remove .view padding so the
+   layout fills the entire available height below the topbar.
+   Each column then scrolls on its own — the ribbon and topics
+   sidebar stay fixed, just like the template.
+============================================================ */
+
+/* 1 ─ Cancel the .view padding when notebook is shown */
+.view:has(.nb-layout) {
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+
+/* 2 ─ Layout fills the remaining height below the topbar */
+.nb-layout {
+  height: calc(100vh - var(--topbar-h));
+  min-height: unset !important;
+  overflow: hidden !important;
+  align-items: stretch !important;
+}
+
+/* 3 ─ Topics sidebar: fixed height, scrolls internally */
+.nb-topics-col {
+  height: 100% !important;
+  overflow-y: auto !important;
+  position: static !important;  /* override old position:sticky */
+  top: unset !important;
+  max-height: unset !important;
+  padding-top: 10px;
+  padding-bottom: 24px;
+}
+
+/* 4 ─ Editor column: fixed height, scrolls internally */
+.nb-editor-col {
+  height: 100% !important;
+  overflow-y: auto !important;
+}
+
+/* 5 ─ Ribbon is sticky WITHIN the scrolling editor column — stays at top */
+.nb-ribbon {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 6 !important;
+}
+
+/* 6 ─ Status bar stays at the bottom (flex column layout) */
+.nb-status-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+}
+
+/* 7 ─ Resizer also stretches to full height */
+.nb-resizer {
+  height: 100% !important;
+  align-self: stretch !important;
+}
