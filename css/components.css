@@ -1930,3 +1930,20 @@ figure.nb-img.nb-img-dragging { opacity: 0.35; pointer-events: none; }
   background: var(--nb-bg-active) !important;
   color: var(--nb-accent-str) !important;
 }
+
+/* ============================================================
+   NOTEBOOK: Hide global topbar — the ribbon is its own header
+   When .nb-layout is rendered, topbar is unnecessary clutter
+============================================================ */
+.main:has(.nb-layout) .topbar {
+  display: none !important;
+}
+/* nb-layout takes the full viewport when topbar is gone */
+.main:has(.nb-layout) .nb-layout {
+  height: 100vh !important;
+}
+/* Also cancel topbar-h offset from view padding rule */
+.main:has(.nb-layout) .view:has(.nb-layout) {
+  padding: 0 !important;
+  overflow: hidden !important;
+}
