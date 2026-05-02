@@ -8,17 +8,26 @@
   body { font-family: 'Segoe UI', 'Arial Hebrew', Arial, sans-serif; direction: rtl; text-align: right; background: #f7f8fa; color: #222; max-width: 900px; margin: 0 auto; padding: 24px; }
   h1 { color: #0a7; border-bottom: 3px solid #0a7; padding-bottom: 8px; }
   .intro { color: #666; margin-bottom: 24px; }
+
+  .filter-bar { background: white; padding: 14px 18px; border-radius: 10px; box-shadow: 0 2px 6px rgba(0,0,0,0.06); margin: 16px 0 24px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .filter-bar label { font-weight: 600; color: #444; font-size: 14px; }
+  .filter-bar select { padding: 8px 12px; border: 2px solid #e0e0e0; border-radius: 6px; font-size: 14px; font-family: inherit; background: white; cursor: pointer; min-width: 180px; }
+  .filter-bar select:hover { border-color: #0a7; }
+  .filter-bar .count-badge { margin-inline-start: auto; background: #0a7; color: white; padding: 4px 12px; border-radius: 20px; font-size: 13px; font-weight: 600; }
+
   .latest-card { background: linear-gradient(135deg, #e8f5e9 0%, #f1f8e9 100%); padding: 20px 24px; border-radius: 12px; box-shadow: 0 4px 12px rgba(10,170,119,0.15); margin: 16px 0; border: 2px solid #0a7; }
   .latest-card a { color: #0a4; text-decoration: none; font-size: 19px; font-weight: 700; display: block; }
   .latest-card a:hover { color: #064; }
   .latest-card .badge { display: inline-block; background: #0a7; color: white; padding: 3px 10px; border-radius: 4px; font-size: 11px; margin-inline-end: 8px; vertical-align: middle; }
   .latest-card .meta { color: #444; font-size: 13px; margin-top: 6px; }
+
   .report-card { background: white; padding: 14px 18px; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.06); margin: 10px 0; border-right: 4px solid #d4a017; transition: all 0.2s; }
   .report-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.12); }
   .report-card a { color: #0a4; text-decoration: none; font-size: 16px; font-weight: 600; }
   .report-card a:hover { color: #064; text-decoration: underline; }
   .report-card .meta { color: #666; font-size: 13px; margin-top: 4px; display: flex; gap: 16px; flex-wrap: wrap; }
   .report-card .meta span { display: inline-flex; align-items: center; gap: 4px; }
+
   .empty { text-align: center; color: #999; padding: 40px; background: white; border-radius: 8px; }
   .section-title { color: #555; font-size: 14px; font-weight: 600; margin: 24px 0 8px; text-transform: uppercase; letter-spacing: 0.5px; }
   .error { background: #ffe5e5; color: #c00; padding: 12px 16px; border-radius: 6px; margin: 12px 0; }
@@ -28,11 +37,21 @@
   <h1>📚 דוחות Wyckoff — היסטוריה</h1>
   <p class="intro">רשימת כל דוחות הניתוח שנוצרו, ממוינים מהחדש לישן.</p>
 
+  <div class="filter-bar" id="filter-bar" style="display:none;">
+    <label for="month-filter">📅 צמצם לפי חודש:</label>
+    <select id="month-filter">
+      <option value="all">כל החודשים</option>
+    </select>
+    <span class="count-badge" id="count-badge">0 דוחות</span>
+  </div>
+
   <div id="content">
     <div class="empty">⏳ טוען...</div>
   </div>
 
   <script>
+    const monthHe = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
+
     function escapeHtml(s) {
       return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     }
@@ -42,6 +61,104 @@
         const r = await fetch(path, { method: 'HEAD' });
         return r.ok;
       } catch { return false; }
+    }
+
+    let allReports = [];
+
+    function getMonthKey(report) {
+      const [year, month] = report.date.split('-');
+      return year + '-' + month;
+    }
+
+    function getMonthLabel(monthKey) {
+      const [year, month] = monthKey.split('-');
+      return monthHe[parseInt(month) - 1] + ' ' + year;
+    }
+
+    function render(filterMonth) {
+      const content = document.getElementById('content');
+      const countBadge = document.getElementById('count-badge');
+
+      let filtered = allReports;
+      if (filterMonth && filterMonth !== 'all') {
+        filtered = allReports.filter(r => getMonthKey(r) === filterMonth);
+      }
+
+      countBadge.textContent = filtered.length + ' דוחות';
+
+      if (filtered.length === 0) {
+        content.innerHTML = '<div class="empty">📭 אין דוחות לחודש זה.</div>';
+        return;
+      }
+
+      let html = '';
+      const showLatestBig = (filterMonth === 'all' || !filterMonth);
+
+      if (showLatestBig) {
+        const latest = filtered[0];
+        html += `
+          <div class="latest-card">
+            <a href="${escapeHtml(latest.file)}">
+              <span class="badge">⭐ אחרון</span>
+              📊 ${escapeHtml(latest.title || latest.symbol)}
+            </a>
+            <div class="meta">
+              📅 ${escapeHtml(latest.date)} · 🕐 ${escapeHtml(latest.time)} שעון ישראל · 💰 ${escapeHtml(latest.symbol)}
+            </div>
+          </div>`;
+
+        if (filtered.length > 1) {
+          html += '<div class="section-title">דוחות קודמים</div>';
+          for (let i = 1; i < filtered.length; i++) {
+            html += renderCard(filtered[i]);
+          }
+        }
+      } else {
+        // Filtered view: all as compact cards (no special "latest" treatment)
+        html += '<div class="section-title">דוחות ' + getMonthLabel(filterMonth) + '</div>';
+        for (const r of filtered) {
+          html += renderCard(r);
+        }
+      }
+
+      content.innerHTML = html;
+    }
+
+    function renderCard(r) {
+      return `
+        <div class="report-card">
+          <a href="${escapeHtml(r.file)}">📊 ${escapeHtml(r.title || r.symbol)}</a>
+          <div class="meta">
+            <span>📅 ${escapeHtml(r.date)}</span>
+            <span>🕐 ${escapeHtml(r.time)} שעון ישראל</span>
+            <span>💰 ${escapeHtml(r.symbol)}</span>
+          </div>
+        </div>`;
+    }
+
+    function buildMonthFilter() {
+      const months = new Set();
+      for (const r of allReports) months.add(getMonthKey(r));
+      const sortedMonths = Array.from(months).sort().reverse(); // newest first
+
+      const select = document.getElementById('month-filter');
+      // Keep "all" option, add months
+      select.innerHTML = '<option value="all">כל החודשים (' + allReports.length + ')</option>';
+      for (const mk of sortedMonths) {
+        const count = allReports.filter(r => getMonthKey(r) === mk).length;
+        const opt = document.createElement('option');
+        opt.value = mk;
+        opt.textContent = getMonthLabel(mk) + ' (' + count + ')';
+        select.appendChild(opt);
+      }
+
+      // Show filter bar only if 3+ reports OR more than 1 month
+      const filterBar = document.getElementById('filter-bar');
+      if (allReports.length >= 3 || sortedMonths.length > 1) {
+        filterBar.style.display = 'flex';
+      }
+
+      select.addEventListener('change', e => render(e.target.value));
     }
 
     async function load() {
@@ -59,7 +176,6 @@
       }
 
       const reports = (manifest.reports || []).slice();
-      // Sort by ts (newest first)
       reports.sort((a, b) => (b.ts || 0) - (a.ts || 0));
 
       // Verify each file exists (skip broken links)
@@ -73,37 +189,9 @@
         return;
       }
 
-      // Render: latest big, rest as compact cards
-      let html = '';
-      const latest = verified[0];
-      html += `
-        <div class="latest-card">
-          <a href="${escapeHtml(latest.file)}">
-            <span class="badge">⭐ אחרון</span>
-            📊 ${escapeHtml(latest.title || latest.symbol)}
-          </a>
-          <div class="meta">
-            📅 ${escapeHtml(latest.date)} · 🕐 ${escapeHtml(latest.time)} שעון ישראל · 💰 ${escapeHtml(latest.symbol)}
-          </div>
-        </div>`;
-
-      if (verified.length > 1) {
-        html += '<div class="section-title">דוחות קודמים</div>';
-        for (let i = 1; i < verified.length; i++) {
-          const r = verified[i];
-          html += `
-            <div class="report-card">
-              <a href="${escapeHtml(r.file)}">📊 ${escapeHtml(r.title || r.symbol)}</a>
-              <div class="meta">
-                <span>📅 ${escapeHtml(r.date)}</span>
-                <span>🕐 ${escapeHtml(r.time)} שעון ישראל</span>
-                <span>💰 ${escapeHtml(r.symbol)}</span>
-              </div>
-            </div>`;
-        }
-      }
-
-      content.innerHTML = html;
+      allReports = verified;
+      buildMonthFilter();
+      render('all');
     }
 
     load();
