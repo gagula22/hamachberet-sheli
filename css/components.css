@@ -1924,3 +1924,9 @@ figure.nb-img.nb-img-dragging { opacity: 0.35; pointer-events: none; }
   font-weight: 500 !important;
 }
 .nb-wiki-link:hover { border-bottom-color: var(--nb-accent) !important; }
+
+/* Active state for B/I/U/S buttons when selection is formatted */
+.nb-tb-btn.nb-tb-active {
+  background: var(--nb-bg-active) !important;
+  color: var(--nb-accent-str) !important;
+}

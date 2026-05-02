@@ -502,7 +502,7 @@
     const _debouncedPush = Editable.debounce(pushUndo, 800);
     editor.addEventListener('input', _debouncedPush);
 
-    // Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y
+    // Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y / Ctrl+Shift+→/← direction
     editor.addEventListener('keydown', (e) => {
       const mod = e.ctrlKey || e.metaKey;
       if (!mod) return;
@@ -510,6 +510,10 @@
         e.preventDefault(); e.stopPropagation(); doUndo();
       } else if (e.key === 'y' || (e.key === 'z' && e.shiftKey)) {
         e.preventDefault(); e.stopPropagation(); doRedo();
+      } else if (e.shiftKey && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) {
+        // Ctrl+Shift+→/← → toggle paragraph direction (like the template)
+        e.preventDefault(); e.stopPropagation();
+        dirBtn.click();
       }
     });
     // ── end undo/redo ───────────────────────────────────────────────────────
@@ -722,6 +726,24 @@
       }
     }, BLOCK_STYLES.map(s => App.el('option', { value: s.v }, s.label)));
 
+    // Live-update block style select when cursor moves
+    function syncBlockStyle() {
+      const sel = window.getSelection();
+      if (!sel || !sel.rangeCount) return;
+      let node = sel.getRangeAt(0).startContainer;
+      while (node && node !== editor) {
+        const tag = node.nodeName && node.nodeName.toLowerCase();
+        if (['h1','h2','h3','blockquote','pre'].includes(tag)) {
+          blockStyleSel.value = tag; return;
+        }
+        node = node.parentNode;
+      }
+      blockStyleSel.value = 'p';
+    }
+    editor.addEventListener('keyup',    syncBlockStyle);
+    editor.addEventListener('mouseup',  syncBlockStyle);
+    editor.addEventListener('focus',    syncBlockStyle);
+
     // ── Ribbon font / size selects with new classes ──────────────────────
     const fontSelR = App.el('select', {
       class: 'nb-tb-select nb-font-sel',
@@ -878,6 +900,21 @@
     }
 
     // ── Build the 2-row ribbon ───────────────────────────────────────────
+    const boldBtn    = tbBtn('B', 'מודגש (Ctrl+B)', () => exec('bold'),          { style: { fontWeight: '700' } });
+    const italicBtn  = tbBtn('I', 'נטוי (Ctrl+I)',   () => exec('italic'),        { style: { fontStyle: 'italic', fontFamily: 'Georgia' } });
+    const ulBtn      = tbBtn('U', 'קו תחתון',        () => exec('underline'),     { style: { textDecoration: 'underline' } });
+    const strikeBtn  = tbBtn('S', 'קו חוצה',         () => exec('strikeThrough'), { style: { textDecoration: 'line-through' } });
+
+    // Live active-state sync for B/I/U/S buttons
+    function syncFormatState() {
+      boldBtn.classList.toggle(  'nb-tb-active', document.queryCommandState('bold'));
+      italicBtn.classList.toggle('nb-tb-active', document.queryCommandState('italic'));
+      ulBtn.classList.toggle(   'nb-tb-active', document.queryCommandState('underline'));
+      strikeBtn.classList.toggle('nb-tb-active', document.queryCommandState('strikeThrough'));
+    }
+    editor.addEventListener('keyup',   syncFormatState);
+    editor.addEventListener('mouseup', syncFormatState);
+
     const ribbon = App.el('div', { class: 'nb-ribbon' }, [
       // Row 1: save/undo | block-style | font/size | B/I/U/S | colors | direction
       App.el('div', { class: 'nb-ribbon-row' }, [
@@ -888,12 +925,7 @@
         ),
         grp(blockStyleSel),
         grp(fontSelR, sizeSelR),
-        grp(
-          tbBtn('B', 'מודגש (Ctrl+B)', () => exec('bold'),         { style: { fontWeight: '700' } }),
-          tbBtn('I', 'נטוי (Ctrl+I)',   () => exec('italic'),       { style: { fontStyle: 'italic', fontFamily: 'Georgia' } }),
-          tbBtn('U', 'קו תחתון',        () => exec('underline'),    { style: { textDecoration: 'underline' } }),
-          tbBtn('S', 'קו חוצה',         () => exec('strikeThrough'),{ style: { textDecoration: 'line-through' } })
-        ),
+        grp(boldBtn, italicBtn, ulBtn, strikeBtn),
         grp(colorInputR, hilightInputR),
         grp(dirBtn)
       ]),
