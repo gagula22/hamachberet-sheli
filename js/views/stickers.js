@@ -1213,6 +1213,61 @@ self.onmessage = async function(e) {
     return mp3meta.bytes.buffer.slice(realStart, realEnd);
   }
 
+  // Transcribe an MP3 by byte-slicing (no decode required). Splits the
+  // requested range into ≤90MB pieces at frame boundaries, uploads each to
+  // the Worker, and stitches the transcripts back with cumulative offsets.
+  async function _transcribeMp3ByteSliced(workerUrl, mp3meta, startSec, endSec, language, onProgress) {
+    const startByte = mp3meta.dataStart + Math.floor(startSec * mp3meta.bytesPerSec);
+    const endByte   = mp3meta.dataStart + Math.floor(endSec   * mp3meta.bytesPerSec);
+    const sliceStart = _findMp3FrameNear(mp3meta.bytes, startByte, 65536);
+    const sliceEnd   = _findMp3FrameNear(mp3meta.bytes, endByte,   65536);
+    if (sliceStart < 0 || sliceEnd <= sliceStart) {
+      throw new Error('לא הצלחתי למצוא גבולות frame תקינים');
+    }
+
+    const CHUNK_BYTES = 90 * 1024 * 1024;
+    const sliceLen = sliceEnd - sliceStart;
+    const boundaries = [];
+    if (sliceLen <= CHUNK_BYTES) {
+      boundaries.push([sliceStart, sliceEnd]);
+    } else {
+      let pos = sliceStart;
+      while (pos < sliceEnd) {
+        const target = Math.min(sliceEnd, pos + CHUNK_BYTES);
+        const realEnd = (target >= sliceEnd) ? sliceEnd : _findMp3FrameNear(mp3meta.bytes, target, 65536);
+        if (realEnd <= pos) break;
+        boundaries.push([pos, realEnd]);
+        pos = realEnd;
+      }
+    }
+
+    const allText = [];
+    const allChunks = [];
+    for (let i = 0; i < boundaries.length; i++) {
+      const cs = boundaries[i][0], ce = boundaries[i][1];
+      const chunkBytes = mp3meta.bytes.buffer.slice(cs, ce);
+      const chunkStartSec = startSec + (cs - sliceStart) / mp3meta.bytesPerSec;
+      const chunkSizeMB = (chunkBytes.byteLength / 1024 / 1024).toFixed(1);
+      const headLine = boundaries.length === 1
+        ? 'שולח ' + chunkSizeMB + ' MB ל-Cloudflare (MP3 ישיר)…'
+        : 'חלק ' + (i + 1) + '/' + boundaries.length + ' (' + chunkSizeMB + ' MB) · שולח לענן…';
+      if (onProgress) onProgress(headLine);
+
+      const result = await _transcribeViaWorker(workerUrl, chunkBytes, language, onProgress);
+      allText.push((result.text || '').trim());
+      if (Array.isArray(result.chunks)) {
+        for (let j = 0; j < result.chunks.length; j++) {
+          const c = result.chunks[j];
+          allChunks.push({
+            timestamp: [c.timestamp[0] + chunkStartSec, c.timestamp[1] + chunkStartSec],
+            text: c.text
+          });
+        }
+      }
+    }
+    return { text: allText.filter(Boolean).join(' '), chunks: allChunks };
+  }
+
   function _slicePcmSec(pcm, startSec, endSec, sampleRate) {
     const start = Math.max(0, Math.floor((startSec || 0) * sampleRate));
     const end   = Math.min(pcm.length, Math.floor((endSec || (pcm.length / sampleRate)) * sampleRate));
@@ -1644,10 +1699,40 @@ self.onmessage = async function(e) {
             const isCompressedAudio = ['.mp3', '.m4a', '.wav', '.aac', '.ogg', '.flac'].indexOf(ext) >= 0;
             const sizeMB = (file.size / 1024 / 1024).toFixed(1);
 
-            // ── FAST PATH: upload original bytes for compressed audio ≤95MB
-            // Avoids decoding (which Chrome can fail on long MP3s due to
-            // 900MB+ Float32 allocations) and avoids re-encoding to bigger WAV.
-            if (file.size <= FAST_LIMIT_BYTES && noTrim && isCompressedAudio) {
+            // ── MP3 BYTE-SLICE PATH: works for any MP3 size, with or without
+            // trim. Avoids decoding entirely (which Chrome fails on long MP3s),
+            // validates trim against actual duration, and produces correct
+            // sub-files at frame boundaries for upload.
+            let mp3meta = null;
+            if (ext === '.mp3') {
+              statusEl.textContent = 'בודק metadata של MP3 (' + sizeMB + ' MB)…';
+              _vtShowProgress(5, 'בודק metadata של MP3…');
+              try { mp3meta = await _readMp3Metadata(file); } catch (_) {}
+            }
+
+            if (mp3meta) {
+              const startSec = adv.startSec || 0;
+              const endSec = (adv.endSec != null) ? adv.endSec : mp3meta.durationSec;
+              if (endSec > mp3meta.durationSec + 0.5) {
+                throw new Error('זמן סיום ' + _formatHMS(endSec) + ' חורג ממשך הקובץ (' + _formatHMS(mp3meta.durationSec) + ')');
+              }
+              const rangeMin = ((endSec - startSec) / 60).toFixed(1);
+              statusEl.textContent = 'מתמלל ' + rangeMin + ' דקות MP3 בענן (חיתוך ישיר)…';
+              _vtShowProgress(15, 'מתמלל ' + rangeMin + ' דקות MP3 בענן…');
+
+              const cloudResult = await _transcribeMp3ByteSliced(
+                adv.workerUrl, mp3meta, startSec, endSec, 'he',
+                function(msg){
+                  if (document.body.contains(statusEl)) statusEl.textContent = msg;
+                  _vtShowProgress(60, msg);
+                }
+              );
+              text   = cloudResult.text;
+              chunks = cloudResult.chunks;
+              offsetSec = 0;  // already absolute (helper added startSec to each chunk)
+              docTitleSrc = 'תמלול עברית · Cloudflare Workers AI · whisper-large-v3-turbo';
+            } else if (file.size <= FAST_LIMIT_BYTES && noTrim && isCompressedAudio) {
+              // ── FAST PATH for non-MP3 compressed audio ≤95MB
               statusEl.textContent = 'מעלה ' + sizeMB + ' MB ל-Cloudflare (ללא פענוח)…';
               barFill.style.width  = '15%';
               _vtShowProgress(15, 'מעלה ' + sizeMB + ' MB ל-Cloudflare (מסלול מהיר — ללא פענוח)…');
@@ -1660,11 +1745,11 @@ self.onmessage = async function(e) {
               chunks = cloudResult.chunks;
               offsetSec = 0;
               docTitleSrc = 'תמלול עברית · Cloudflare Workers AI · whisper-large-v3-turbo';
-              // Skip the chunked path below
             } else {
             // ── CHUNKED PATH: decode → downsample → ~40-min WAV chunks ─────
-            // Used for files >95MB, video files, or partial-range trims.
-            statusEl.textContent = 'מפענח קובץ ' + sizeMB + ' MB בדפדפן (' + (file.size > FAST_LIMIT_BYTES ? 'גדול מ-95MB → פיצול לחתיכות' : 'דרוש בגלל טווח חלקי') + ')…';
+            // Used for non-MP3 large files, video files, or partial-range trims
+            // on non-MP3 sources.
+            statusEl.textContent = 'מפענח קובץ ' + sizeMB + ' MB בדפדפן…';
             barFill.style.width  = '8%';
             _vtShowProgress(8, 'מפענח קובץ אודיו בדפדפן…');
             const decoded = await _decodeAnyFileToPcm(file, function(msg){
