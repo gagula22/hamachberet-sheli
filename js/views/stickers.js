@@ -1090,6 +1090,129 @@ self.onmessage = async function(e) {
     return { pcm: pcm, sampleRate: sampleRate, durationSec: pcm.length / sampleRate };
   }
 
+  // ── MP3 byte-slice path (no full decode required) ───────────────────────
+  // For long CBR MP3 files (e.g. 256kbps × 45 min = 82MB), Chrome's
+  // decodeAudioData often fails — and the HTMLVideoElement fallback is too
+  // slow / can truncate. Byte-slicing reads the original bytes, finds frame
+  // boundaries, and produces valid MP3 sub-files for any time range.
+
+  function _skipID3v2(bytes) {
+    if (bytes.length >= 10 && bytes[0] === 0x49 && bytes[1] === 0x44 && bytes[2] === 0x33) {
+      const size = ((bytes[6] & 0x7f) << 21) | ((bytes[7] & 0x7f) << 14) |
+                   ((bytes[8] & 0x7f) << 7)  |  (bytes[9] & 0x7f);
+      return 10 + size;
+    }
+    return 0;
+  }
+
+  function _findMp3FrameNear(bytes, from, range) {
+    range = range || 65536;
+    const len = bytes.length - 4;
+    const fwdEnd = Math.min(len, from + range);
+    for (let i = Math.max(0, from); i < fwdEnd; i++) {
+      // Sync 11 bits + non-reserved version + non-reserved layer
+      if (bytes[i] === 0xFF &&
+          (bytes[i+1] & 0xE0) === 0xE0 &&
+          (bytes[i+1] & 0x18) !== 0x08 &&  // not reserved version
+          (bytes[i+1] & 0x06) !== 0x00) {  // not reserved layer
+        return i;
+      }
+    }
+    const backStart = Math.max(0, from - range);
+    for (let i = Math.min(from - 1, len - 1); i >= backStart; i--) {
+      if (bytes[i] === 0xFF &&
+          (bytes[i+1] & 0xE0) === 0xE0 &&
+          (bytes[i+1] & 0x18) !== 0x08 &&
+          (bytes[i+1] & 0x06) !== 0x00) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  function _parseMp3FrameHeader(bytes, offset) {
+    if (bytes.length < offset + 4) return null;
+    if (bytes[offset] !== 0xFF) return null;
+    if ((bytes[offset+1] & 0xE0) !== 0xE0) return null;
+
+    const b1 = bytes[offset + 1];
+    const b2 = bytes[offset + 2];
+    const versionId    = (b1 >> 3) & 0x03;   // 0=2.5, 1=res, 2=2, 3=1
+    const layer        = (b1 >> 1) & 0x03;   // 1=L3, 2=L2, 3=L1
+    const bitrateIdx   = (b2 >> 4) & 0x0F;
+    const samplerateIdx= (b2 >> 2) & 0x03;
+    if (versionId === 1 || layer === 0) return null;
+    if (bitrateIdx === 0 || bitrateIdx === 0x0F) return null;
+    if (samplerateIdx === 3) return null;
+    if (layer !== 1) return null;  // Layer III only
+
+    const BR_M1_L3 = [0,32,40,48,56,64,80,96,112,128,160,192,224,256,320,0];
+    const BR_M2_L3 = [0, 8,16,24,32,40,48,56, 64, 80, 96,112,128,144,160,0];
+    const SR_M1  = [44100, 48000, 32000];
+    const SR_M2  = [22050, 24000, 16000];
+    const SR_M25 = [11025, 12000,  8000];
+
+    let bitrate, sampleRate;
+    if (versionId === 3)      { bitrate = BR_M1_L3[bitrateIdx] * 1000; sampleRate = SR_M1[samplerateIdx]; }
+    else if (versionId === 2) { bitrate = BR_M2_L3[bitrateIdx] * 1000; sampleRate = SR_M2[samplerateIdx]; }
+    else                      { bitrate = BR_M2_L3[bitrateIdx] * 1000; sampleRate = SR_M25[samplerateIdx]; }
+    if (!bitrate || !sampleRate) return null;
+    return { bitrate: bitrate, sampleRate: sampleRate, versionId: versionId };
+  }
+
+  // Read full MP3 file, parse header, sample for VBR, compute duration.
+  // Returns { bytes, bitrate, sampleRate, durationSec, dataStart, bytesPerSec }
+  // or null if file is not a clean CBR MP3.
+  async function _readMp3Metadata(file) {
+    const ext = ((file.name || '').match(/\.[^.]+$/) || [''])[0].toLowerCase();
+    if (ext !== '.mp3') return null;
+    const ab = await file.arrayBuffer();
+    const bytes = new Uint8Array(ab);
+    const id3End = _skipID3v2(bytes);
+    const firstFrame = _findMp3FrameNear(bytes, id3End, 1024 * 1024);
+    if (firstFrame < 0) return null;
+    const header = _parseMp3FrameHeader(bytes, firstFrame);
+    if (!header) return null;
+
+    // Sample 4 spots in the file to detect VBR
+    const sampleBitrates = [];
+    for (let f = 1; f <= 4; f++) {
+      const pos = firstFrame + Math.floor((bytes.length - firstFrame) * f / 5);
+      const fr = _findMp3FrameNear(bytes, pos, 65536);
+      if (fr >= 0) {
+        const h = _parseMp3FrameHeader(bytes, fr);
+        if (h) sampleBitrates.push(h.bitrate);
+      }
+    }
+    const isCBR = sampleBitrates.length === 0 ||
+                  sampleBitrates.every(function(b){ return Math.abs(b - header.bitrate) < header.bitrate * 0.05; });
+    if (!isCBR) return null;
+
+    const audioBytes = bytes.length - firstFrame;
+    const bytesPerSec = header.bitrate / 8;
+    const durationSec = audioBytes / bytesPerSec;
+    return {
+      bytes: bytes,
+      bitrate: header.bitrate,
+      sampleRate: header.sampleRate,
+      durationSec: durationSec,
+      dataStart: firstFrame,
+      bytesPerSec: bytesPerSec
+    };
+  }
+
+  // Slice an MP3 by time range. Returns ArrayBuffer of valid MP3 bytes.
+  function _sliceMp3ByTimeBytes(mp3meta, startSec, endSec) {
+    const startByte = mp3meta.dataStart + Math.floor(startSec * mp3meta.bytesPerSec);
+    const endByte   = mp3meta.dataStart + Math.floor(endSec   * mp3meta.bytesPerSec);
+    const realStart = _findMp3FrameNear(mp3meta.bytes, startByte, 65536);
+    const realEnd   = _findMp3FrameNear(mp3meta.bytes, endByte,   65536);
+    if (realStart < 0 || realEnd < 0 || realEnd <= realStart) {
+      throw new Error('לא הצלחתי למצוא גבולות frame תקינים בטווח המבוקש');
+    }
+    return mp3meta.bytes.buffer.slice(realStart, realEnd);
+  }
+
   function _slicePcmSec(pcm, startSec, endSec, sampleRate) {
     const start = Math.max(0, Math.floor((startSec || 0) * sampleRate));
     const end   = Math.min(pcm.length, Math.floor((endSec || (pcm.length / sampleRate)) * sampleRate));
@@ -1239,6 +1362,11 @@ self.onmessage = async function(e) {
   function _saveWavViaPicker(blob, suggestedName) {
     return _saveBlobViaPicker(blob, suggestedName, {
       description: 'WAV audio', extension: '.wav', mimeType: 'audio/wav'
+    });
+  }
+  function _saveMp3ViaPicker(blob, suggestedName) {
+    return _saveBlobViaPicker(blob, suggestedName, {
+      description: 'MP3 audio', extension: '.mp3', mimeType: 'audio/mpeg'
     });
   }
 
@@ -1811,6 +1939,7 @@ self.onmessage = async function(e) {
     // ── Cut tool: split a file into clips by time ranges, save each ──────
     let _cutFile = null;
     let _cutDecoded = null;
+    let _cutMp3Meta = null;   // when set, byte-slice path is used (MP3 fast)
     let _cutRunning = false;
 
     const cutFileLabel = document.createElement('div');
@@ -1828,15 +1957,31 @@ self.onmessage = async function(e) {
       if (!file || _cutRunning) return;
       _cutFile = file;
       _cutDecoded = null;
-      cutFileLabel.textContent = '📁 ' + file.name + ' · ' + (file.size/1024/1024).toFixed(1) + ' MB · מפענח…';
-      _cutStatus('⏳ מפענח קובץ…');
+      _cutMp3Meta = null;
+      cutFileLabel.textContent = '📁 ' + file.name + ' · ' + (file.size/1024/1024).toFixed(1) + ' MB · קורא…';
+      _cutStatus('⏳ קורא קובץ…');
       try {
+        // Fast path: CBR MP3 — byte-slice without decoding (instant, accurate
+        // duration, output stays MP3). Works even for very long files where
+        // decodeAudioData would fail or truncate.
+        const mp3 = await _readMp3Metadata(file);
+        if (mp3) {
+          _cutMp3Meta = mp3;
+          _cutDecoded = { durationSec: mp3.durationSec };  // for range validation
+          const min = (mp3.durationSec / 60).toFixed(1);
+          const kbps = Math.round(mp3.bitrate / 1000);
+          cutFileLabel.textContent = '📁 ' + file.name + ' · ' + (file.size/1024/1024).toFixed(1) +
+            ' MB · משך: ' + min + ' דקות · MP3 ' + kbps + 'kbps · חיתוך ישיר ללא פענוח';
+          _cutStatus('✓ מוכן (מסלול MP3 מהיר) — הקליפים יישמרו כ-MP3', '#2d7a2d');
+          return;
+        }
+        // Slow path: full decode — used for non-MP3 / VBR MP3 / video files
         _cutDecoded = await _decodeAnyFileToPcm(file, function(msg){ _cutStatus('⏳ ' + msg); });
         const min = (_cutDecoded.durationSec / 60).toFixed(1);
         cutFileLabel.textContent = '📁 ' + file.name + ' · ' + (file.size/1024/1024).toFixed(1) + ' MB · משך: ' + min + ' דקות';
         _cutStatus('✓ מוכן — הוסף טווחים ולחץ "חתוך ושמור"', '#2d7a2d');
       } catch (e) {
-        _cutStatus('❌ לא הצלחתי לפענח: ' + e.message, '#c00');
+        _cutStatus('❌ לא הצלחתי לקרוא: ' + e.message, '#c00');
         cutFileLabel.textContent = '';
       }
     }
@@ -1939,12 +2084,20 @@ self.onmessage = async function(e) {
         for (let i = 0; i < ranges.length; i++) {
           const s = ranges[i][0], e = ranges[i][1];
           _cutStatus('⏳ קליפ ' + (i+1) + '/' + ranges.length + ' (' + _formatHMS(s) + '–' + _formatHMS(e) + ') · בחר היכן לשמור…');
-          const slice = _slicePcmSec(_cutDecoded.pcm, s, e, _cutDecoded.sampleRate);
-          const wavBytes = _pcmToWavBytes(slice, _cutDecoded.sampleRate);
-          const blob = new Blob([wavBytes], { type: 'audio/wav' });
           const tag = _formatHMS(s).replace(/:/g, '-') + '_to_' + _formatHMS(e).replace(/:/g, '-');
-          const clipName = baseStem + '_' + tag + '.wav';
-          const res = await _saveWavViaPicker(blob, clipName);
+          let res;
+          if (_cutMp3Meta) {
+            // MP3 byte-slice path — fast, lossless, output is MP3
+            const mp3Bytes = _sliceMp3ByTimeBytes(_cutMp3Meta, s, e);
+            const blob = new Blob([mp3Bytes], { type: 'audio/mpeg' });
+            res = await _saveMp3ViaPicker(blob, baseStem + '_' + tag + '.mp3');
+          } else {
+            // PCM-decode path — output is WAV
+            const slice = _slicePcmSec(_cutDecoded.pcm, s, e, _cutDecoded.sampleRate);
+            const wavBytes = _pcmToWavBytes(slice, _cutDecoded.sampleRate);
+            const blob = new Blob([wavBytes], { type: 'audio/wav' });
+            res = await _saveWavViaPicker(blob, baseStem + '_' + tag + '.wav');
+          }
           if (res.method === 'cancelled') cancelled++;
           else saved++;
         }
