@@ -1510,10 +1510,33 @@ self.onmessage = async function(e) {
           var text, chunks, offsetSec, docTitleSrc;
 
           if (adv.source === 'cloud') {
-            // ── Cloud path: decode → downsample to 16kHz mono → split into
-            // ~40-min WAV chunks → upload each. Lifts the 100MB Worker body
-            // limit and lets us trim by start/end before upload.
-            statusEl.textContent = 'מפענח קובץ אודיו בדפדפן…';
+            const FAST_LIMIT_BYTES = 95 * 1024 * 1024;
+            const noTrim = (adv.startSec == null && adv.endSec == null);
+            const ext = (file.name.match(/\.[^.]+$/) || [''])[0].toLowerCase();
+            const isCompressedAudio = ['.mp3', '.m4a', '.wav', '.aac', '.ogg', '.flac'].indexOf(ext) >= 0;
+            const sizeMB = (file.size / 1024 / 1024).toFixed(1);
+
+            // ── FAST PATH: upload original bytes for compressed audio ≤95MB
+            // Avoids decoding (which Chrome can fail on long MP3s due to
+            // 900MB+ Float32 allocations) and avoids re-encoding to bigger WAV.
+            if (file.size <= FAST_LIMIT_BYTES && noTrim && isCompressedAudio) {
+              statusEl.textContent = 'מעלה ' + sizeMB + ' MB ל-Cloudflare (ללא פענוח)…';
+              barFill.style.width  = '15%';
+              _vtShowProgress(15, 'מעלה ' + sizeMB + ' MB ל-Cloudflare (מסלול מהיר — ללא פענוח)…');
+              const ab = await file.arrayBuffer();
+              const cloudResult = await _transcribeViaWorker(adv.workerUrl, ab, 'he', function(msg){
+                if (document.body.contains(statusEl)) statusEl.textContent = msg;
+                _vtShowProgress(60, msg);
+              });
+              text   = cloudResult.text;
+              chunks = cloudResult.chunks;
+              offsetSec = 0;
+              docTitleSrc = 'תמלול עברית · Cloudflare Workers AI · whisper-large-v3-turbo';
+              // Skip the chunked path below
+            } else {
+            // ── CHUNKED PATH: decode → downsample → ~40-min WAV chunks ─────
+            // Used for files >95MB, video files, or partial-range trims.
+            statusEl.textContent = 'מפענח קובץ ' + sizeMB + ' MB בדפדפן (' + (file.size > FAST_LIMIT_BYTES ? 'גדול מ-95MB → פיצול לחתיכות' : 'דרוש בגלל טווח חלקי') + ')…';
             barFill.style.width  = '8%';
             _vtShowProgress(8, 'מפענח קובץ אודיו בדפדפן…');
             const decoded = await _decodeAnyFileToPcm(file, function(msg){
@@ -1549,6 +1572,7 @@ self.onmessage = async function(e) {
               });
             }
             docTitleSrc = 'תמלול עברית · Cloudflare Workers AI · whisper-large-v3-turbo';
+            }  // end of CHUNKED PATH
           } else {
             // ── Local path: decode in browser, run Whisper in Web Worker ─────
             statusEl.textContent = 'מפענח קובץ אודיו…';
