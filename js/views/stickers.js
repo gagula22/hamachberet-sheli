@@ -900,6 +900,78 @@ self.onmessage = async function(e) {
     }).join('');
   }
 
+  // ── Cloud transcription via user-deployed Cloudflare Worker ──────────────
+  // POSTs the raw audio file to the Worker, which calls Workers AI Whisper
+  // (whisper-large-v3-turbo) on Cloudflare's GPUs and returns transcript JSON.
+  // Returns the same { text, chunks } shape the local Whisper Worker produces.
+  async function _transcribeViaWorker(workerUrl, fileBuffer, language, onProgress) {
+    var url = workerUrl.replace(/\/+$/, '') + '/?language=' + encodeURIComponent(language || 'he');
+    if (onProgress) onProgress('שולח אודיו לענן…');
+
+    var r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: fileBuffer
+    });
+    if (!r.ok) {
+      var errBody = '';
+      try { errBody = await r.text(); } catch (_) {}
+      throw new Error('Worker שגיאה ' + r.status + ': ' + errBody.slice(0, 200));
+    }
+    if (onProgress) onProgress('הענן מתמלל ב-Whisper-Large-v3-Turbo…');
+    var data = await r.json();
+    if (data.error) throw new Error('Worker: ' + data.error);
+
+    // Normalise to { text, chunks: [{timestamp:[s,e], text}] }
+    var text = (data.text || '').trim();
+    var chunks = [];
+
+    if (Array.isArray(data.segments) && data.segments.length) {
+      // OpenAI-style segment list
+      chunks = data.segments.map(function(s){
+        var st = (s.start != null ? s.start : 0);
+        var en = (s.end   != null ? s.end   : st + 1);
+        return { timestamp: [st, en], text: ' ' + (s.text || '').trim() };
+      });
+    } else if (Array.isArray(data.words) && data.words.length) {
+      // Word-level → group every ~30s into a paragraph
+      var GROUP = 30;
+      var cur = null;
+      for (var i = 0; i < data.words.length; i++) {
+        var w  = data.words[i];
+        var ws = (w.start != null ? w.start : (w.startTime || 0));
+        var we = (w.end   != null ? w.end   : (w.endTime || ws));
+        var wt = (w.word || w.text || '').trim();
+        if (!cur || ws - cur.s > GROUP) {
+          if (cur) chunks.push({ timestamp: [cur.s, cur.e], text: ' ' + cur.t.join(' ') });
+          cur = { s: ws, e: we, t: [wt] };
+        } else {
+          cur.e = we; cur.t.push(wt);
+        }
+      }
+      if (cur) chunks.push({ timestamp: [cur.s, cur.e], text: ' ' + cur.t.join(' ') });
+    } else if (data.vtt && typeof data.vtt === 'string') {
+      // WEBVTT fallback parsing
+      var re = /(\d{2}:\d{2}:\d{2}\.\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}\.\d{3})\n([\s\S]*?)(?=\n\n|\n*$)/g;
+      var m;
+      function _hmsToSec(hms) {
+        var p = hms.split(':'); return parseInt(p[0])*3600 + parseInt(p[1])*60 + parseFloat(p[2]);
+      }
+      while ((m = re.exec(data.vtt)) !== null) {
+        chunks.push({ timestamp: [_hmsToSec(m[1]), _hmsToSec(m[2])], text: ' ' + m[3].replace(/\n/g,' ').trim() });
+      }
+    }
+    return { text: text, chunks: chunks, raw: data };
+  }
+
+  // Quick health check — returns true if Worker URL responds (any 2xx/4xx OK)
+  async function _pingWorker(workerUrl) {
+    try {
+      var r = await fetch(workerUrl.replace(/\/+$/, '') + '/', { method: 'OPTIONS' });
+      return r.ok || r.status === 204;
+    } catch (_) { return false; }
+  }
+
   // Floating toast for transcription (separate from translation toast)
   function _getVtToast() {
     if (_vtToast && document.body.contains(_vtToast)) return _vtToast;
@@ -976,6 +1048,51 @@ self.onmessage = async function(e) {
     }, '🎙 התמלול רץ ברקע · תוכל לנווט בחופשיות · תקבל הודעה כשיסיים');
 
     // ── Advanced settings panel (collapsible) ─────────────────────────────
+    // ── Source selector: cloud (Cloudflare Worker) vs local (browser Whisper)
+    const sourceSel = document.createElement('select');
+    sourceSel.style.cssText = 'padding:6px 10px;border:1px solid #d0c080;border-radius:8px;font-size:13px;background:#fffef5;direction:rtl;cursor:pointer;flex:1;';
+    [
+      { v: 'cloud', l: '🚀 Cloudflare Workers AI · large-v3-turbo · מהיר · אפס עומס' },
+      { v: 'local', l: '💻 דפדפן (offline) · small/medium · רץ על המחשב' }
+    ].forEach(function(o){
+      var opt = document.createElement('option');
+      opt.value = o.v; opt.textContent = o.l;
+      sourceSel.appendChild(opt);
+    });
+    sourceSel.value = localStorage.getItem('vt_source') || 'cloud';
+    sourceSel.addEventListener('change', function(){
+      try { localStorage.setItem('vt_source', sourceSel.value); } catch(_){}
+      _toggleSourceFields();
+    });
+
+    const workerUrlInput = document.createElement('input');
+    workerUrlInput.type = 'url';
+    workerUrlInput.placeholder = 'https://whisper-bridge.xxx.workers.dev';
+    workerUrlInput.style.cssText = 'flex:1;padding:6px 10px;border:1px solid #d0c080;border-radius:8px;font-size:12px;background:#fffef5;direction:ltr;outline:none;';
+    workerUrlInput.value = localStorage.getItem('vt_worker_url') || '';
+    workerUrlInput.addEventListener('change', function(){
+      try { localStorage.setItem('vt_worker_url', workerUrlInput.value.trim()); } catch(_){}
+    });
+
+    const workerTestBtn = document.createElement('button');
+    workerTestBtn.textContent = '🔌 בדוק';
+    workerTestBtn.style.cssText = 'padding:6px 12px;background:#fff7d6;border:1px solid #d0c080;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;color:#5a4a00;white-space:nowrap;';
+    const workerTestStatus = document.createElement('span');
+    workerTestStatus.style.cssText = 'font-size:12px;color:#888;';
+    workerTestBtn.addEventListener('click', async function(){
+      var u = workerUrlInput.value.trim();
+      if (!u) { workerTestStatus.textContent = 'לא הוגדר URL'; workerTestStatus.style.color = '#c00'; return; }
+      workerTestStatus.textContent = 'בודק…'; workerTestStatus.style.color = '#888';
+      try {
+        var ok = await _pingWorker(u);
+        workerTestStatus.textContent = ok ? '✓ Worker מגיב' : '✗ Worker לא מגיב';
+        workerTestStatus.style.color = ok ? '#2d7a2d' : '#c00';
+      } catch (e) {
+        workerTestStatus.textContent = '✗ ' + e.message;
+        workerTestStatus.style.color = '#c00';
+      }
+    });
+
     const modelSel = document.createElement('select');
     modelSel.style.cssText = 'padding:6px 10px;border:1px solid #d0c080;border-radius:8px;font-size:13px;background:#fffef5;direction:rtl;cursor:pointer;';
     [
@@ -999,6 +1116,7 @@ self.onmessage = async function(e) {
 
     const advPanel = document.createElement('details');
     advPanel.style.cssText = 'margin-top:12px;border:1px solid var(--line);border-radius:var(--r-sm);background:#fafafa;';
+    advPanel.open = !workerUrlInput.value;  // open by default if URL not yet configured
     advPanel.innerHTML =
       '<summary style="padding:10px 14px;cursor:pointer;font-size:13px;font-weight:600;color:#555;user-select:none;">⚙️ הגדרות מתקדמות</summary>' +
       '<div id="vt-adv-body" style="padding:12px 14px 14px;border-top:1px solid var(--line);"></div>';
@@ -1013,26 +1131,57 @@ self.onmessage = async function(e) {
       row.appendChild(lbl); row.appendChild(control);
       return row;
     }
-    advBody.appendChild(_advRow('מודל', modelSel));
-    advBody.appendChild(_advRow('זמן התחלה', startInput));
-    advBody.appendChild(_advRow('זמן סיום', endInput));
+
+    // Cloud-mode rows (URL + test button) — shown only when source=cloud
+    var workerUrlWrap = document.createElement('div');
+    workerUrlWrap.style.cssText = 'display:flex;gap:6px;align-items:center;flex:1;';
+    workerUrlWrap.appendChild(workerUrlInput);
+    workerUrlWrap.appendChild(workerTestBtn);
+
+    var sourceRow      = _advRow('מקור עיבוד', sourceSel);
+    var workerUrlRow   = _advRow('Worker URL',  workerUrlWrap);
+    var workerStatusRow = _advRow('סטטוס',      workerTestStatus);
+    var modelRow       = _advRow('מודל',        modelSel);
+    var startRow       = _advRow('זמן התחלה',   startInput);
+    var endRow         = _advRow('זמן סיום',    endInput);
+
+    advBody.appendChild(sourceRow);
+    advBody.appendChild(workerUrlRow);
+    advBody.appendChild(workerStatusRow);
+    advBody.appendChild(modelRow);
+    advBody.appendChild(startRow);
+    advBody.appendChild(endRow);
+
     var hint = document.createElement('p');
     hint.style.cssText = 'margin:6px 0 0;font-size:12px;color:#888;line-height:1.5;';
     hint.innerHTML = 'השאר ריק לתמלול הקובץ המלא · דוגמאות: <code style="background:#eee;padding:1px 5px;border-radius:3px;">10:00</code> <code style="background:#eee;padding:1px 5px;border-radius:3px;">1:23:45</code> <code style="background:#eee;padding:1px 5px;border-radius:3px;">90s</code> <code style="background:#eee;padding:1px 5px;border-radius:3px;">1h2m</code>';
     advBody.appendChild(hint);
 
-    // Read & validate advanced settings. Returns { model, startSec, endSec, suffix }
+    function _toggleSourceFields() {
+      var isCloud = sourceSel.value === 'cloud';
+      workerUrlRow.style.display    = isCloud ? '' : 'none';
+      workerStatusRow.style.display = isCloud ? '' : 'none';
+      modelRow.style.display        = isCloud ? 'none' : '';
+    }
+    _toggleSourceFields();
+
+    // Read & validate advanced settings. Returns full settings object
     // or throws an Error with a Hebrew message on bad input.
     function _readAdvanced() {
-      var model = modelSel.value || 'Xenova/whisper-small';
-      var rawStart = startInput.value.trim();
-      var rawEnd   = endInput.value.trim();
-      var startSec = rawStart ? _parseTimeInput(rawStart) : null;
-      var endSec   = rawEnd   ? _parseTimeInput(rawEnd)   : null;
+      var source    = sourceSel.value || 'cloud';
+      var workerUrl = (workerUrlInput.value || '').trim();
+      var model     = modelSel.value || 'Xenova/whisper-small';
+      var rawStart  = startInput.value.trim();
+      var rawEnd    = endInput.value.trim();
+      var startSec  = rawStart ? _parseTimeInput(rawStart) : null;
+      var endSec    = rawEnd   ? _parseTimeInput(rawEnd)   : null;
       if (Number.isNaN(startSec)) throw new Error('זמן התחלה לא תקין: ' + rawStart);
       if (Number.isNaN(endSec))   throw new Error('זמן סיום לא תקין: ' + rawEnd);
       if (startSec != null && endSec != null && startSec >= endSec) {
         throw new Error('זמן הסיום חייב להיות אחרי זמן ההתחלה');
+      }
+      if (source === 'cloud' && !workerUrl) {
+        throw new Error('הגדר Worker URL בהגדרות מתקדמות (או החלף ל"דפדפן offline")');
       }
       var suffix = '';
       if (startSec != null || endSec != null) {
@@ -1040,7 +1189,14 @@ self.onmessage = async function(e) {
         var b = endSec   != null ? _formatHMS(endSec).replace(/^00:/, '')   : 'סוף';
         suffix = ' (' + a + '–' + b + ')';
       }
-      return { model: model, startSec: startSec, endSec: endSec, suffix: suffix };
+      return {
+        source: source,
+        workerUrl: workerUrl,
+        model: model,
+        startSec: startSec,
+        endSec: endSec,
+        suffix: suffix
+      };
     }
 
     // ── Audio file processing ─────────────────────────────────────────────
@@ -1068,46 +1224,75 @@ self.onmessage = async function(e) {
       // Run everything async — non-blocking even after navigation
       (async function() {
         try {
-          // 1. Decode audio to 16kHz mono Float32Array
-          statusEl.textContent = 'מפענח קובץ אודיו…';
-          const ab       = await file.arrayBuffer();
-          const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
-          const decoded  = await audioCtx.decodeAudioData(ab);
-          const raw      = decoded.getChannelData(0);
-          let   audio    = new Float32Array(raw); // copy so we can transfer
-          audioCtx.close();
+          var text, chunks, offsetSec, docTitleSrc;
 
-          // 1b. Trim to advanced range if provided
-          audio = _trimAudio(audio, adv.startSec, adv.endSec);
-          const durationMin = Math.round(audio.length / 16000 / 60);
-          const offsetSec = adv.startSec || 0;
-
-          // 2. Init Whisper Worker (downloads model on first use of a given size)
-          const isMedium = adv.model.indexOf('medium') >= 0;
-          _wwProgCb = function(p) {
-            if (p.status === 'progress') {
-              const pct = Math.round(p.progress || 0);
-              const sizeNote = isMedium ? '~750MB' : '~150MB';
-              const msg = `מוריד מודל Whisper (${sizeNote})… ${pct}% — חד-פעמי`;
-              if (document.body.contains(statusEl)) { barFill.style.width = (3 + pct * 0.15) + '%'; statusEl.textContent = msg; }
-              _vtShowProgress(3 + pct * 0.15, msg);
+          if (adv.source === 'cloud') {
+            // ── Cloud path: send raw file bytes to user's Cloudflare Worker ──
+            // Trimming is not supported in cloud mode (would require browser-side
+            // decode + re-encode) — the worker transcribes the whole file.
+            if (adv.startSec != null || adv.endSec != null) {
+              throw new Error('טווח חלקי זמין רק במצב "דפדפן offline". נקה את שדות הזמן או החלף מצב.');
             }
-          };
-          const initMsg = 'מאתחל מודל Whisper AI…';
-          if (document.body.contains(statusEl)) statusEl.textContent = initMsg;
-          _vtShowProgress(18, initMsg);
-          await _ensureWhisperWorker(adv.model);
+            statusEl.textContent = 'שולח לענן…';
+            barFill.style.width  = '15%';
+            _vtShowProgress(15, 'שולח אודיו ל-Cloudflare Worker…');
 
-          // 3. Transcribe
-          const transMsg = `מתמלל ${durationMin} דקות אודיו ברקע…`;
-          if (document.body.contains(statusEl)) { barFill.style.width = '22%'; statusEl.textContent = transMsg; }
-          _vtShowProgress(22, transMsg);
+            const ab = await file.arrayBuffer();
+            const sizeMB = (ab.byteLength / 1024 / 1024).toFixed(1);
+            if (ab.byteLength > 100 * 1024 * 1024) {
+              throw new Error('הקובץ ' + sizeMB + 'MB — Cloudflare Worker מוגבל ל-100MB. הקטן את הקובץ או החלף ל"דפדפן offline".');
+            }
+            statusEl.textContent = 'שולח ' + sizeMB + 'MB לענן…';
+            _vtShowProgress(20, 'שולח ' + sizeMB + 'MB ל-Cloudflare Workers AI…');
 
-          const result = await _whisperTranscribe(audio);
-          const text   = result.text;
-          const chunks = result.chunks;
+            const cloudResult = await _transcribeViaWorker(adv.workerUrl, ab, 'he', function(msg){
+              if (document.body.contains(statusEl)) statusEl.textContent = msg;
+              _vtShowProgress(60, msg);
+            });
+            text       = cloudResult.text;
+            chunks     = cloudResult.chunks;
+            offsetSec  = 0;
+            docTitleSrc = 'תמלול עברית · Cloudflare Workers AI · whisper-large-v3-turbo';
+          } else {
+            // ── Local path: decode in browser, run Whisper in Web Worker ─────
+            statusEl.textContent = 'מפענח קובץ אודיו…';
+            const ab2      = await file.arrayBuffer();
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+            const decoded  = await audioCtx.decodeAudioData(ab2);
+            const raw      = decoded.getChannelData(0);
+            let   audio    = new Float32Array(raw);
+            audioCtx.close();
 
-          // 4. Build Word .doc
+            audio = _trimAudio(audio, adv.startSec, adv.endSec);
+            const durationMin = Math.round(audio.length / 16000 / 60);
+            offsetSec = adv.startSec || 0;
+
+            const isMedium = adv.model.indexOf('medium') >= 0;
+            _wwProgCb = function(p) {
+              if (p.status === 'progress') {
+                const pct = Math.round(p.progress || 0);
+                const sizeNote = isMedium ? '~750MB' : '~150MB';
+                const msg = `מוריד מודל Whisper (${sizeNote})… ${pct}% — חד-פעמי`;
+                if (document.body.contains(statusEl)) { barFill.style.width = (3 + pct * 0.15) + '%'; statusEl.textContent = msg; }
+                _vtShowProgress(3 + pct * 0.15, msg);
+              }
+            };
+            const initMsg = 'מאתחל מודל Whisper AI…';
+            if (document.body.contains(statusEl)) statusEl.textContent = initMsg;
+            _vtShowProgress(18, initMsg);
+            await _ensureWhisperWorker(adv.model);
+
+            const transMsg = `מתמלל ${durationMin} דקות אודיו ברקע…`;
+            if (document.body.contains(statusEl)) { barFill.style.width = '22%'; statusEl.textContent = transMsg; }
+            _vtShowProgress(22, transMsg);
+
+            const localResult = await _whisperTranscribe(audio);
+            text   = localResult.text;
+            chunks = localResult.chunks;
+            docTitleSrc = 'תמלול עברית · Whisper AI ' + (isMedium ? '(medium)' : '(small)');
+          }
+
+          // ── Build Word .doc (shared between cloud + local paths) ──────────
           if (document.body.contains(statusEl)) _vtShowProgress(97, 'מכין קובץ Word…');
           const baseName  = file.name.replace(/\.[^.]+$/, '') + adv.suffix;
           const dateStr   = new Date().toLocaleDateString('he-IL');
@@ -1123,7 +1308,7 @@ self.onmessage = async function(e) {
             `<body dir="rtl">`,
             `<h1 style="font-size:22px;margin-bottom:4px;direction:rtl;text-align:right;">${_esc(baseName)}</h1>`,
             `<p style="font-size:11px;color:#999;margin:0 0 28px;direction:ltr;text-align:left;">`,
-            `תמלול עברית · Whisper AI · ${dateStr}</p>`,
+            `${_esc(docTitleSrc)} · ${dateStr}</p>`,
             `<hr style="border:none;border-top:1px solid #e0e0e0;margin-bottom:24px;">`,
             paragraphs,
             `</body></html>`
@@ -1180,24 +1365,18 @@ self.onmessage = async function(e) {
       if (!_vtRunning) transcribeFile(e.dataTransfer.files[0]);
     });
 
-    // ── YouTube → cobalt.tools download launcher ──────────────────────────
-    // Public Invidious/Piped/CORS proxies are dead or rate-limited as of 2026.
-    // Instead of trying (and failing) to fetch audio from a static page, we
-    // hand off to cobalt.tools — a maintained downloader site. The user gets
-    // a real audio file, drops it on the zone above, and Whisper does the rest.
+    // ── YouTube → external downloader launcher ────────────────────────────
+    // No single public service works reliably for YouTube anymore (cobalt.tools
+    // disabled YT on their main instance, all Invidious/Piped public servers
+    // are dead/rate-limited). Solution: offer the user multiple known
+    // downloader sites — they click one, if blocked they try another.
     const ytInput = document.createElement('input');
     ytInput.type = 'text';
     ytInput.placeholder = 'הדבק קישור YouTube…';
     ytInput.style.cssText = 'flex:1;padding:8px 12px;border:1px solid #d0c080;border-radius:8px;font-size:13px;outline:none;background:#fffef5;direction:ltr;min-width:0;';
 
-    const ytBtn = App.el('button', {
-      style: { padding: '8px 18px', background: '#f5c842', border: 'none',
-               borderRadius: '8px', fontWeight: 700, fontSize: '13px',
-               cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: '0' }
-    }, '⬇ הורד אודיו');
-
     const ytStatusEl = App.el('div', {
-      style: { fontSize: '12px', color: 'var(--ink-mute)', marginTop: '8px', lineHeight: '1.55', minHeight: '16px' }
+      style: { fontSize: '12px', color: 'var(--ink-mute)', marginTop: '10px', lineHeight: '1.55', minHeight: '16px' }
     }, '');
 
     function _ytStatus(msg, color) {
@@ -1205,35 +1384,51 @@ self.onmessage = async function(e) {
       ytStatusEl.style.color = color || 'var(--ink-mute)';
     }
 
-    function startYtDownload() {
-      const url = ytInput.value.trim();
-      if (!url) { ytInput.focus(); return; }
-      const vidId = _extractYouTubeId(url);
-      if (!vidId) {
-        _ytStatus('❌ קישור YouTube לא תקין', '#c00');
-        return;
-      }
-      // cobalt.tools accepts the source URL as a hash fragment and pre-fills the
-      // input. The user just clicks "Audio → MP3 → Download" once it loads.
-      const cobaltUrl = 'https://cobalt.tools/#' + encodeURIComponent(url);
-      window.open(cobaltUrl, '_blank', 'noopener,noreferrer');
-      _ytStatus('✓ נפתחה כרטיסייה חדשה ב-cobalt.tools · הורד את הקובץ וגרור אותו לתיבה למעלה',
-                '#2d7a2d');
+    // Each service takes a YouTube URL and returns a deep-link that pre-fills it.
+    var YT_SERVICES = [
+      { name: 'savefrom.net', build: function(u){ return 'https://en.savefrom.net/1-youtube-video-downloader-336/?url=' + encodeURIComponent(u); } },
+      { name: 'yt1s.com',     build: function(u){ return 'https://yt1s.com/youtube-to-mp3?q=' + encodeURIComponent(u); } },
+      { name: 'y2mate',       build: function(u, id){ return 'https://www.y2mate.com/youtube-mp3/' + id; } },
+      { name: 'ssyoutube',    build: function(u){ return u.replace('youtube.com', 'ssyoutube.com').replace('youtu.be/', 'ssyoutu.be/'); } },
+      { name: '9convert',     build: function(u){ return 'https://9convert.com/en7/youtube-to-mp3?q=' + encodeURIComponent(u); } }
+    ];
+
+    function _openYtService(svc) {
+      var url = ytInput.value.trim();
+      if (!url) { ytInput.focus(); _ytStatus('הדבק קישור YouTube ואז לחץ על שירות', '#c00'); return; }
+      var vidId = _extractYouTubeId(url);
+      if (!vidId) { _ytStatus('❌ קישור YouTube לא תקין', '#c00'); return; }
+      var dest = svc.build(url, vidId);
+      window.open(dest, '_blank', 'noopener,noreferrer');
+      _ytStatus('✓ נפתח ' + svc.name + ' בכרטיסייה חדשה · הורד את ה-MP3 וגרור אותו לתיבה למעלה', '#2d7a2d');
     }
 
-    ytBtn.addEventListener('click', startYtDownload);
-    ytInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') startYtDownload(); });
+    var ytButtonsRow = document.createElement('div');
+    ytButtonsRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;';
+    YT_SERVICES.forEach(function(svc) {
+      var b = document.createElement('button');
+      b.textContent = svc.name;
+      b.style.cssText = 'padding:7px 14px;background:#fff7d6;border:1px solid #d0c080;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;color:#5a4a00;transition:background 120ms;';
+      b.onmouseover = function(){ b.style.background = '#f5c842'; };
+      b.onmouseout  = function(){ b.style.background = '#fff7d6'; };
+      b.onclick = function(){ _openYtService(svc); };
+      ytButtonsRow.appendChild(b);
+    });
 
+    // Enter on the input opens the first service (savefrom — most permissive)
+    ytInput.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') _openYtService(YT_SERVICES[0]);
+    });
 
     const ytSection = App.el('div', {
       style: { marginTop: '18px', paddingTop: '16px', borderTop: '1px solid var(--line)' }
     }, [
       App.el('div', { style: { fontWeight: 600, fontSize: '13px', marginBottom: '4px' } },
         '⬇️  הורדת אודיו מ-YouTube'),
-      App.el('div', { style: { fontSize: '12px', color: 'var(--ink-mute)', marginBottom: '10px', lineHeight: '1.5' } },
-        'הדבק קישור YouTube → לחץ "הורד" → ייפתח cobalt.tools בכרטיסייה חדשה. בחר Audio → MP3 → הורד את הקובץ → גרור אותו לתיבה למעלה לתמלול.'),
-      App.el('div', { style: { display: 'flex', gap: '8px', alignItems: 'center' } },
-        [ytInput, ytBtn]),
+      App.el('div', { style: { fontSize: '12px', color: 'var(--ink-mute)', marginBottom: '10px', lineHeight: '1.55' } },
+        'הדבק קישור · בחר שירות הורדה (אם הראשון חסום נסה את הבא) · הורד MP3 · גרור אותו לתיבה למעלה'),
+      ytInput,
+      ytButtonsRow,
       ytStatusEl
     ]);
 
@@ -1244,7 +1439,7 @@ self.onmessage = async function(e) {
       App.el('strong', { style: { fontSize: '13px' } }, '🎙 Whisper AI · Web Worker — הדפדפן לא ייחסם'),
       App.el('br', {}),
       App.el('span', { style: { fontSize: '12px', color: 'var(--ink-mute)' } },
-        'גרור קובץ אודיו/וידאו מקומי · המודל מוריד פעם אחת · תמלול ממשיך ברקע · חותמות זמן לחיצות בפלט · ללא עלות')
+        'גרור קובץ אודיו/וידאו · ברירת מחדל = ענן (Whisper-Large-v3-Turbo, אפס עומס) · אופציונלי מצב offline · חותמות זמן בפלט')
     ]);
 
     return App.el('div', { class: 'card' }, [
