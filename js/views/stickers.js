@@ -1458,8 +1458,11 @@ self.onmessage = async function(e) {
       ytStatusEl.style.color = color || 'var(--ink-mute)';
     }
 
-    // External downloader services (try in order if the first is blocked).
+    // External downloader services. `copyFirst:true` copies the URL to the
+    // clipboard before opening (for sites that don't accept URL prefill).
     var YT_SERVICES = [
+      { name: '⭐ vidssave',  primary: true, copyFirst: true,
+        build: function(){ return 'https://vidssave.com/youtube-video-downloader-3cx'; } },
       { name: 'cobalt.tools', build: function(u){ return 'https://cobalt.tools/#' + encodeURIComponent(u); } },
       { name: 'savefrom',     build: function(u){ return 'https://en.savefrom.net/1-youtube-video-downloader-336/?url=' + encodeURIComponent(u); } },
       { name: 'yt1s',         build: function(u){ return 'https://yt1s.com/youtube-to-mp3?q=' + encodeURIComponent(u); } },
@@ -1467,26 +1470,48 @@ self.onmessage = async function(e) {
       { name: 'ssyoutube',    build: function(u){ return u.replace('youtube.com', 'ssyoutube.com').replace('youtu.be/', 'ssyoutu.be/'); } }
     ];
 
-    function _openYtService(svc) {
+    async function _openYtService(svc) {
       var url = ytInput.value.trim();
       if (!url) { ytInput.focus(); _ytStatus('❌ הדבק קישור YouTube ואז לחץ על שירות', '#c00'); return; }
       var vidId = _extractYouTubeId(url);
       if (!vidId) { _ytStatus('❌ קישור YouTube לא תקין', '#c00'); return; }
+
+      // For services without URL prefill, copy the YouTube URL to clipboard
+      // first so the user just hits Ctrl+V on the destination page.
+      var copied = false;
+      if (svc.copyFirst && navigator.clipboard && navigator.clipboard.writeText) {
+        try { await navigator.clipboard.writeText(url); copied = true; } catch (_) {}
+      }
+
       var dest = svc.build(url, vidId);
       window.open(dest, '_blank', 'noopener,noreferrer');
-      _ytStatus('✓ נפתח ' + svc.name + ' בכרטיסייה חדשה — הורד את ה-MP3 וגרור לתיבה למעלה (הענן יתמלל אוטומטית)', '#2d7a2d');
+
+      var clipboardNote = copied ? ' · הקישור הועתק ל-clipboard, ב-' + svc.name.replace(/^[^\w]+/, '') + ' הקלד Ctrl+V' : '';
+      _ytStatus('✓ נפתח ' + svc.name + ' בכרטיסייה חדשה' + clipboardNote + ' · הורד MP3 → גרור לתיבה למעלה', '#2d7a2d');
     }
 
-    var ytButtonsRow = document.createElement('div');
-    ytButtonsRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;';
+    var ytPrimaryRow = document.createElement('div');
+    ytPrimaryRow.style.cssText = 'display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;';
+    var ytFallbackLabel = document.createElement('div');
+    ytFallbackLabel.style.cssText = 'font-size:11px;color:#999;margin-top:14px;margin-bottom:4px;';
+    ytFallbackLabel.textContent = 'אם vidssave חסום — נסה אחד מאלה:';
+    var ytFallbackRow = document.createElement('div');
+    ytFallbackRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;';
     YT_SERVICES.forEach(function(svc) {
       var b = document.createElement('button');
       b.textContent = svc.name;
-      b.style.cssText = 'padding:7px 14px;background:#fff7d6;border:1px solid #d0c080;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;color:#5a4a00;transition:background 120ms;';
-      b.onmouseover = function(){ b.style.background = '#f5c842'; };
-      b.onmouseout  = function(){ b.style.background = '#fff7d6'; };
+      if (svc.primary) {
+        b.style.cssText = 'padding:10px 22px;background:#f5c842;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;color:#3b3a3a;transition:background 120ms;flex:1;min-width:200px;';
+        b.onmouseover = function(){ b.style.background = '#f0b800'; };
+        b.onmouseout  = function(){ b.style.background = '#f5c842'; };
+        ytPrimaryRow.appendChild(b);
+      } else {
+        b.style.cssText = 'padding:6px 12px;background:#fff7d6;border:1px solid #d0c080;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;color:#5a4a00;transition:background 120ms;';
+        b.onmouseover = function(){ b.style.background = '#f5c842'; };
+        b.onmouseout  = function(){ b.style.background = '#fff7d6'; };
+        ytFallbackRow.appendChild(b);
+      }
       b.onclick = function(){ _openYtService(svc); };
-      ytButtonsRow.appendChild(b);
     });
     ytInput.addEventListener('keydown', function(e){
       if (e.key === 'Enter') _openYtService(YT_SERVICES[0]);
@@ -1498,9 +1523,11 @@ self.onmessage = async function(e) {
       App.el('div', { style: { fontWeight: 600, fontSize: '13px', marginBottom: '4px' } },
         '🎬  הורדת אודיו מ-YouTube → תמלול בענן'),
       App.el('div', { style: { fontSize: '12px', color: 'var(--ink-mute)', marginBottom: '10px', lineHeight: '1.55' } },
-        'הדבק קישור · בחר שירות הורדה (cobalt עובד הכי טוב) · הורד את ה-MP3 · גרור לתיבה למעלה — הענן יתמלל אוטומטית עם אפס עומס על המחשב'),
+        'הדבק קישור · לחץ "vidssave" · הקישור יועתק ל-clipboard ו-vidssave ייפתח · הקלד Ctrl+V והורד את ה-MP3 · גרור אותו לתיבה למעלה — הענן יתמלל אוטומטית באפס עומס על המחשב'),
       ytInput,
-      ytButtonsRow,
+      ytPrimaryRow,
+      ytFallbackLabel,
+      ytFallbackRow,
       ytStatusEl
     ]);
 
