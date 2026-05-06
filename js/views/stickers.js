@@ -1153,6 +1153,8 @@ self.onmessage = async function(e) {
   // ── Tool 4: תמלול וידאו בעברית ───────────────────────────────────────────
   function buildVideoTranscriber() {
     const MAX_FILE = 2 * 1024 * 1024 * 1024; // 2 GB
+    // Hard-coded Worker URL — transparent to the user, no UI field.
+    const WORKER_URL = 'https://broad-hall-729c.gagula22.workers.dev';
 
     const statusEl = App.el('p', { style: { margin: '10px 0 0', fontSize: '13px', color: 'var(--ink-mute)' } });
     const barTrack = App.el('div', { style: { marginTop: '10px', height: '5px', background: '#e8e8e8', borderRadius: '3px', overflow: 'hidden' } });
@@ -1183,34 +1185,6 @@ self.onmessage = async function(e) {
       _toggleSourceFields();
     });
 
-    const workerUrlInput = document.createElement('input');
-    workerUrlInput.type = 'url';
-    workerUrlInput.placeholder = 'https://whisper-bridge.xxx.workers.dev';
-    workerUrlInput.style.cssText = 'flex:1;padding:6px 10px;border:1px solid #d0c080;border-radius:8px;font-size:12px;background:#fffef5;direction:ltr;outline:none;';
-    workerUrlInput.value = localStorage.getItem('vt_worker_url') || '';
-    workerUrlInput.addEventListener('change', function(){
-      try { localStorage.setItem('vt_worker_url', workerUrlInput.value.trim()); } catch(_){}
-    });
-
-    const workerTestBtn = document.createElement('button');
-    workerTestBtn.textContent = '🔌 בדוק';
-    workerTestBtn.style.cssText = 'padding:6px 12px;background:#fff7d6;border:1px solid #d0c080;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;color:#5a4a00;white-space:nowrap;';
-    const workerTestStatus = document.createElement('span');
-    workerTestStatus.style.cssText = 'font-size:12px;color:#888;';
-    workerTestBtn.addEventListener('click', async function(){
-      var u = workerUrlInput.value.trim();
-      if (!u) { workerTestStatus.textContent = 'לא הוגדר URL'; workerTestStatus.style.color = '#c00'; return; }
-      workerTestStatus.textContent = 'בודק…'; workerTestStatus.style.color = '#888';
-      try {
-        var ok = await _pingWorker(u);
-        workerTestStatus.textContent = ok ? '✓ Worker מגיב' : '✗ Worker לא מגיב';
-        workerTestStatus.style.color = ok ? '#2d7a2d' : '#c00';
-      } catch (e) {
-        workerTestStatus.textContent = '✗ ' + e.message;
-        workerTestStatus.style.color = '#c00';
-      }
-    });
-
     const modelSel = document.createElement('select');
     modelSel.style.cssText = 'padding:6px 10px;border:1px solid #d0c080;border-radius:8px;font-size:13px;background:#fffef5;direction:rtl;cursor:pointer;';
     [
@@ -1234,7 +1208,6 @@ self.onmessage = async function(e) {
 
     const advPanel = document.createElement('details');
     advPanel.style.cssText = 'margin-top:12px;border:1px solid var(--line);border-radius:var(--r-sm);background:#fafafa;';
-    advPanel.open = !workerUrlInput.value;  // open by default if URL not yet configured
     advPanel.innerHTML =
       '<summary style="padding:10px 14px;cursor:pointer;font-size:13px;font-weight:600;color:#555;user-select:none;">⚙️ הגדרות מתקדמות</summary>' +
       '<div id="vt-adv-body" style="padding:12px 14px 14px;border-top:1px solid var(--line);"></div>';
@@ -1250,22 +1223,12 @@ self.onmessage = async function(e) {
       return row;
     }
 
-    // Cloud-mode rows (URL + test button) — shown only when source=cloud
-    var workerUrlWrap = document.createElement('div');
-    workerUrlWrap.style.cssText = 'display:flex;gap:6px;align-items:center;flex:1;';
-    workerUrlWrap.appendChild(workerUrlInput);
-    workerUrlWrap.appendChild(workerTestBtn);
-
-    var sourceRow      = _advRow('מקור עיבוד', sourceSel);
-    var workerUrlRow   = _advRow('Worker URL',  workerUrlWrap);
-    var workerStatusRow = _advRow('סטטוס',      workerTestStatus);
-    var modelRow       = _advRow('מודל',        modelSel);
-    var startRow       = _advRow('זמן התחלה',   startInput);
-    var endRow         = _advRow('זמן סיום',    endInput);
+    var sourceRow = _advRow('מקור עיבוד', sourceSel);
+    var modelRow  = _advRow('מודל',        modelSel);
+    var startRow  = _advRow('זמן התחלה',   startInput);
+    var endRow    = _advRow('זמן סיום',    endInput);
 
     advBody.appendChild(sourceRow);
-    advBody.appendChild(workerUrlRow);
-    advBody.appendChild(workerStatusRow);
     advBody.appendChild(modelRow);
     advBody.appendChild(startRow);
     advBody.appendChild(endRow);
@@ -1277,29 +1240,23 @@ self.onmessage = async function(e) {
 
     function _toggleSourceFields() {
       var isCloud = sourceSel.value === 'cloud';
-      workerUrlRow.style.display    = isCloud ? '' : 'none';
-      workerStatusRow.style.display = isCloud ? '' : 'none';
-      modelRow.style.display        = isCloud ? 'none' : '';
+      modelRow.style.display = isCloud ? 'none' : '';
     }
     _toggleSourceFields();
 
     // Read & validate advanced settings. Returns full settings object
     // or throws an Error with a Hebrew message on bad input.
     function _readAdvanced() {
-      var source    = sourceSel.value || 'cloud';
-      var workerUrl = (workerUrlInput.value || '').trim();
-      var model     = modelSel.value || 'Xenova/whisper-small';
-      var rawStart  = startInput.value.trim();
-      var rawEnd    = endInput.value.trim();
-      var startSec  = rawStart ? _parseTimeInput(rawStart) : null;
-      var endSec    = rawEnd   ? _parseTimeInput(rawEnd)   : null;
+      var source   = sourceSel.value || 'cloud';
+      var model    = modelSel.value || 'Xenova/whisper-small';
+      var rawStart = startInput.value.trim();
+      var rawEnd   = endInput.value.trim();
+      var startSec = rawStart ? _parseTimeInput(rawStart) : null;
+      var endSec   = rawEnd   ? _parseTimeInput(rawEnd)   : null;
       if (Number.isNaN(startSec)) throw new Error('זמן התחלה לא תקין: ' + rawStart);
       if (Number.isNaN(endSec))   throw new Error('זמן סיום לא תקין: ' + rawEnd);
       if (startSec != null && endSec != null && startSec >= endSec) {
         throw new Error('זמן הסיום חייב להיות אחרי זמן ההתחלה');
-      }
-      if (source === 'cloud' && !workerUrl) {
-        throw new Error('הגדר Worker URL בהגדרות מתקדמות (או החלף ל"דפדפן offline")');
       }
       var suffix = '';
       if (startSec != null || endSec != null) {
@@ -1309,7 +1266,7 @@ self.onmessage = async function(e) {
       }
       return {
         source: source,
-        workerUrl: workerUrl,
+        workerUrl: WORKER_URL,
         model: model,
         startSec: startSec,
         endSec: endSec,
@@ -1567,12 +1524,7 @@ self.onmessage = async function(e) {
       var vidId = _extractYouTubeId(url);
       if (!vidId) { _ytStatus('❌ קישור YouTube לא תקין', '#c00'); return; }
 
-      // Worker URL must be configured
-      var workerUrl = (localStorage.getItem('vt_worker_url') || workerUrlInput.value || '').trim();
-      if (!workerUrl) {
-        _ytStatus('❌ הגדר Worker URL בהגדרות מתקדמות', '#c00');
-        return;
-      }
+      var workerUrl = WORKER_URL;
 
       // Read ranges (may throw)
       var ranges;
