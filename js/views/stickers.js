@@ -1630,13 +1630,45 @@ self.onmessage = async function(e) {
       if (e.key === 'Enter') _openYtService(YT_SERVICES[0]);
     });
 
+    // Helper for step section headers — gives each step a numbered badge
+    function _stepHeader(num, title, color) {
+      return App.el('div', {
+        style: { display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }
+      }, [
+        App.el('span', {
+          style: {
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            width: '26px', height: '26px', borderRadius: '50%',
+            background: color, color: '#fff', fontWeight: '700', fontSize: '13px',
+            flexShrink: '0'
+          }
+        }, String(num)),
+        App.el('div', {
+          style: { fontWeight: '700', fontSize: '14px', color: '#3b3a3a' }
+        }, title)
+      ]);
+    }
+    function _stepHowto(lines) {
+      var ol = document.createElement('ol');
+      ol.style.cssText = 'margin:6px 0 12px 26px;padding:0;font-size:12px;color:#666;line-height:1.85;';
+      lines.forEach(function(line){
+        var li = document.createElement('li');
+        li.innerHTML = line;
+        ol.appendChild(li);
+      });
+      return ol;
+    }
+
     const ytSection = App.el('div', {
-      style: { marginTop: '18px', paddingTop: '16px', borderTop: '1px solid var(--line)' }
+      style: { marginTop: '20px', paddingTop: '18px', borderTop: '1px solid var(--line)' }
     }, [
-      App.el('div', { style: { fontWeight: 600, fontSize: '13px', marginBottom: '4px' } },
-        '🎬  הורדת אודיו מ-YouTube → תמלול בענן'),
-      App.el('div', { style: { fontSize: '12px', color: 'var(--ink-mute)', marginBottom: '10px', lineHeight: '1.55' } },
-        'הדבק קישור · לחץ "vidssave" · הקישור יועתק ל-clipboard ו-vidssave ייפתח · הקלד Ctrl+V והורד את ה-MP3 · גרור אותו לתיבה למעלה — הענן יתמלל אוטומטית באפס עומס על המחשב'),
+      _stepHeader(1, 'להוריד את הוידאו מ-YouTube ולשמור במחשב', '#5ba3d0'),
+      _stepHowto([
+        'הדבק את כתובת הוידאו מ-YouTube בשדה למטה',
+        'לחץ על <b>⭐ vidssave</b> · הקישור מועתק ל-clipboard ואתר הורדה ייפתח בכרטיסייה חדשה',
+        'באתר ההורדה: לחץ בשדה והקלד <b>Ctrl+V</b> · בחר MP3 · לחץ <b>Download</b>',
+        'הקובץ יורד לתיקיית ההורדות במחשב — סיימת את שלב 1'
+      ]),
       ytInput,
       ytPrimaryRow,
       ytFallbackLabel,
@@ -1796,12 +1828,15 @@ self.onmessage = async function(e) {
     cutGoBtn.addEventListener('click', _cutGo);
 
     const cutSection = App.el('div', {
-      style: { marginTop: '18px', paddingTop: '16px', borderTop: '1px solid var(--line)' }
+      style: { marginTop: '20px', paddingTop: '18px', borderTop: '1px solid var(--line)' }
     }, [
-      App.el('div', { style: { fontWeight: 600, fontSize: '13px', marginBottom: '4px' } },
-        '✂️  חיתוך מהיר ללא תמלול — שמור קליפים בנפרד'),
-      App.el('div', { style: { fontSize: '12px', color: 'var(--ink-mute)', marginBottom: '4px', lineHeight: '1.55' } },
-        'גרור קובץ אודיו/וידאו · הוסף טווחים · לחץ "חתוך ושמור" — דיאלוג Windows ייפתח לכל קליפ. הכל מקומי בדפדפן, ללא העלאה לענן, אין מגבלת גודל.'),
+      _stepHeader(2, 'לחתוך לקליפים (אופציונלי)', '#9b8bb8'),
+      _stepHowto([
+        'גרור את הקובץ שהורדת לתיבה למטה (אודיו או וידאו, כל גודל)',
+        'הוסף טווחי זמן — לדוגמה <code style="background:#eee;padding:1px 4px;border-radius:3px;">1:30</code> עד <code style="background:#eee;padding:1px 4px;border-radius:3px;">3:00</code>. לחץ "<b>＋ הוסף קטע</b>" לעוד.',
+        'לחץ "<b>✂️ חתוך ושמור קליפים</b>" · לכל קליפ ייפתח דיאלוג שמירה — בחר תיקייה ושם',
+        'מתי להשתמש: לתמלל רק חלקים מסוימים, או כשהקובץ ארוך מאוד'
+      ]),
       cutFileInput, cutZone, cutFileLabel,
       App.el('div', { style: { fontSize: '12px', color: '#777', marginTop: '12px', marginBottom: '4px', fontWeight: '600' } },
         'טווחי החיתוך:'),
@@ -1813,24 +1848,36 @@ self.onmessage = async function(e) {
 
     const infoBanner = App.el('div', {
       style: { background: '#f0f6fb', border: '1px solid #a0c8e8',
-               borderRadius: 'var(--r-sm)', padding: '11px 16px', marginBottom: '14px', lineHeight: '1.6' }
+               borderRadius: 'var(--r-sm)', padding: '10px 14px', marginBottom: '14px', lineHeight: '1.55' }
     }, [
-      App.el('strong', { style: { fontSize: '13px' } }, '🎙 Whisper AI · Web Worker — הדפדפן לא ייחסם'),
-      App.el('br', {}),
       App.el('span', { style: { fontSize: '12px', color: 'var(--ink-mute)' } },
-        'גרור קובץ אודיו/וידאו · ברירת מחדל = ענן (Whisper-Large-v3-Turbo, אפס עומס) · אופציונלי מצב offline · חותמות זמן בפלט')
+        '🎙 הזרימה: שלב 1 (הורדה מ-YouTube) → שלב 2 (חיתוך, אופציונלי) → שלב 3 (תמלול בענן). כל קובץ — Whisper-Large-v3-Turbo בענן, ללא עומס על המחשב.')
+    ]);
+
+    // ── Step 3: transcribe — wrap the existing drop zone with a header ─────
+    const transcribeSection = App.el('div', {
+      style: { marginTop: '20px', paddingTop: '18px', borderTop: '1px solid var(--line)' }
+    }, [
+      _stepHeader(3, 'לתמלל את הקובץ בענן ולשמור Word במחשב', '#2d7a2d'),
+      _stepHowto([
+        'גרור את הקובץ (המקורי או קליפ משלב 2) לתיבה למטה',
+        'הענן מתמלל אוטומטית ב-<b>Whisper-Large-v3-Turbo</b> (איכות מקסימלית, ללא עומס על המחשב)',
+        'בסיום ייפתח דיאלוג שמירה — <b>בחר תיקייה ושם לקובץ ה-Word</b>',
+        'אפשר לפתוח <b>⚙️ הגדרות מתקדמות</b> למצב offline או טווח חלקי'
+      ]),
+      fileInput, zone, statusEl, barTrack, bgBadge,
+      advPanel
     ]);
 
     return App.el('div', { class: 'card' }, [
       App.el('div', { class: 'row row-between', style: { marginBottom: '16px' } }, [
         App.el('h2', {}, '🎙  תמלול וידאו בעברית'),
-        App.el('span', { class: 'chip sky' }, 'Whisper AI · ברקע · ללא עלות')
+        App.el('span', { class: 'chip sky' }, 'Whisper AI · ענן · ללא עלות')
       ]),
       infoBanner,
-      fileInput, zone, statusEl, barTrack, bgBadge,
-      advPanel,
-      ytSection,
-      cutSection
+      ytSection,         // Step 1: download from YouTube
+      cutSection,        // Step 2: cut into clips (optional)
+      transcribeSection  // Step 3: transcribe in cloud
     ]);
   }
 
