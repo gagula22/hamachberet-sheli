@@ -972,6 +972,111 @@ self.onmessage = async function(e) {
     } catch (_) { return false; }
   }
 
+  // POST a YouTube URL to the Worker /youtube endpoint — Worker fetches the
+  // audio from YouTube directly (zero load on user's machine) and runs Whisper.
+  async function _transcribeYouTubeViaWorker(workerUrl, ytUrl, language, onProgress) {
+    var url = workerUrl.replace(/\/+$/, '') + '/youtube';
+    if (onProgress) onProgress('מבקש מ-Cloudflare למשוך אודיו מ-YouTube…');
+    var r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: ytUrl, language: language || 'he' })
+    });
+    if (!r.ok) {
+      var errBody = '';
+      try { errBody = await r.text(); } catch (_) {}
+      var msg = errBody;
+      try { var j = JSON.parse(errBody); if (j.error) msg = j.error; } catch (_) {}
+      throw new Error((msg || 'Worker שגיאה ' + r.status).slice(0, 250));
+    }
+    if (onProgress) onProgress('הענן מתמלל ב-Whisper-Large-v3-Turbo…');
+    var data = await r.json();
+    if (data.error) throw new Error(data.error);
+
+    var text = (data.text || '').trim();
+    var chunks = [];
+    if (Array.isArray(data.segments) && data.segments.length) {
+      chunks = data.segments.map(function(s){
+        var st = (s.start != null ? s.start : 0);
+        var en = (s.end   != null ? s.end   : st + 1);
+        return { timestamp: [st, en], text: ' ' + (s.text || '').trim() };
+      });
+    }
+    return { text: text, chunks: chunks, video: data.video || null, raw: data };
+  }
+
+  // File System Access API — let the user pick where to save. Falls back to
+  // a normal anchor download in browsers that don't support the picker.
+  async function _saveDocViaPicker(blob, suggestedName) {
+    if (window.showSaveFilePicker) {
+      try {
+        var handle = await window.showSaveFilePicker({
+          suggestedName: suggestedName,
+          types: [{
+            description: 'Word Document',
+            accept: { 'application/msword': ['.doc'] }
+          }]
+        });
+        var writable = await handle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+        return { method: 'picker', name: handle.name };
+      } catch (err) {
+        if (err && err.name === 'AbortError') return { method: 'cancelled' };
+        // Fall through to download fallback on any other error
+      }
+    }
+    var blobUrl = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = blobUrl; a.download = suggestedName;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(blobUrl); }, 3000);
+    return { method: 'download', name: suggestedName };
+  }
+
+  // Filter Whisper chunks by user-selected time ranges and group into sections.
+  // Returns array of { name, chunks } — each section becomes a heading in DOCX.
+  // If no ranges → single full-transcript section.
+  function _filterChunksByRanges(chunks, ranges) {
+    if (!ranges || !ranges.length) {
+      return [{ name: null, chunks: chunks }];
+    }
+    return ranges.map(function(r){
+      var s = r[0], e = r[1];
+      var label = _formatHMS(s).replace(/^00:/, '') + '–' + _formatHMS(e).replace(/^00:/, '');
+      var inRange = (chunks || []).filter(function(c){
+        var cs = c.timestamp[0], ce = c.timestamp[1] != null ? c.timestamp[1] : cs;
+        return ce >= s && cs <= e;
+      });
+      return { name: label, chunks: inRange };
+    });
+  }
+
+  // Build a multi-section DOCX HTML body. Each section gets an H2 + paragraphs.
+  function _buildMultiSectionDocHtml(baseName, sourceLine, sections) {
+    var dateStr = new Date().toLocaleDateString('he-IL');
+    var parts = [
+      "<html xmlns:o='urn:schemas-microsoft-com:office:office'",
+      " xmlns:w='urn:schemas-microsoft-com:office:word'",
+      " xmlns='http://www.w3.org/TR/REC-html40'>",
+      "<head><meta charset='utf-8'><title>" + _esc(baseName) + "</title>",
+      "<style>body{font-family:Arial,sans-serif;padding:36px;max-width:820px;direction:rtl;}",
+      "p{unicode-bidi:plaintext;}h2{color:#2d6f9c;}</style></head>",
+      "<body dir='rtl'>",
+      "<h1 style='font-size:22px;margin-bottom:4px;direction:rtl;text-align:right;'>" + _esc(baseName) + "</h1>",
+      "<p style='font-size:11px;color:#999;margin:0 0 28px;direction:ltr;text-align:left;'>" + _esc(sourceLine) + " · " + dateStr + "</p>",
+      "<hr style='border:none;border-top:1px solid #e0e0e0;margin-bottom:24px;'>"
+    ];
+    sections.forEach(function(sec){
+      if (sec.name) {
+        parts.push("<h2 style='font-size:18px;margin:24px 0 10px;direction:rtl;text-align:right;'>⏱ " + _esc(sec.name) + "</h2>");
+      }
+      parts.push(_buildTimestampedHtml(sec.chunks, 0, null, null));
+    });
+    parts.push("</body></html>");
+    return parts.join('');
+  }
+
   // Floating toast for transcription (separate from translation toast)
   function _getVtToast() {
     if (_vtToast && document.body.contains(_vtToast)) return _vtToast;
@@ -1003,7 +1108,12 @@ self.onmessage = async function(e) {
       </div>`);
   }
 
-  function _vtShowDone(dlName, blobUrl) {
+  // Show the done-toast. Accepts either (dlName, blob) or (dlName, blobUrl) for
+  // backward compat — if blobOrUrl is a Blob, the save button uses the File
+  // System Access API picker (so the user picks where to save).
+  function _vtShowDone(dlName, blobOrUrl) {
+    var pickerSupported = typeof window.showSaveFilePicker === 'function';
+    var btnLabel = pickerSupported ? '💾 שמור בתיקייה שלי…' : '⬇ הורד קובץ Word';
     _vtToastHtml(`
       <div style="background:linear-gradient(135deg,#5ba3d0,#2d6f9c);padding:11px 16px;color:#fff;display:flex;align-items:center;gap:10px;">
         <span style="font-size:20px;">✅</span>
@@ -1011,12 +1121,20 @@ self.onmessage = async function(e) {
       </div>
       <div style="padding:14px 16px;">
         <div style="font-size:12px;color:#666;margin-bottom:12px;">${_esc(dlName)}</div>
-        <button id="vt-dl-btn" style="width:100%;padding:10px;background:linear-gradient(135deg,#cfe4f7,#5ba3d0);border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;color:#fff;margin-bottom:8px;">⬇ שמור קובץ Word</button>
+        <button id="vt-dl-btn" style="width:100%;padding:10px;background:linear-gradient(135deg,#cfe4f7,#5ba3d0);border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;color:#fff;margin-bottom:8px;">${btnLabel}</button>
         <button id="vt-close-btn" style="width:100%;padding:7px;background:#f5f5f5;border:1px solid #e0e0e0;border-radius:8px;font-size:12px;cursor:pointer;color:#888;">סגור</button>
       </div>`);
-    _vtToast.querySelector('#vt-dl-btn').onclick = function() {
-      var a = document.createElement('a'); a.href = blobUrl; a.download = dlName; a.click();
-      setTimeout(function() { URL.revokeObjectURL(blobUrl); _vtToast.style.display = 'none'; }, 3000);
+    _vtToast.querySelector('#vt-dl-btn').onclick = async function() {
+      var blob = (blobOrUrl instanceof Blob) ? blobOrUrl : null;
+      if (blob) {
+        var res = await _saveDocViaPicker(blob, dlName);
+        if (res.method === 'cancelled') return;       // user changed their mind, keep toast open
+        _vtToast.style.display = 'none';
+      } else {
+        // Legacy URL path
+        var a = document.createElement('a'); a.href = blobOrUrl; a.download = dlName; a.click();
+        setTimeout(function() { try { URL.revokeObjectURL(blobOrUrl); } catch(_){} _vtToast.style.display = 'none'; }, 3000);
+      }
     };
     _vtToast.querySelector('#vt-close-btn').onclick = function() { _vtToast.style.display = 'none'; };
   }
@@ -1315,7 +1433,6 @@ self.onmessage = async function(e) {
           ].join('');
 
           const blob    = new Blob(['﻿', docHtml], { type: 'application/msword' });
-          const blobUrl = URL.createObjectURL(blob);
           const dlName  = baseName + '_תמלול.doc';
 
           if (document.body.contains(statusEl)) {
@@ -1324,7 +1441,7 @@ self.onmessage = async function(e) {
             statusEl.style.color   = 'var(--sky-deep,#2d6f9c)';
             statusEl.textContent   = `✓ תמלול הושלם · ${Math.round(text.split(/\s+/).length)} מילים · ראה הודעה בפינה`;
           }
-          _vtShowDone(dlName, blobUrl);
+          _vtShowDone(dlName, blob);
 
         } catch (e) {
           if (document.body.contains(statusEl)) {
@@ -1365,11 +1482,11 @@ self.onmessage = async function(e) {
       if (!_vtRunning) transcribeFile(e.dataTransfer.files[0]);
     });
 
-    // ── YouTube → external downloader launcher ────────────────────────────
-    // No single public service works reliably for YouTube anymore (cobalt.tools
-    // disabled YT on their main instance, all Invidious/Piped public servers
-    // are dead/rate-limited). Solution: offer the user multiple known
-    // downloader sites — they click one, if blocked they try another.
+    // ── YouTube → Cloudflare Worker → Whisper ─────────────────────────────
+    // Worker fetches the audio from YouTube directly (zero load on the user's
+    // machine) and runs Whisper-Large-v3-Turbo on Cloudflare's GPUs. The
+    // browser only sends a URL + optional ranges, gets back a transcript JSON,
+    // filters segments by ranges, builds DOCX, and saves via picker.
     const ytInput = document.createElement('input');
     ytInput.type = 'text';
     ytInput.placeholder = 'הדבק קישור YouTube…';
@@ -1384,51 +1501,153 @@ self.onmessage = async function(e) {
       ytStatusEl.style.color = color || 'var(--ink-mute)';
     }
 
-    // Each service takes a YouTube URL and returns a deep-link that pre-fills it.
-    var YT_SERVICES = [
-      { name: 'savefrom.net', build: function(u){ return 'https://en.savefrom.net/1-youtube-video-downloader-336/?url=' + encodeURIComponent(u); } },
-      { name: 'yt1s.com',     build: function(u){ return 'https://yt1s.com/youtube-to-mp3?q=' + encodeURIComponent(u); } },
-      { name: 'y2mate',       build: function(u, id){ return 'https://www.y2mate.com/youtube-mp3/' + id; } },
-      { name: 'ssyoutube',    build: function(u){ return u.replace('youtube.com', 'ssyoutube.com').replace('youtu.be/', 'ssyoutu.be/'); } },
-      { name: '9convert',     build: function(u){ return 'https://9convert.com/en7/youtube-to-mp3?q=' + encodeURIComponent(u); } }
-    ];
+    // ── Multi-range UI ───────────────────────────────────────────────────
+    var rangesContainer = document.createElement('div');
+    rangesContainer.style.cssText = 'display:flex;flex-direction:column;gap:6px;margin-top:8px;';
 
-    function _openYtService(svc) {
-      var url = ytInput.value.trim();
-      if (!url) { ytInput.focus(); _ytStatus('הדבק קישור YouTube ואז לחץ על שירות', '#c00'); return; }
-      var vidId = _extractYouTubeId(url);
-      if (!vidId) { _ytStatus('❌ קישור YouTube לא תקין', '#c00'); return; }
-      var dest = svc.build(url, vidId);
-      window.open(dest, '_blank', 'noopener,noreferrer');
-      _ytStatus('✓ נפתח ' + svc.name + ' בכרטיסייה חדשה · הורד את ה-MP3 וגרור אותו לתיבה למעלה', '#2d7a2d');
+    function _addRangeRow(start, end) {
+      var row = document.createElement('div');
+      row.style.cssText = 'display:flex;gap:6px;align-items:center;';
+      var startBox = document.createElement('input');
+      startBox.type = 'text';
+      startBox.placeholder = 'התחלה (1:30)';
+      startBox.value = start || '';
+      startBox.style.cssText = 'flex:1;padding:6px 10px;border:1px solid #d0c080;border-radius:8px;font-size:13px;background:#fffef5;direction:ltr;text-align:center;';
+      var endBox = document.createElement('input');
+      endBox.type = 'text';
+      endBox.placeholder = 'סיום (3:00)';
+      endBox.value = end || '';
+      endBox.style.cssText = startBox.style.cssText;
+      var rmBtn = document.createElement('button');
+      rmBtn.textContent = '×';
+      rmBtn.title = 'הסר קטע';
+      rmBtn.style.cssText = 'width:32px;height:32px;background:#fff7d6;border:1px solid #d0c080;border-radius:8px;font-size:16px;cursor:pointer;color:#888;flex-shrink:0;';
+      rmBtn.onclick = function(){ row.remove(); };
+      row.appendChild(startBox);
+      row.appendChild(endBox);
+      row.appendChild(rmBtn);
+      row.__startBox = startBox;
+      row.__endBox = endBox;
+      rangesContainer.appendChild(row);
     }
 
-    var ytButtonsRow = document.createElement('div');
-    ytButtonsRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;';
-    YT_SERVICES.forEach(function(svc) {
-      var b = document.createElement('button');
-      b.textContent = svc.name;
-      b.style.cssText = 'padding:7px 14px;background:#fff7d6;border:1px solid #d0c080;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;color:#5a4a00;transition:background 120ms;';
-      b.onmouseover = function(){ b.style.background = '#f5c842'; };
-      b.onmouseout  = function(){ b.style.background = '#fff7d6'; };
-      b.onclick = function(){ _openYtService(svc); };
-      ytButtonsRow.appendChild(b);
-    });
+    var addRangeBtn = document.createElement('button');
+    addRangeBtn.textContent = '＋ הוסף קטע';
+    addRangeBtn.style.cssText = 'padding:6px 14px;background:#fff;border:1px dashed #d0c080;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;color:#5a4a00;margin-top:6px;align-self:flex-start;';
+    addRangeBtn.onclick = function(){ _addRangeRow(); };
 
-    // Enter on the input opens the first service (savefrom — most permissive)
-    ytInput.addEventListener('keydown', function(e) {
-      if (e.key === 'Enter') _openYtService(YT_SERVICES[0]);
-    });
+    function _readRanges() {
+      var rows = rangesContainer.children;
+      var ranges = [];
+      for (var i = 0; i < rows.length; i++) {
+        var rs = rows[i].__startBox.value.trim();
+        var re = rows[i].__endBox.value.trim();
+        if (!rs && !re) continue;  // empty row → skip
+        var s = _parseTimeInput(rs);
+        var e = _parseTimeInput(re);
+        if (Number.isNaN(s) || s == null) throw new Error('זמן התחלה לא תקין: ' + rs);
+        if (Number.isNaN(e) || e == null) throw new Error('זמן סיום לא תקין: ' + re);
+        if (s >= e) throw new Error('זמן הסיום חייב להיות אחרי זמן ההתחלה (' + rs + '–' + re + ')');
+        ranges.push([s, e]);
+      }
+      return ranges;
+    }
+
+    var ytTranscribeBtn = App.el('button', {
+      style: { padding: '10px 22px', background: '#f5c842', border: 'none',
+               borderRadius: '8px', fontWeight: 700, fontSize: '14px',
+               cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: '0',
+               marginTop: '12px' }
+    }, '🚀 תמלל בענן ושמור');
+
+    async function startYtCloudTranscribe() {
+      if (_vtRunning) return;
+      var url = ytInput.value.trim();
+      if (!url) { ytInput.focus(); _ytStatus('❌ הדבק קישור YouTube', '#c00'); return; }
+      var vidId = _extractYouTubeId(url);
+      if (!vidId) { _ytStatus('❌ קישור YouTube לא תקין', '#c00'); return; }
+
+      // Worker URL must be configured
+      var workerUrl = (localStorage.getItem('vt_worker_url') || workerUrlInput.value || '').trim();
+      if (!workerUrl) {
+        _ytStatus('❌ הגדר Worker URL בהגדרות מתקדמות', '#c00');
+        return;
+      }
+
+      // Read ranges (may throw)
+      var ranges;
+      try { ranges = _readRanges(); }
+      catch (err) { _ytStatus('❌ ' + err.message, '#c00'); return; }
+
+      _vtRunning = true;
+      ytTranscribeBtn.disabled = true;
+      ytTranscribeBtn.textContent = '⏳ עובד…';
+      bgBadge.style.display = 'block';
+      _ytStatus('⏳ שולח לענן…');
+      _vtShowProgress(10, 'שולח קישור ל-Cloudflare Worker…');
+
+      try {
+        var res = await _transcribeYouTubeViaWorker(workerUrl, url, 'he', function(msg){
+          _ytStatus('⏳ ' + msg);
+          _vtShowProgress(50, msg);
+        });
+
+        var sections = _filterChunksByRanges(res.chunks, ranges);
+        var totalText = sections.map(function(s){
+          return (s.chunks || []).map(function(c){ return c.text; }).join('');
+        }).join('').trim();
+        var totalWords = totalText ? totalText.split(/\s+/).length : 0;
+        if (!totalWords) {
+          throw new Error('הטווחים שביקשת לא מכילים טקסט. בדוק את זמני ההתחלה/סיום.');
+        }
+
+        // Build filename
+        var titleHint = res.video && res.video.title ? res.video.title : ('YouTube_' + vidId);
+        var safeTitle = titleHint.replace(/[\\/:*?"<>|]+/g, '').slice(0, 80) || vidId;
+        var rangeSuffix = ranges.length
+          ? ' (' + ranges.map(function(r){ return _formatHMS(r[0]).replace(/^00:/, '') + '-' + _formatHMS(r[1]).replace(/^00:/, ''); }).join(', ') + ')'
+          : '';
+        var baseName = safeTitle + rangeSuffix;
+        var dlName = baseName + '_תמלול.doc';
+
+        // Build DOCX with sections per range
+        var sourceLine = 'תמלול עברית · YouTube · Cloudflare Workers AI · whisper-large-v3-turbo';
+        var docHtml = _buildMultiSectionDocHtml(baseName, sourceLine, sections);
+        var blob = new Blob(['﻿', docHtml], { type: 'application/msword' });
+
+        bgBadge.style.display = 'none';
+        _ytStatus('✅ תמלול הושלם · ' + totalWords + ' מילים · בחר איפה לשמור', '#2d7a2d');
+        _vtShowProgress(100, 'בוחר תיקיית שמירה…');
+        _vtShowDone(dlName, blob);
+
+      } catch (err) {
+        bgBadge.style.display = 'none';
+        _ytStatus('❌ ' + err.message, '#c00');
+        _vtShowError(err.message);
+        console.error('[YouTube cloud]', err);
+      } finally {
+        _vtRunning = false;
+        ytTranscribeBtn.disabled = false;
+        ytTranscribeBtn.textContent = '🚀 תמלל בענן ושמור';
+      }
+    }
+
+    ytTranscribeBtn.addEventListener('click', startYtCloudTranscribe);
+    ytInput.addEventListener('keydown', function(e){ if (e.key === 'Enter') startYtCloudTranscribe(); });
 
     const ytSection = App.el('div', {
       style: { marginTop: '18px', paddingTop: '16px', borderTop: '1px solid var(--line)' }
     }, [
       App.el('div', { style: { fontWeight: 600, fontSize: '13px', marginBottom: '4px' } },
-        '⬇️  הורדת אודיו מ-YouTube'),
+        '🎬  תמלול YouTube דרך הענן — אפס עומס על המחשב'),
       App.el('div', { style: { fontSize: '12px', color: 'var(--ink-mute)', marginBottom: '10px', lineHeight: '1.55' } },
-        'הדבק קישור · בחר שירות הורדה (אם הראשון חסום נסה את הבא) · הורד MP3 · גרור אותו לתיבה למעלה'),
+        'הדבק קישור · הוסף קטעים אופציונליים · לחץ "תמלל בענן ושמור" · הקובץ נשמר במחשב במקום שתבחר. עד 30 דקות וידאו לבקשה.'),
       ytInput,
-      ytButtonsRow,
+      App.el('div', { style: { fontSize: '12px', color: '#777', marginTop: '10px', marginBottom: '4px', fontWeight: '600' } },
+        'קטעים לתמלול (השאר ריק לתמלול הסרטון המלא):'),
+      rangesContainer,
+      addRangeBtn,
+      ytTranscribeBtn,
       ytStatusEl
     ]);
 
