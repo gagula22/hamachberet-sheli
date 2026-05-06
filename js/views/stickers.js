@@ -964,6 +964,97 @@ self.onmessage = async function(e) {
     return { text: text, chunks: chunks, raw: data };
   }
 
+  // ── Audio decode + WAV encode (browser-side) ─────────────────────────────
+  // Lets us downsample large files to 16kHz mono and split them into Worker-
+  // friendly chunks before upload, lifting the 100MB request-body limit.
+  async function _decodeAnyFileToPcm(file) {
+    const ab = await file.arrayBuffer();
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+    const decoded  = await audioCtx.decodeAudioData(ab);
+    const ch = decoded.numberOfChannels;
+    let pcm;
+    if (ch > 1) {
+      const c0 = decoded.getChannelData(0);
+      const c1 = decoded.getChannelData(1);
+      pcm = new Float32Array(c0.length);
+      for (let i = 0; i < c0.length; i++) pcm[i] = (c0[i] + c1[i]) * 0.5;
+    } else {
+      pcm = new Float32Array(decoded.getChannelData(0));
+    }
+    audioCtx.close();
+    return { pcm: pcm, sampleRate: 16000, durationSec: pcm.length / 16000 };
+  }
+
+  function _slicePcmSec(pcm, startSec, endSec, sampleRate) {
+    const start = Math.max(0, Math.floor((startSec || 0) * sampleRate));
+    const end   = Math.min(pcm.length, Math.floor((endSec || (pcm.length / sampleRate)) * sampleRate));
+    return pcm.slice(start, end);
+  }
+
+  function _pcmToWavBytes(pcm, sampleRate) {
+    const n = pcm.length;
+    const buffer = new ArrayBuffer(44 + n * 2);
+    const view = new DataView(buffer);
+    function writeStr(o, s) { for (let i = 0; i < s.length; i++) view.setUint8(o + i, s.charCodeAt(i)); }
+    writeStr(0, 'RIFF');
+    view.setUint32(4, 36 + n * 2, true);
+    writeStr(8, 'WAVE');
+    writeStr(12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * 2, true);
+    view.setUint16(32, 2, true);
+    view.setUint16(34, 16, true);
+    writeStr(36, 'data');
+    view.setUint32(40, n * 2, true);
+    let offset = 44;
+    for (let i = 0; i < n; i++) {
+      const s = Math.max(-1, Math.min(1, pcm[i]));
+      view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+      offset += 2;
+    }
+    return buffer;
+  }
+
+  // Chunked Whisper-via-Worker. Splits PCM into ≤40-minute pieces (each
+  // becomes ~76MB WAV — safely under the 100MB Worker body limit), uploads
+  // each, and stitches the transcripts with cumulative-time offsets.
+  async function _transcribeViaWorkerChunked(workerUrl, pcm, sampleRate, language, onProgress) {
+    const totalSec = pcm.length / sampleRate;
+    const CHUNK_DUR = 40 * 60;  // 40 min per chunk
+    const boundaries = [];
+    for (let s = 0; s < totalSec; s += CHUNK_DUR) {
+      boundaries.push([s, Math.min(totalSec, s + CHUNK_DUR)]);
+    }
+    if (!boundaries.length) boundaries.push([0, 0]);
+
+    const allText = [];
+    const allChunks = [];
+    for (let i = 0; i < boundaries.length; i++) {
+      const [s, e] = boundaries[i];
+      const headLine = boundaries.length === 1
+        ? 'שולח לענן…'
+        : 'חלק ' + (i + 1) + '/' + boundaries.length + ' (' + _formatHMS(s) + '–' + _formatHMS(e) + ')…';
+      if (onProgress) onProgress(headLine);
+
+      const slice = _slicePcmSec(pcm, s, e, sampleRate);
+      const wavBytes = _pcmToWavBytes(slice, sampleRate);
+      const result = await _transcribeViaWorker(workerUrl, wavBytes, language, onProgress);
+      allText.push((result.text || '').trim());
+      if (Array.isArray(result.chunks)) {
+        for (const c of result.chunks) {
+          allChunks.push({
+            timestamp: [c.timestamp[0] + s, c.timestamp[1] + s],
+            text: c.text
+          });
+        }
+      }
+    }
+    return { text: allText.filter(Boolean).join(' '), chunks: allChunks };
+  }
+
   // Quick health check — returns true if Worker URL responds (any 2xx/4xx OK)
   async function _pingWorker(workerUrl) {
     try {
@@ -1007,15 +1098,18 @@ self.onmessage = async function(e) {
 
   // File System Access API — let the user pick where to save. Falls back to
   // a normal anchor download in browsers that don't support the picker.
-  async function _saveDocViaPicker(blob, suggestedName) {
+  // opts: { description, extension, mimeType }
+  async function _saveBlobViaPicker(blob, suggestedName, opts) {
+    opts = opts || {};
+    var description = opts.description || 'File';
+    var ext = opts.extension || ((suggestedName.match(/\.[^.]+$/) || ['.bin'])[0]);
+    var mime = opts.mimeType || blob.type || 'application/octet-stream';
     if (window.showSaveFilePicker) {
       try {
+        var accept = {}; accept[mime] = [ext];
         var handle = await window.showSaveFilePicker({
           suggestedName: suggestedName,
-          types: [{
-            description: 'Word Document',
-            accept: { 'application/msword': ['.doc'] }
-          }]
+          types: [{ description: description, accept: accept }]
         });
         var writable = await handle.createWritable();
         await writable.write(blob);
@@ -1023,7 +1117,6 @@ self.onmessage = async function(e) {
         return { method: 'picker', name: handle.name };
       } catch (err) {
         if (err && err.name === 'AbortError') return { method: 'cancelled' };
-        // Fall through to download fallback on any other error
       }
     }
     var blobUrl = URL.createObjectURL(blob);
@@ -1032,6 +1125,16 @@ self.onmessage = async function(e) {
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(function(){ URL.revokeObjectURL(blobUrl); }, 3000);
     return { method: 'download', name: suggestedName };
+  }
+  function _saveDocViaPicker(blob, suggestedName) {
+    return _saveBlobViaPicker(blob, suggestedName, {
+      description: 'Word Document', extension: '.doc', mimeType: 'application/msword'
+    });
+  }
+  function _saveWavViaPicker(blob, suggestedName) {
+    return _saveBlobViaPicker(blob, suggestedName, {
+      description: 'WAV audio', extension: '.wav', mimeType: 'audio/wav'
+    });
   }
 
   // Filter Whisper chunks by user-selected time ranges and group into sections.
@@ -1302,31 +1405,41 @@ self.onmessage = async function(e) {
           var text, chunks, offsetSec, docTitleSrc;
 
           if (adv.source === 'cloud') {
-            // ── Cloud path: send raw file bytes to user's Cloudflare Worker ──
-            // Trimming is not supported in cloud mode (would require browser-side
-            // decode + re-encode) — the worker transcribes the whole file.
+            // ── Cloud path: decode → downsample to 16kHz mono → split into
+            // ~40-min WAV chunks → upload each. Lifts the 100MB Worker body
+            // limit and lets us trim by start/end before upload.
+            statusEl.textContent = 'מפענח קובץ אודיו בדפדפן…';
+            barFill.style.width  = '8%';
+            _vtShowProgress(8, 'מפענח קובץ אודיו בדפדפן (פעולה מקומית מהירה)…');
+            const decoded = await _decodeAnyFileToPcm(file);
+            let pcm = decoded.pcm;
+
+            // Apply user's trim range (if set)
             if (adv.startSec != null || adv.endSec != null) {
-              throw new Error('טווח חלקי זמין רק במצב "דפדפן offline". נקה את שדות הזמן או החלף מצב.');
+              pcm = _slicePcmSec(pcm, adv.startSec, adv.endSec, decoded.sampleRate);
             }
-            statusEl.textContent = 'שולח לענן…';
-            barFill.style.width  = '15%';
-            _vtShowProgress(15, 'שולח אודיו ל-Cloudflare Worker…');
+            offsetSec = adv.startSec || 0;
 
-            const ab = await file.arrayBuffer();
-            const sizeMB = (ab.byteLength / 1024 / 1024).toFixed(1);
-            if (ab.byteLength > 100 * 1024 * 1024) {
-              throw new Error('הקובץ ' + sizeMB + 'MB — Cloudflare Worker מוגבל ל-100MB. הקטן את הקובץ או החלף ל"דפדפן offline".');
+            const totalMin = (pcm.length / decoded.sampleRate / 60).toFixed(1);
+            statusEl.textContent = 'מתמלל בענן (' + totalMin + ' דקות אודיו)…';
+            _vtShowProgress(20, 'מתמלל ' + totalMin + ' דקות בענן…');
+
+            const cloudResult = await _transcribeViaWorkerChunked(
+              adv.workerUrl, pcm, decoded.sampleRate, 'he',
+              function(msg){
+                if (document.body.contains(statusEl)) statusEl.textContent = msg;
+                _vtShowProgress(60, msg);
+              }
+            );
+            text   = cloudResult.text;
+            chunks = cloudResult.chunks;
+            // Apply offset to chunks if user trimmed (timestamps stay absolute
+            // from start of original file, like the local path)
+            if (offsetSec && chunks) {
+              chunks = chunks.map(function(c){
+                return { timestamp: [c.timestamp[0] + offsetSec, c.timestamp[1] + offsetSec], text: c.text };
+              });
             }
-            statusEl.textContent = 'שולח ' + sizeMB + 'MB לענן…';
-            _vtShowProgress(20, 'שולח ' + sizeMB + 'MB ל-Cloudflare Workers AI…');
-
-            const cloudResult = await _transcribeViaWorker(adv.workerUrl, ab, 'he', function(msg){
-              if (document.body.contains(statusEl)) statusEl.textContent = msg;
-              _vtShowProgress(60, msg);
-            });
-            text       = cloudResult.text;
-            chunks     = cloudResult.chunks;
-            offsetSec  = 0;
             docTitleSrc = 'תמלול עברית · Cloudflare Workers AI · whisper-large-v3-turbo';
           } else {
             // ── Local path: decode in browser, run Whisper in Web Worker ─────
@@ -1531,6 +1644,173 @@ self.onmessage = async function(e) {
       ytStatusEl
     ]);
 
+    // ── Cut tool: split a file into clips by time ranges, save each ──────
+    let _cutFile = null;
+    let _cutDecoded = null;
+    let _cutRunning = false;
+
+    const cutFileLabel = document.createElement('div');
+    cutFileLabel.style.cssText = 'font-size:12px;color:#888;margin-top:8px;min-height:16px;';
+
+    const cutStatusEl = document.createElement('div');
+    cutStatusEl.style.cssText = 'font-size:12px;color:var(--ink-mute);margin-top:8px;line-height:1.55;min-height:16px;';
+
+    function _cutStatus(msg, color) {
+      cutStatusEl.textContent = msg;
+      cutStatusEl.style.color = color || 'var(--ink-mute)';
+    }
+
+    async function _cutLoadFile(file) {
+      if (!file || _cutRunning) return;
+      _cutFile = file;
+      _cutDecoded = null;
+      cutFileLabel.textContent = '📁 ' + file.name + ' · ' + (file.size/1024/1024).toFixed(1) + ' MB · מפענח…';
+      _cutStatus('⏳ מפענח קובץ אודיו…');
+      try {
+        _cutDecoded = await _decodeAnyFileToPcm(file);
+        const min = (_cutDecoded.durationSec / 60).toFixed(1);
+        cutFileLabel.textContent = '📁 ' + file.name + ' · ' + (file.size/1024/1024).toFixed(1) + ' MB · משך: ' + min + ' דקות';
+        _cutStatus('✓ מוכן — הוסף טווחים ולחץ "חתוך ושמור"', '#2d7a2d');
+      } catch (e) {
+        _cutStatus('❌ לא הצלחתי לפענח: ' + e.message, '#c00');
+        cutFileLabel.textContent = '';
+      }
+    }
+
+    const cutFileInput = document.createElement('input');
+    cutFileInput.type = 'file';
+    cutFileInput.accept = '.mp3,.mp4,.wav,.m4a,.webm,.ogg,.aac,.flac';
+    cutFileInput.style.display = 'none';
+    cutFileInput.addEventListener('change', function(){ _cutLoadFile(cutFileInput.files[0]); cutFileInput.value = ''; });
+
+    const cutZone = App.el('div', {
+      style: { border: '2px dashed var(--line)', borderRadius: 'var(--r-md)',
+               padding: '20px', textAlign: 'center', cursor: 'pointer',
+               transition: 'all 180ms', background: 'var(--cream)',
+               marginTop: '10px' },
+      onClick: function() { if (!_cutRunning) cutFileInput.click(); }
+    }, [
+      App.el('div', { style: { fontSize: '28px', marginBottom: '4px' } }, '✂️'),
+      App.el('div', { style: { fontWeight: 600, fontSize: '13px', marginBottom: '2px' } },
+        'גרור קובץ לחיתוך לכאן'),
+      App.el('div', { style: { fontSize: '11px', color: 'var(--ink-mute)' } },
+        'הקליפים יישמרו כ-WAV במקום שתבחר')
+    ]);
+    cutZone.addEventListener('dragover',  function(e) { e.preventDefault(); cutZone.style.borderColor = 'var(--lavender-deep,#9b8bb8)'; cutZone.style.background = 'var(--lavender,#e6ddf4)'; });
+    cutZone.addEventListener('dragleave', function()  { cutZone.style.borderColor = 'var(--line)'; cutZone.style.background = 'var(--cream)'; });
+    cutZone.addEventListener('drop', function(e) {
+      e.preventDefault(); cutZone.style.borderColor = 'var(--line)'; cutZone.style.background = 'var(--cream)';
+      _cutLoadFile(e.dataTransfer.files[0]);
+    });
+
+    // Cut ranges UI (independent from transcription's start/end inputs)
+    const cutRangesContainer = document.createElement('div');
+    cutRangesContainer.style.cssText = 'display:flex;flex-direction:column;gap:6px;margin-top:10px;';
+
+    function _addCutRangeRow(start, end) {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;gap:6px;align-items:center;';
+      const startBox = document.createElement('input');
+      startBox.type = 'text';
+      startBox.placeholder = 'התחלה (1:30)';
+      startBox.value = start || '';
+      startBox.style.cssText = 'flex:1;padding:6px 10px;border:1px solid #d0c080;border-radius:8px;font-size:13px;background:#fffef5;direction:ltr;text-align:center;';
+      const endBox = document.createElement('input');
+      endBox.type = 'text';
+      endBox.placeholder = 'סיום (3:00)';
+      endBox.value = end || '';
+      endBox.style.cssText = startBox.style.cssText;
+      const rmBtn = document.createElement('button');
+      rmBtn.textContent = '×';
+      rmBtn.title = 'הסר קטע';
+      rmBtn.style.cssText = 'width:32px;height:32px;background:#fff7d6;border:1px solid #d0c080;border-radius:8px;font-size:16px;cursor:pointer;color:#888;flex-shrink:0;';
+      rmBtn.onclick = function(){ row.remove(); };
+      row.appendChild(startBox);
+      row.appendChild(endBox);
+      row.appendChild(rmBtn);
+      row.__startBox = startBox;
+      row.__endBox = endBox;
+      cutRangesContainer.appendChild(row);
+    }
+    _addCutRangeRow();  // start with one empty row
+
+    const cutAddBtn = document.createElement('button');
+    cutAddBtn.textContent = '＋ הוסף קטע';
+    cutAddBtn.style.cssText = 'padding:6px 14px;background:#fff;border:1px dashed #d0c080;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;color:#5a4a00;margin-top:6px;align-self:flex-start;';
+    cutAddBtn.onclick = function(){ _addCutRangeRow(); };
+
+    const cutGoBtn = document.createElement('button');
+    cutGoBtn.textContent = '✂️ חתוך ושמור קליפים';
+    cutGoBtn.style.cssText = 'padding:10px 22px;background:#e6ddf4;border:1px solid #9b8bb8;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;color:#3b3a3a;margin-top:12px;align-self:flex-start;';
+
+    async function _cutGo() {
+      if (_cutRunning) return;
+      if (!_cutDecoded) { _cutStatus('❌ גרור קובץ קודם', '#c00'); return; }
+
+      const ranges = [];
+      const rows = cutRangesContainer.children;
+      for (let i = 0; i < rows.length; i++) {
+        const rs = rows[i].__startBox.value.trim();
+        const re = rows[i].__endBox.value.trim();
+        if (!rs && !re) continue;
+        const s = _parseTimeInput(rs);
+        const e = _parseTimeInput(re);
+        if (Number.isNaN(s) || s == null) { _cutStatus('❌ זמן התחלה לא תקין: ' + rs, '#c00'); return; }
+        if (Number.isNaN(e) || e == null) { _cutStatus('❌ זמן סיום לא תקין: ' + re, '#c00'); return; }
+        if (s >= e) { _cutStatus('❌ סיום לפני התחלה (' + rs + '–' + re + ')', '#c00'); return; }
+        if (e > _cutDecoded.durationSec + 0.5) {
+          _cutStatus('❌ ' + re + ' חורג ממשך הקובץ (' + _formatHMS(_cutDecoded.durationSec) + ')', '#c00');
+          return;
+        }
+        ranges.push([s, e]);
+      }
+      if (!ranges.length) { _cutStatus('❌ הוסף לפחות טווח אחד', '#c00'); return; }
+
+      _cutRunning = true;
+      cutGoBtn.disabled = true;
+      cutGoBtn.textContent = '⏳ חותך…';
+      let saved = 0, cancelled = 0;
+      const baseStem = _cutFile.name.replace(/\.[^.]+$/, '');
+      try {
+        for (let i = 0; i < ranges.length; i++) {
+          const s = ranges[i][0], e = ranges[i][1];
+          _cutStatus('⏳ קליפ ' + (i+1) + '/' + ranges.length + ' (' + _formatHMS(s) + '–' + _formatHMS(e) + ') · בחר היכן לשמור…');
+          const slice = _slicePcmSec(_cutDecoded.pcm, s, e, _cutDecoded.sampleRate);
+          const wavBytes = _pcmToWavBytes(slice, _cutDecoded.sampleRate);
+          const blob = new Blob([wavBytes], { type: 'audio/wav' });
+          const tag = _formatHMS(s).replace(/:/g, '-') + '_to_' + _formatHMS(e).replace(/:/g, '-');
+          const clipName = baseStem + '_' + tag + '.wav';
+          const res = await _saveWavViaPicker(blob, clipName);
+          if (res.method === 'cancelled') cancelled++;
+          else saved++;
+        }
+        _cutStatus('✓ נשמרו ' + saved + '/' + ranges.length + ' קליפים' + (cancelled ? ' · ' + cancelled + ' ביטולים' : ''), '#2d7a2d');
+      } catch (err) {
+        _cutStatus('❌ ' + err.message, '#c00');
+      } finally {
+        _cutRunning = false;
+        cutGoBtn.disabled = false;
+        cutGoBtn.textContent = '✂️ חתוך ושמור קליפים';
+      }
+    }
+    cutGoBtn.addEventListener('click', _cutGo);
+
+    const cutSection = App.el('div', {
+      style: { marginTop: '18px', paddingTop: '16px', borderTop: '1px solid var(--line)' }
+    }, [
+      App.el('div', { style: { fontWeight: 600, fontSize: '13px', marginBottom: '4px' } },
+        '✂️  חיתוך מהיר ללא תמלול — שמור קליפים בנפרד'),
+      App.el('div', { style: { fontSize: '12px', color: 'var(--ink-mute)', marginBottom: '4px', lineHeight: '1.55' } },
+        'גרור קובץ אודיו/וידאו · הוסף טווחים · לחץ "חתוך ושמור" — דיאלוג Windows ייפתח לכל קליפ. הכל מקומי בדפדפן, ללא העלאה לענן, אין מגבלת גודל.'),
+      cutFileInput, cutZone, cutFileLabel,
+      App.el('div', { style: { fontSize: '12px', color: '#777', marginTop: '12px', marginBottom: '4px', fontWeight: '600' } },
+        'טווחי החיתוך:'),
+      cutRangesContainer,
+      cutAddBtn,
+      cutGoBtn,
+      cutStatusEl
+    ]);
+
     const infoBanner = App.el('div', {
       style: { background: '#f0f6fb', border: '1px solid #a0c8e8',
                borderRadius: 'var(--r-sm)', padding: '11px 16px', marginBottom: '14px', lineHeight: '1.6' }
@@ -1549,7 +1829,8 @@ self.onmessage = async function(e) {
       infoBanner,
       fileInput, zone, statusEl, barTrack, bgBadge,
       advPanel,
-      ytSection
+      ytSection,
+      cutSection
     ]);
   }
 
