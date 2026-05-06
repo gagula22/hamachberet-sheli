@@ -965,42 +965,129 @@ self.onmessage = async function(e) {
   }
 
   // ── Audio decode + WAV encode (browser-side) ─────────────────────────────
-  // Lets us downsample large files to 16kHz mono and split them into Worker-
-  // friendly chunks before upload, lifting the 100MB request-body limit.
-  async function _decodeAnyFileToPcm(file) {
+  // Two-stage decode:
+  //  (1) FAST: AudioContext.decodeAudioData on the raw bytes — works for
+  //      MP3/WAV/M4A/OGG/FLAC. Native, instant.
+  //  (2) FALLBACK: HTMLVideoElement playback at 16x + capture via WebAudio.
+  //      Works for MP4/WebM/MOV video containers that decodeAudioData refuses.
+  //      Real-time-bound (16x speedup) but reliable for any browser-playable file.
+  async function _decodeAnyFileToPcm(file, onProgress) {
     const ab = await file.arrayBuffer();
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
-    let decoded;
     try {
-      decoded = await audioCtx.decodeAudioData(ab);
+      const decoded = await audioCtx.decodeAudioData(ab);
+      const ch = decoded.numberOfChannels;
+      let pcm;
+      if (ch > 1) {
+        const c0 = decoded.getChannelData(0);
+        const c1 = decoded.getChannelData(1);
+        pcm = new Float32Array(c0.length);
+        for (let i = 0; i < c0.length; i++) pcm[i] = (c0[i] + c1[i]) * 0.5;
+      } else {
+        pcm = new Float32Array(decoded.getChannelData(0));
+      }
+      audioCtx.close();
+      return { pcm: pcm, sampleRate: 16000, durationSec: pcm.length / 16000 };
     } catch (decodeErr) {
       try { audioCtx.close(); } catch (_) {}
-      const ext = ((file.name || '').match(/\.[^.]+$/) || [''])[0].toLowerCase();
-      const isVideo = ['.mp4', '.webm', '.mkv', '.mov', '.avi', '.flv'].indexOf(ext) >= 0;
-      if (isVideo) {
-        throw new Error(
-          'הקובץ ' + ext + ' הוא וידאו — הדפדפן לא מצליח לפענח אותו ישירות. ' +
-          'חזור ל-vidssave/cobalt, הורד את הסרטון מחדש בפורמט MP3 (Audio Only), ' +
-          'ואז גרור שוב. MP3 תמיד עובד.'
-        );
+      // Fallback for video / unusual containers
+      if (onProgress) onProgress('פענוח ישיר נכשל — עובר ל-HTMLVideoElement (איטי יותר אבל עובד על MP4 וידאו)…');
+      return _decodeViaVideoElement(file, onProgress);
+    }
+  }
+
+  // Fallback decoder via real-time playback. Used for MP4/WebM/MOV that
+  // decodeAudioData rejects. Plays the file at max playbackRate (16x in
+  // most browsers) routed through a Web Audio graph that captures samples
+  // into a Float32 buffer. Audio is silenced via GainNode(0).
+  async function _decodeViaVideoElement(file, onProgress) {
+    const blobUrl = URL.createObjectURL(file);
+    const media = document.createElement('video');
+    media.src = blobUrl;
+    media.preload = 'auto';
+    media.crossOrigin = 'anonymous';
+
+    // Wait for the file to be ready to play
+    await new Promise(function(resolve, reject) {
+      let settled = false;
+      function done(err) {
+        if (settled) return;
+        settled = true;
+        if (err) { try { URL.revokeObjectURL(blobUrl); } catch (_) {} reject(err); }
+        else resolve();
       }
-      throw new Error(
-        'פורמט ' + (ext || 'לא ידוע') + ' לא נתמך לפענוח בדפדפן. ' +
-        'נסה MP3 (האפשרות הבטוחה ביותר), או WAV / M4A / OGG.'
-      );
+      media.oncanplaythrough = function(){ done(); };
+      media.onerror = function(){ done(new Error('הדפדפן לא הצליח לטעון את הקובץ (codec לא נתמך, או פגום)')); };
+      try { media.load(); } catch (e) { done(e); }
+      setTimeout(function(){ done(new Error('זמן טעינה ארוך מדי — נסה קובץ אחר')); }, 45000);
+    });
+
+    const duration = media.duration;
+    if (!isFinite(duration) || duration === 0) {
+      try { URL.revokeObjectURL(blobUrl); } catch (_) {}
+      throw new Error('הקובץ לא מכיל אודיו תקין (משך לא ידוע)');
     }
-    const ch = decoded.numberOfChannels;
-    let pcm;
-    if (ch > 1) {
-      const c0 = decoded.getChannelData(0);
-      const c1 = decoded.getChannelData(1);
-      pcm = new Float32Array(c0.length);
-      for (let i = 0; i < c0.length; i++) pcm[i] = (c0[i] + c1[i]) * 0.5;
-    } else {
-      pcm = new Float32Array(decoded.getChannelData(0));
+
+    const sampleRate = 16000;
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: sampleRate });
+    const source = audioCtx.createMediaElementSource(media);
+    const gain = audioCtx.createGain();
+    gain.gain.value = 0; // silent, but ScriptProcessor still fires
+    const bufSize = 16384;
+    const processor = audioCtx.createScriptProcessor(bufSize, 1, 1);
+
+    const chunks = [];
+    let totalSamples = 0;
+    processor.onaudioprocess = function(ev) {
+      const inBuf = ev.inputBuffer;
+      const ch = inBuf.numberOfChannels;
+      let mono;
+      if (ch > 1) {
+        const c0 = inBuf.getChannelData(0);
+        const c1 = inBuf.getChannelData(1);
+        mono = new Float32Array(c0.length);
+        for (let i = 0; i < c0.length; i++) mono[i] = (c0[i] + c1[i]) * 0.5;
+      } else {
+        mono = new Float32Array(inBuf.getChannelData(0));
+      }
+      chunks.push(mono);
+      totalSamples += mono.length;
+    };
+
+    source.connect(processor);
+    processor.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    try { media.playbackRate = 16; } catch (_) {}
+    await media.play();
+
+    // Progress reporter while playing back
+    let progressTimer = null;
+    if (onProgress) {
+      progressTimer = setInterval(function(){
+        const pct = duration ? (media.currentTime / duration) * 100 : 0;
+        const remainingWall = (duration - media.currentTime) / (media.playbackRate || 1);
+        onProgress('פורק וידאו: ' + pct.toFixed(0) + '% · נשארו ~' + Math.max(0, Math.round(remainingWall)) + ' שנ׳');
+      }, 1000);
     }
-    audioCtx.close();
-    return { pcm: pcm, sampleRate: 16000, durationSec: pcm.length / 16000 };
+
+    await new Promise(function(resolve){ media.onended = resolve; });
+
+    if (progressTimer) clearInterval(progressTimer);
+    try { processor.disconnect(); source.disconnect(); gain.disconnect(); } catch (_) {}
+    try { await audioCtx.close(); } catch (_) {}
+    try { URL.revokeObjectURL(blobUrl); } catch (_) {}
+
+    if (totalSamples === 0) {
+      throw new Error('לא נקלטו דגימות אודיו — ייתכן שלקובץ אין פסקול');
+    }
+    const pcm = new Float32Array(totalSamples);
+    let off = 0;
+    for (let i = 0; i < chunks.length; i++) {
+      pcm.set(chunks[i], off);
+      off += chunks[i].length;
+    }
+    return { pcm: pcm, sampleRate: sampleRate, durationSec: pcm.length / sampleRate };
   }
 
   function _slicePcmSec(pcm, startSec, endSec, sampleRate) {
@@ -1428,8 +1515,11 @@ self.onmessage = async function(e) {
             // limit and lets us trim by start/end before upload.
             statusEl.textContent = 'מפענח קובץ אודיו בדפדפן…';
             barFill.style.width  = '8%';
-            _vtShowProgress(8, 'מפענח קובץ אודיו בדפדפן (פעולה מקומית מהירה)…');
-            const decoded = await _decodeAnyFileToPcm(file);
+            _vtShowProgress(8, 'מפענח קובץ אודיו בדפדפן…');
+            const decoded = await _decodeAnyFileToPcm(file, function(msg){
+              if (document.body.contains(statusEl)) statusEl.textContent = msg;
+              _vtShowProgress(10, msg);
+            });
             let pcm = decoded.pcm;
 
             // Apply user's trim range (if set)
@@ -1462,12 +1552,12 @@ self.onmessage = async function(e) {
           } else {
             // ── Local path: decode in browser, run Whisper in Web Worker ─────
             statusEl.textContent = 'מפענח קובץ אודיו…';
-            const ab2      = await file.arrayBuffer();
-            const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
-            const decoded  = await audioCtx.decodeAudioData(ab2);
-            const raw      = decoded.getChannelData(0);
-            let   audio    = new Float32Array(raw);
-            audioCtx.close();
+            _vtShowProgress(8, 'מפענח קובץ אודיו…');
+            const decodedLocal = await _decodeAnyFileToPcm(file, function(msg){
+              if (document.body.contains(statusEl)) statusEl.textContent = msg;
+              _vtShowProgress(10, msg);
+            });
+            let audio = decodedLocal.pcm;
 
             audio = _trimAudio(audio, adv.startSec, adv.endSec);
             const durationMin = Math.round(audio.length / 16000 / 60);
@@ -1684,8 +1774,8 @@ self.onmessage = async function(e) {
       _stepHowto([
         'הדבק את כתובת הוידאו מ-YouTube בשדה למטה',
         'לחץ על <b>⭐ vidssave</b> · הקישור מועתק ל-clipboard ואתר הורדה ייפתח בכרטיסייה חדשה',
-        'באתר ההורדה: לחץ בשדה והקלד <b>Ctrl+V</b> · ⚠️ <b>בחר פורמט MP3 (Audio Only) — לא MP4!</b> · לחץ <b>Download</b>',
-        'הקובץ MP3 יורד לתיקיית ההורדות במחשב — סיימת את שלב 1'
+        'באתר ההורדה: לחץ בשדה והקלד <b>Ctrl+V</b> · בחר פורמט (MP3 הכי מהיר; MP4 גם נתמך) · לחץ <b>Download</b>',
+        'הקובץ יורד לתיקיית ההורדות במחשב — סיימת את שלב 1'
       ]),
       ytInput,
       ytPrimaryRow,
@@ -1715,9 +1805,9 @@ self.onmessage = async function(e) {
       _cutFile = file;
       _cutDecoded = null;
       cutFileLabel.textContent = '📁 ' + file.name + ' · ' + (file.size/1024/1024).toFixed(1) + ' MB · מפענח…';
-      _cutStatus('⏳ מפענח קובץ אודיו…');
+      _cutStatus('⏳ מפענח קובץ…');
       try {
-        _cutDecoded = await _decodeAnyFileToPcm(file);
+        _cutDecoded = await _decodeAnyFileToPcm(file, function(msg){ _cutStatus('⏳ ' + msg); });
         const min = (_cutDecoded.durationSec / 60).toFixed(1);
         cutFileLabel.textContent = '📁 ' + file.name + ' · ' + (file.size/1024/1024).toFixed(1) + ' MB · משך: ' + min + ' דקות';
         _cutStatus('✓ מוכן — הוסף טווחים ולחץ "חתוך ושמור"', '#2d7a2d');
@@ -1742,9 +1832,9 @@ self.onmessage = async function(e) {
     }, [
       App.el('div', { style: { fontSize: '28px', marginBottom: '4px' } }, '✂️'),
       App.el('div', { style: { fontWeight: 600, fontSize: '13px', marginBottom: '2px' } },
-        'גרור MP3 לחיתוך לכאן'),
+        'גרור קובץ לחיתוך לכאן'),
       App.el('div', { style: { fontSize: '11px', color: 'var(--ink-mute)' } },
-        'הקליפים יישמרו כ-WAV במקום שתבחר · MP3/WAV/M4A · לא MP4 וידאו')
+        'MP3 / MP4 / WAV / M4A / WebM · הקליפים יישמרו כ-WAV במקום שתבחר')
     ]);
     cutZone.addEventListener('dragover',  function(e) { e.preventDefault(); cutZone.style.borderColor = 'var(--lavender-deep,#9b8bb8)'; cutZone.style.background = 'var(--lavender,#e6ddf4)'; });
     cutZone.addEventListener('dragleave', function()  { cutZone.style.borderColor = 'var(--line)'; cutZone.style.background = 'var(--cream)'; });
@@ -1850,7 +1940,7 @@ self.onmessage = async function(e) {
     }, [
       _stepHeader(2, 'לחתוך לקליפים (אופציונלי)', '#9b8bb8'),
       _stepHowto([
-        'גרור את ה-<b>MP3</b> שהורדת לתיבה למטה (לא MP4 וידאו — הדפדפן לא יודע לפענח וידאו)',
+        'גרור את הקובץ שהורדת לתיבה למטה — <b>MP3 / MP4 / WAV / M4A / WebM</b> (MP4 וידאו נתמך, פענוח לוקח קצת יותר זמן)',
         'הוסף טווחי זמן — לדוגמה <code style="background:#eee;padding:1px 4px;border-radius:3px;">1:30</code> עד <code style="background:#eee;padding:1px 4px;border-radius:3px;">3:00</code>. לחץ "<b>＋ הוסף קטע</b>" לעוד.',
         'לחץ "<b>✂️ חתוך ושמור קליפים</b>" · לכל קליפ ייפתח דיאלוג שמירה — בחר תיקייה ושם',
         'מתי להשתמש: לתמלל רק חלקים מסוימים, או כשהקובץ ארוך מאוד'
