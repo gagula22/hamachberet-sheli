@@ -970,7 +970,25 @@ self.onmessage = async function(e) {
   async function _decodeAnyFileToPcm(file) {
     const ab = await file.arrayBuffer();
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
-    const decoded  = await audioCtx.decodeAudioData(ab);
+    let decoded;
+    try {
+      decoded = await audioCtx.decodeAudioData(ab);
+    } catch (decodeErr) {
+      try { audioCtx.close(); } catch (_) {}
+      const ext = ((file.name || '').match(/\.[^.]+$/) || [''])[0].toLowerCase();
+      const isVideo = ['.mp4', '.webm', '.mkv', '.mov', '.avi', '.flv'].indexOf(ext) >= 0;
+      if (isVideo) {
+        throw new Error(
+          'הקובץ ' + ext + ' הוא וידאו — הדפדפן לא מצליח לפענח אותו ישירות. ' +
+          'חזור ל-vidssave/cobalt, הורד את הסרטון מחדש בפורמט MP3 (Audio Only), ' +
+          'ואז גרור שוב. MP3 תמיד עובד.'
+        );
+      }
+      throw new Error(
+        'פורמט ' + (ext || 'לא ידוע') + ' לא נתמך לפענוח בדפדפן. ' +
+        'נסה MP3 (האפשרות הבטוחה ביותר), או WAV / M4A / OGG.'
+      );
+    }
     const ch = decoded.numberOfChannels;
     let pcm;
     if (ch > 1) {
@@ -1666,8 +1684,8 @@ self.onmessage = async function(e) {
       _stepHowto([
         'הדבק את כתובת הוידאו מ-YouTube בשדה למטה',
         'לחץ על <b>⭐ vidssave</b> · הקישור מועתק ל-clipboard ואתר הורדה ייפתח בכרטיסייה חדשה',
-        'באתר ההורדה: לחץ בשדה והקלד <b>Ctrl+V</b> · בחר MP3 · לחץ <b>Download</b>',
-        'הקובץ יורד לתיקיית ההורדות במחשב — סיימת את שלב 1'
+        'באתר ההורדה: לחץ בשדה והקלד <b>Ctrl+V</b> · ⚠️ <b>בחר פורמט MP3 (Audio Only) — לא MP4!</b> · לחץ <b>Download</b>',
+        'הקובץ MP3 יורד לתיקיית ההורדות במחשב — סיימת את שלב 1'
       ]),
       ytInput,
       ytPrimaryRow,
@@ -1724,9 +1742,9 @@ self.onmessage = async function(e) {
     }, [
       App.el('div', { style: { fontSize: '28px', marginBottom: '4px' } }, '✂️'),
       App.el('div', { style: { fontWeight: 600, fontSize: '13px', marginBottom: '2px' } },
-        'גרור קובץ לחיתוך לכאן'),
+        'גרור MP3 לחיתוך לכאן'),
       App.el('div', { style: { fontSize: '11px', color: 'var(--ink-mute)' } },
-        'הקליפים יישמרו כ-WAV במקום שתבחר')
+        'הקליפים יישמרו כ-WAV במקום שתבחר · MP3/WAV/M4A · לא MP4 וידאו')
     ]);
     cutZone.addEventListener('dragover',  function(e) { e.preventDefault(); cutZone.style.borderColor = 'var(--lavender-deep,#9b8bb8)'; cutZone.style.background = 'var(--lavender,#e6ddf4)'; });
     cutZone.addEventListener('dragleave', function()  { cutZone.style.borderColor = 'var(--line)'; cutZone.style.background = 'var(--cream)'; });
@@ -1832,7 +1850,7 @@ self.onmessage = async function(e) {
     }, [
       _stepHeader(2, 'לחתוך לקליפים (אופציונלי)', '#9b8bb8'),
       _stepHowto([
-        'גרור את הקובץ שהורדת לתיבה למטה (אודיו או וידאו, כל גודל)',
+        'גרור את ה-<b>MP3</b> שהורדת לתיבה למטה (לא MP4 וידאו — הדפדפן לא יודע לפענח וידאו)',
         'הוסף טווחי זמן — לדוגמה <code style="background:#eee;padding:1px 4px;border-radius:3px;">1:30</code> עד <code style="background:#eee;padding:1px 4px;border-radius:3px;">3:00</code>. לחץ "<b>＋ הוסף קטע</b>" לעוד.',
         'לחץ "<b>✂️ חתוך ושמור קליפים</b>" · לכל קליפ ייפתח דיאלוג שמירה — בחר תיקייה ושם',
         'מתי להשתמש: לתמלל רק חלקים מסוימים, או כשהקובץ ארוך מאוד'
