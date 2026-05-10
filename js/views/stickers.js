@@ -1293,12 +1293,11 @@ self.onmessage = async function(e) {
       throw new Error('לא הצלחתי למצוא גבולות frame תקינים');
     }
 
-    // Cloudflare Workers Free plan has BOTH a 128MB memory cap AND a 10ms
-    // CPU-time cap per request. base64-encoding the audio in the Worker is
-    // pure CPU work, so even a 30MB chunk overruns the CPU budget. 5MB
-    // keeps base64 work < ~10ms and total heap < 15MB. Many small chunks
-    // are slower wall-clock (≈30s each) but they actually complete.
-    const CHUNK_BYTES = 5 * 1024 * 1024;
+    // Cloudflare Workers Free CPU limit is stricter when the request comes
+    // with an Origin header (~30ms vs ~50ms server-to-server). Empirically
+    // verified by curl tests: 2MB POST with Origin → 200, 3MB → 503/1102.
+    // 2MB chunks keep us comfortably under the threshold.
+    const CHUNK_BYTES = 2 * 1024 * 1024;
     const sliceLen = sliceEnd - sliceStart;
     const boundaries = [];
     if (sliceLen <= CHUNK_BYTES) {
@@ -1385,14 +1384,12 @@ self.onmessage = async function(e) {
     return buffer;
   }
 
-  // Chunked Whisper-via-Worker. Splits PCM into ~2-minute pieces (each
-  // becomes ~3.8MB WAV — safely under both the Worker's 128MB memory cap
-  // and the 10ms CPU-time cap on the Free plan, since base64-encoding a
-  // small chunk is fast). Uploads each, stitches transcripts with
-  // cumulative-time offsets.
+  // Chunked Whisper-via-Worker. Splits PCM into ~1-minute pieces (each
+  // becomes ~1.9MB WAV — safely under the Worker CPU cap that gets stricter
+  // when an Origin header is present (verified ~30ms threshold = 2MB).
   async function _transcribeViaWorkerChunked(workerUrl, pcm, sampleRate, language, onProgress) {
     const totalSec = pcm.length / sampleRate;
-    const CHUNK_DUR = 2 * 60;  // 2 min per chunk → ~3.8MB WAV
+    const CHUNK_DUR = 60;  // 1 min per chunk → ~1.9MB WAV
     const boundaries = [];
     for (let s = 0; s < totalSec; s += CHUNK_DUR) {
       boundaries.push([s, Math.min(totalSec, s + CHUNK_DUR)]);
@@ -1812,22 +1809,24 @@ self.onmessage = async function(e) {
             const isCompressedAudio = ['.mp3', '.m4a', '.wav', '.aac', '.ogg', '.flac'].indexOf(ext) >= 0;
             const sizeMB = (file.size / 1024 / 1024).toFixed(1);
 
-            // ── PRE-FLIGHT: confirm Worker can handle a 5MB payload before we
-            // commit to a long upload run. If the Worker hits CPU/RAM caps,
-            // surface a clear instruction now rather than a vague "Failed to
-            // fetch" mid-chunk.
-            statusEl.textContent = 'בודק חיבור ל-Worker (5MB silent payload)…';
-            _vtShowProgress(3, 'בודק חיבור ל-Worker עם 5MB טסט…');
+            // ── PRE-FLIGHT: tiny 1MB POST to verify the Worker is reachable
+            // and not currently 503'ing. We deliberately keep it small (well
+            // under the 2MB threshold where Cloudflare's CPU cap kicks in
+            // for browser-origin requests).
+            statusEl.textContent = 'בודק חיבור ל-Worker…';
+            _vtShowProgress(3, 'בודק חיבור ל-Worker (1MB טסט)…');
             console.log('[transcribe] preflight start', adv.workerUrl);
-            const probe = await _preflightWorker(adv.workerUrl, 5, function(msg){
+            const probe = await _preflightWorker(adv.workerUrl, 1, function(msg){
               if (document.body.contains(statusEl)) statusEl.textContent = msg;
             });
             console.log('[transcribe] preflight result', probe);
-            if (!probe.ok) {
+            if (!probe.ok && probe.code !== 500) {
+              // 500 = Whisper rejected fake silent bytes (expected, Worker is fine)
+              // Anything else (503, fetch error, network) = real problem.
               const why = probe.fetchErr
-                ? 'הדפדפן דחה את ה-fetch: "' + probe.fetchErr + '" — סביר ש-Cloudflare Worker חרג ממגבלות (CPU 10ms / RAM 128MB) בעת קידוד base64.'
+                ? 'הדפדפן דחה את ה-fetch: "' + probe.fetchErr + '"'
                 : ('Worker החזיר HTTP ' + probe.code + (probe.body ? ' · ' + probe.body : ''));
-              throw new Error('בדיקת Worker נכשלה: ' + why + '. הפיתרון: עדכן את קוד ה-Worker ל-v4 (משתמש ב-Uint8Array ישיר ללא base64). ביקש ממני קודם — תאמר "פתח לי את v4" ואני אתן את הקוד שוב.');
+              throw new Error('בדיקת Worker נכשלה: ' + why + '. אם מופיע 503/1102 — Cloudflare מגביל CPU מתחת ל-30ms. הפיתרון: עדכן את ה-Worker ל-v4 (Uint8Array ישיר, ללא base64). תכתוב "פתח לי את v4" לקוד.');
             }
 
             // ── MP3 BYTE-SLICE PATH: works for any MP3 size, with or without
