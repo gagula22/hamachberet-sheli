@@ -2619,7 +2619,7 @@ self.onmessage = async function(e) {
     const cutSection = App.el('div', {
       style: { marginTop: '20px', paddingTop: '18px', borderTop: '1px solid var(--line)' }
     }, [
-      _stepHeader(2, 'לחתוך לקליפים (אופציונלי)', '#9b8bb8'),
+      _stepHeader(2, 'חיתוך אודיו בלבד (אופציונלי) — פלט WAV', '#9b8bb8'),
       _stepHowto([
         'גרור את הקובץ שהורדת לתיבה למטה — <b>MP3 / MP4 / WAV / M4A / WebM</b>',
         'הוסף טווחי זמן <b>בכל אורך</b> שתרצה. דוגמאות: <code style="background:#eee;padding:1px 4px;border-radius:3px;">1:30</code>–<code style="background:#eee;padding:1px 4px;border-radius:3px;">3:00</code> · <code style="background:#eee;padding:1px 4px;border-radius:3px;">5:00</code>–<code style="background:#eee;padding:1px 4px;border-radius:3px;">45:00</code> · <code style="background:#eee;padding:1px 4px;border-radius:3px;">10:00</code>–<code style="background:#eee;padding:1px 4px;border-radius:3px;">1:35:00</code> (90 דק׳!). אין גבול עליון — רק שזמן הסיום ≤ אורך הקובץ',
