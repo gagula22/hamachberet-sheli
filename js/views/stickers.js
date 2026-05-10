@@ -2522,7 +2522,7 @@ self.onmessage = async function(e) {
     }, [
       App.el('div', { style: { fontSize: '28px', marginBottom: '4px' } }, '✂️'),
       App.el('div', { style: { fontWeight: 600, fontSize: '13px', marginBottom: '2px' } },
-        'גרור קובץ לחיתוך לכאן'),
+        'גרור קובץ שמע בלבד לחיתוך כאן'),
       App.el('div', { style: { fontSize: '11px', color: 'var(--ink-mute)' } },
         'MP3 / MP4 / WAV / M4A / WebM · הקליפים יישמרו כ-WAV במקום שתבחר')
     ]);
