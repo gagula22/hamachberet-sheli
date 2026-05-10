@@ -1671,13 +1671,23 @@ self.onmessage = async function(e) {
     var video = document.createElement('video');
     video.src = blobUrl;
     video.preload = 'auto';
-    video.muted = false;
+    video.muted = false;  // raw audio needed for Web Audio capture path
     video.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;';
     document.body.appendChild(video);
+
+    // Route the element's audio through Web Audio to a MediaStream destination
+    // — but never connect to context.destination, so the user hears nothing
+    // while the recorder still gets the full audio track.
+    var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    var audioSource = audioCtx.createMediaElementSource(video);
+    var audioDest = audioCtx.createMediaStreamDestination();
+    audioSource.connect(audioDest);
+    // (No connection to audioCtx.destination → silent for the user)
 
     function cleanup() {
       try { URL.revokeObjectURL(blobUrl); } catch (_) {}
       try { video.remove(); } catch (_) {}
+      try { audioCtx.close(); } catch (_) {}
     }
 
     try {
@@ -1702,10 +1712,17 @@ self.onmessage = async function(e) {
       }
 
       // captureStream: prefer standard, fallback to mozCaptureStream
-      var stream = (typeof video.captureStream === 'function')
+      var srcStream = (typeof video.captureStream === 'function')
         ? video.captureStream()
         : (typeof video.mozCaptureStream === 'function' ? video.mozCaptureStream() : null);
-      if (!stream) throw new Error('captureStream לא נתמך בדפדפן הזה');
+      if (!srcStream) throw new Error('captureStream לא נתמך בדפדפן הזה');
+
+      // Combine: video tracks from captureStream + audio track from Web Audio
+      // (the captureStream's audio track is empty since createMediaElementSource
+      // captured the element's audio exclusively into the Web Audio graph)
+      var stream = new MediaStream(
+        [].concat(srcStream.getVideoTracks(), audioDest.stream.getAudioTracks())
+      );
 
       // Pick best supported MIME type (WebM/Opus is usually safest)
       var mimeCandidates = [
