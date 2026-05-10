@@ -2114,27 +2114,42 @@ self.onmessage = async function(e) {
       cutFileLabel.textContent = '📁 ' + file.name + ' · ' + (file.size/1024/1024).toFixed(1) + ' MB · קורא…';
       _cutStatus('⏳ קורא קובץ…');
       try {
-        // Fast path: CBR MP3 — byte-slice without decoding (instant, accurate
-        // duration, output stays MP3). Works even for very long files where
-        // decodeAudioData would fail or truncate.
-        const mp3 = await _readMp3Metadata(file);
+        // Fast path: MP3 — byte-slice without decoding. Even VBR works because
+        // we read Xing/Info header for duration.
+        let mp3 = null;
+        let mp3Err = null;
+        try {
+          mp3 = await _readMp3Metadata(file);
+        } catch (e) {
+          mp3Err = e;
+          console.warn('[cut] _readMp3Metadata threw:', e);
+        }
+        console.log('[cut] MP3 metadata for', file.name, '=', mp3, 'err=', mp3Err);
+
         if (mp3) {
           _cutMp3Meta = mp3;
-          _cutDecoded = { durationSec: mp3.durationSec };  // for range validation
+          _cutDecoded = { durationSec: mp3.durationSec };
           const min = (mp3.durationSec / 60).toFixed(1);
           const kbps = Math.round(mp3.bitrate / 1000);
           const vbrTag = mp3.isVbr ? ' VBR' : ' CBR';
           cutFileLabel.textContent = '📁 ' + file.name + ' · ' + (file.size/1024/1024).toFixed(1) +
             ' MB · משך: ' + min + ' דקות · MP3 ' + kbps + 'kbps' + vbrTag + ' · חיתוך ישיר';
           const vbrNote = mp3.isVbr ? ' (VBR — קצוות עשויים לסטות בשנייה־שתיים)' : '';
-          _cutStatus('✓ מוכן (מסלול MP3 מהיר)' + vbrNote + ' — הקליפים יישמרו כ-MP3', '#2d7a2d');
+          _cutStatus('✓ מוכן (מסלול MP3 מהיר v2)' + vbrNote + ' — הקליפים יישמרו כ-MP3', '#2d7a2d');
           return;
         }
-        // Slow path: full decode — used for non-MP3 / VBR MP3 / video files
+
+        // MP3 parsing failed — show why before falling back to slow decode
+        const ext = ((file.name || '').match(/\.[^.]+$/) || [''])[0].toLowerCase();
+        if (ext === '.mp3') {
+          _cutStatus('⚠️ הקובץ הוא MP3 אבל לא הצלחתי לפענח header — נופל למסלול דקודר איטי. בדוק Console (F12)', '#b85c00');
+        } else {
+          _cutStatus('⏳ פורמט לא-MP3 (' + ext + ') — עובר לדקודר…');
+        }
         _cutDecoded = await _decodeAnyFileToPcm(file, function(msg){ _cutStatus('⏳ ' + msg); });
         const min = (_cutDecoded.durationSec / 60).toFixed(1);
-        cutFileLabel.textContent = '📁 ' + file.name + ' · ' + (file.size/1024/1024).toFixed(1) + ' MB · משך: ' + min + ' דקות';
-        _cutStatus('✓ מוכן — הוסף טווחים ולחץ "חתוך ושמור"', '#2d7a2d');
+        cutFileLabel.textContent = '📁 ' + file.name + ' · ' + (file.size/1024/1024).toFixed(1) + ' MB · משך: ' + min + ' דקות (דקודר)';
+        _cutStatus('✓ מוכן (מסלול דקודר) — הקליפים יישמרו כ-WAV', '#2d7a2d');
       } catch (e) {
         _cutStatus('❌ לא הצלחתי לקרוא: ' + e.message, '#c00');
         cutFileLabel.textContent = '';
