@@ -327,15 +327,19 @@
 
     function _imgObjToDataUrl(img) {
       if (!img || !img.width || !img.height) return null;
+      // Skip decorative tiny images (icons / masks / dots) to save time
+      // and to keep the output document small.
+      if (img.width < 8 || img.height < 8) return null;
       try {
-        var canvas = document.createElement('canvas');
-        canvas.width = img.width;
-        canvas.height = img.height;
-        var ctx = canvas.getContext('2d');
+        // Rasterize into a "natural" canvas first.
+        var srcCanvas = document.createElement('canvas');
+        srcCanvas.width = img.width;
+        srcCanvas.height = img.height;
+        var srcCtx = srcCanvas.getContext('2d');
         if (img.bitmap) {
-          ctx.drawImage(img.bitmap, 0, 0);
+          srcCtx.drawImage(img.bitmap, 0, 0);
         } else if (img.data) {
-          var imgData = ctx.createImageData(img.width, img.height);
+          var imgData = srcCtx.createImageData(img.width, img.height);
           var dst = imgData.data;
           var src = img.data;
           var kind = img.kind;
@@ -360,11 +364,29 @@
           } else {
             return null;
           }
-          ctx.putImageData(imgData, 0, 0);
+          srcCtx.putImageData(imgData, 0, 0);
         } else {
           return null;
         }
-        return canvas.toDataURL('image/png');
+
+        // For huge images (often 4K scans), downscale to a max edge of
+        // 1280px before serializing — keeps document size sane and
+        // toDataURL much faster. Use JPEG for big photos, PNG otherwise.
+        var MAX_EDGE = 1280;
+        var w = img.width, h = img.height;
+        var canvas = srcCanvas;
+        if (w > MAX_EDGE || h > MAX_EDGE) {
+          var scale = MAX_EDGE / Math.max(w, h);
+          var dw = Math.round(w * scale);
+          var dh = Math.round(h * scale);
+          canvas = document.createElement('canvas');
+          canvas.width = dw;
+          canvas.height = dh;
+          canvas.getContext('2d').drawImage(srcCanvas, 0, 0, dw, dh);
+        }
+        // Heuristic: photos (>512 on either side) → JPEG saves a lot.
+        var useJpeg = (canvas.width > 512 || canvas.height > 512);
+        return useJpeg ? canvas.toDataURL('image/jpeg', 0.85) : canvas.toDataURL('image/png');
       } catch (e) {
         console.warn('[pdf2word] image decode failed:', e);
         return null;
@@ -556,29 +578,42 @@
         const n   = pdf.numPages;
         let html  = '';
 
-        // First pass: collect text items, page widths, and embedded
-        // images. Three pieces of per-page data drive the second pass.
-        const perPageItems   = [];
-        const perPageImages  = [];
-        const perPageWidth   = [];
-        for (let i = 1; i <= n; i++) {
-          bar.style.width = (5 + (i / n) * 50) + '%';
-          status.textContent = 'מנתח עמוד ' + i + ' / ' + n + '…';
-          const page    = await pdf.getPage(i);
-          const content = await page.getTextContent();
-          perPageItems.push(content.items);
-          // page.view = [x0, y0, x1, y1] in user-space units
-          var v = page.view || [0, 0, 612, 792];
-          perPageWidth.push(v[2] - v[0]);
-          // Image extraction is best-effort; if it fails the text still
-          // gets through.
-          try {
-            perPageImages.push(await _extractPageImages(page));
-          } catch (e) {
-            console.warn('[pdf2word] images for page ' + i + ':', e);
-            perPageImages.push([]);
+        // First pass: collect per-page text + images + width in
+        // parallel. Each page is independent, but to avoid hammering
+        // the PDF.js worker we cap concurrency at 4 simultaneous pages.
+        const perPageItems   = new Array(n);
+        const perPageImages  = new Array(n);
+        const perPageWidth   = new Array(n);
+        const CONCURRENCY    = 4;
+        let nextPage         = 1;
+        let donePages        = 0;
+
+        async function _processOnePage() {
+          while (true) {
+            const myIdx = nextPage++;
+            if (myIdx > n) return;
+            const page = await pdf.getPage(myIdx);
+            // Run text + image extraction in parallel within the page.
+            const [content, images] = await Promise.all([
+              page.getTextContent(),
+              _extractPageImages(page).catch(function(e) {
+                console.warn('[pdf2word] images for page ' + myIdx + ':', e);
+                return [];
+              })
+            ]);
+            const v = page.view || [0, 0, 612, 792];
+            perPageItems[myIdx - 1]  = content.items;
+            perPageImages[myIdx - 1] = images;
+            perPageWidth[myIdx - 1]  = v[2] - v[0];
+            donePages++;
+            bar.style.width = (5 + (donePages / n) * 50) + '%';
+            status.textContent = 'מנתח עמוד ' + donePages + ' / ' + n + '…';
           }
         }
+
+        const workers = [];
+        for (let w = 0; w < Math.min(CONCURRENCY, n); w++) workers.push(_processOnePage());
+        await Promise.all(workers);
 
         const allItems = [].concat.apply([], perPageItems);
         const allLinesForBody = _buildLinesFromItems(allItems);
