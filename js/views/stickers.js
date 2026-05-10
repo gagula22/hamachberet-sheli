@@ -139,6 +139,30 @@
                width: '0', transition: 'width 300ms', marginTop: '10px' }
     });
 
+    // Image extraction is the slow part of the conversion. The user
+    // can opt out for a near-instant "text only" run.
+    const imgCheckbox = document.createElement('input');
+    imgCheckbox.type = 'checkbox';
+    imgCheckbox.id = 'pdf2word-images';
+    imgCheckbox.checked = true;
+    imgCheckbox.style.cssText = 'margin:0;cursor:pointer;width:16px;height:16px;';
+    const imgLabel = document.createElement('label');
+    imgLabel.htmlFor = 'pdf2word-images';
+    imgLabel.style.cssText = 'display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--ink);cursor:pointer;user-select:none;';
+    imgLabel.appendChild(imgCheckbox);
+    var imgLabelText = document.createElement('span');
+    imgLabelText.innerHTML = 'כלול תמונות מוטמעות <span style="color:var(--ink-mute);font-weight:400;">(איטי יותר ב־PDF גדולים)</span>';
+    imgLabel.appendChild(imgLabelText);
+
+    const optsRow = App.el('div', {
+      style: {
+        display: 'flex', flexWrap: 'wrap', gap: '14px', alignItems: 'center',
+        marginTop: '12px', padding: '10px 14px',
+        background: 'var(--cream)', borderRadius: 'var(--r-sm)',
+        border: '1px solid var(--line)'
+      }
+    }, [imgLabel]);
+
     // ── Helpers for structure-preserving extraction ────────────────────
     // Escape user text so embedded HTML in the PDF doesn't break the doc.
     function _escHtml(s) {
@@ -614,19 +638,25 @@
         let nextPage         = 1;
         let donePages        = 0;
 
+        const includeImages = imgCheckbox.checked;
+
         async function _processOnePage() {
           while (true) {
             const myIdx = nextPage++;
             if (myIdx > n) return;
             const page = await pdf.getPage(myIdx);
             // Run text + image extraction in parallel within the page.
-            const [content, images] = await Promise.all([
-              page.getTextContent(),
-              _extractPageImages(page).catch(function(e) {
+            // Image extraction is skipped entirely in fast mode.
+            const tasks = [page.getTextContent()];
+            if (includeImages) {
+              tasks.push(_extractPageImages(page).catch(function(e) {
                 console.warn('[pdf2word] images for page ' + myIdx + ':', e);
                 return [];
-              })
-            ]);
+              }));
+            }
+            const results = await Promise.all(tasks);
+            const content = results[0];
+            const images  = includeImages ? results[1] : [];
             const v = page.view || [0, 0, 612, 792];
             perPageItems[myIdx - 1]  = content.items;
             perPageImages[myIdx - 1] = images;
@@ -720,9 +750,9 @@
         App.el('h2', {}, '📄  PDF  →  Word'),
         App.el('span', { class: 'chip butter' }, 'חלץ טקסט מ-PDF לקובץ Word')
       ]),
-      fileInput, zone, status, bar,
+      fileInput, zone, optsRow, status, bar,
       App.el('p', { style: { fontSize: '12px', color: 'var(--ink-mute)', margin: '10px 0 0', lineHeight: '1.6' } },
-        '✨ משמר מבנה: שורות, פסקאות, כותרות, רשימות (• / 1.), כותרות ממורכזות, Bold/Italic, ותמונות מוטמעות (PNG/JPEG). טבלאות מורכבות וצורות גרפיות עדיין לא נתמכות.')
+        '✨ משמר מבנה: שורות, פסקאות, כותרות, רשימות (• / 1.), כותרות ממורכזות, Bold/Italic. תמונות מוטמעות אופציונליות — בטל את הסימון להמרה מהירה של PDF טקסטואלי.')
     ]);
   }
 
