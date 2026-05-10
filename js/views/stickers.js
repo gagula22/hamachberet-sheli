@@ -139,6 +139,174 @@
                width: '0', transition: 'width 300ms', marginTop: '10px' }
     });
 
+    // ── Helpers for structure-preserving extraction ────────────────────
+    // Escape user text so embedded HTML in the PDF doesn't break the doc.
+    function _escHtml(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    // Decide whether a font name implies bold / italic.
+    function _fontIsBold(name) {
+      if (!name) return false;
+      var n = String(name).toLowerCase();
+      return /bold|black|heavy|semibold|demi/.test(n);
+    }
+    function _fontIsItalic(name) {
+      if (!name) return false;
+      var n = String(name).toLowerCase();
+      return /italic|oblique/.test(n);
+    }
+
+    // Reconstruct lines from PDF text items by grouping items with
+    // similar baseline Y. Within a line, sort items by X. PDF coordinate
+    // origin is bottom-left, so we sort lines by Y descending afterwards.
+    function _buildLinesFromItems(items) {
+      var lines = [];   // [{ y, h, parts: [{str, x, fontSize, bold, italic}] }]
+      const Y_TOLERANCE_FACTOR = 0.5;  // items within 0.5×height share a line
+      items.forEach(function(it) {
+        if (!it.str) return;
+        // transform = [a, b, c, d, e, f]; e = x, f = y; height ≈ |a| or |d|
+        var t = it.transform || [1,0,0,1,0,0];
+        var x = t[4], y = t[5];
+        var fontSize = Math.abs(t[0]) || it.height || 10;
+        var part = {
+          str: it.str,
+          x: x,
+          y: y,
+          fontSize: fontSize,
+          bold: _fontIsBold(it.fontName),
+          italic: _fontIsItalic(it.fontName),
+          width: it.width || 0,
+          hasEOL: !!it.hasEOL
+        };
+        // Find an existing line on the same baseline.
+        var match = null;
+        for (var j = lines.length - 1; j >= 0 && j >= lines.length - 6; j--) {
+          var L = lines[j];
+          var avgH = (L.h + fontSize) / 2;
+          if (Math.abs(L.y - y) <= avgH * Y_TOLERANCE_FACTOR) { match = L; break; }
+        }
+        if (match) {
+          match.parts.push(part);
+          if (fontSize > match.h) match.h = fontSize;
+        } else {
+          lines.push({ y: y, h: fontSize, parts: [part] });
+        }
+      });
+      // Sort lines top→bottom (PDF y is bottom-up, so descending).
+      lines.sort(function(a, b) { return b.y - a.y; });
+      // Within a line, sort by X. Hebrew text items may already arrive
+      // in visual right-to-left order; sorting by X ascending puts them
+      // left-to-right in DOM, which the browser will render RTL because
+      // of unicode-bidi:plaintext on the paragraph.
+      lines.forEach(function(L) {
+        L.parts.sort(function(a, b) { return a.x - b.x; });
+      });
+      return lines;
+    }
+
+    // Heuristic: pick a "body" font size = median of all text heights.
+    // Anything 1.25× body becomes h3, 1.55× → h2, 1.85× → h1.
+    function _bodyFontSize(lines) {
+      var sizes = [];
+      lines.forEach(function(L) {
+        L.parts.forEach(function(p) { if (p.fontSize > 0) sizes.push(p.fontSize); });
+      });
+      if (!sizes.length) return 10;
+      sizes.sort(function(a, b){ return a - b; });
+      return sizes[Math.floor(sizes.length / 2)];
+    }
+
+    // Convert a single line's parts to inline HTML, merging adjacent
+    // parts with identical formatting and inserting a space when there
+    // is a visible X gap between consecutive items.
+    function _lineToHtml(parts, bodySize) {
+      if (!parts.length) return '';
+      var out = '';
+      var prev = null;
+      parts.forEach(function(p) {
+        var text = _escHtml(p.str);
+        // Insert a space if there is a real horizontal gap from the
+        // previous item that wasn't captured by the embedded space.
+        if (prev) {
+          var prevEnd = prev.x + (prev.width || 0);
+          var gap = p.x - prevEnd;
+          // Threshold ≈ 0.25 of font height (a quarter-em) — generous
+          // enough to keep words separate without inventing fake spaces.
+          if (gap > prev.fontSize * 0.25 && !/\s$/.test(text) && !/\s$/.test(prev.str)) {
+            out += ' ';
+          }
+        }
+        var open = '', close = '';
+        if (p.bold)   { open += '<strong>'; close = '</strong>' + close; }
+        if (p.italic) { open += '<em>';     close = '</em>' + close; }
+        out += open + text + close;
+        prev = p;
+      });
+      return out;
+    }
+
+    // Decide which heading level (or paragraph) a line belongs to.
+    function _lineTag(line, bodySize) {
+      // The line's "size" is the largest font in any of its parts.
+      var maxSize = 0;
+      line.parts.forEach(function(p) { if (p.fontSize > maxSize) maxSize = p.fontSize; });
+      var ratio = bodySize > 0 ? maxSize / bodySize : 1;
+      if (ratio >= 1.85) return 'h1';
+      if (ratio >= 1.55) return 'h2';
+      if (ratio >= 1.25) return 'h3';
+      return 'p';
+    }
+
+    // Convert lines into HTML, grouping consecutive paragraph lines into
+    // a single <p>, breaking paragraphs at large vertical gaps.
+    function _linesToHtml(lines, bodySize) {
+      if (!lines.length) return '';
+      var html = '';
+      var openTag = null;        // currently open block: 'p' / 'h1' / 'h2' / 'h3'
+      var openParts = [];        // accumulated lines for current block
+      var prevY = null;
+      var prevH = bodySize;
+
+      function flush() {
+        if (!openTag || !openParts.length) { openTag = null; openParts = []; return; }
+        var inner = openParts.join('<br>');
+        var style = 'unicode-bidi:plaintext;direction:auto;margin:0 0 8px;';
+        if (openTag === 'p') style += 'line-height:1.7;';
+        html += '<' + openTag + ' style="' + style + '">' + inner + '</' + openTag + '>';
+        openTag = null;
+        openParts = [];
+      }
+
+      for (var i = 0; i < lines.length; i++) {
+        var L = lines[i];
+        var tag = _lineTag(L, bodySize);
+        var inlineHtml = _lineToHtml(L.parts, bodySize);
+        if (!inlineHtml.trim()) continue;
+
+        // Detect a paragraph break before this line: vertical gap larger
+        // than 1.4× the previous line's height ⇒ new block.
+        var gapBreak = false;
+        if (prevY !== null) {
+          var gap = prevY - L.y;          // top→bottom is positive in PDF
+          var threshold = prevH * 1.4;
+          if (gap > threshold) gapBreak = true;
+        }
+
+        if (openTag !== tag || gapBreak) {
+          flush();
+          openTag = tag;
+          openParts = [inlineHtml];
+        } else {
+          openParts.push(inlineHtml);
+        }
+        prevY = L.y;
+        prevH = L.h;
+      }
+      flush();
+      return html;
+    }
+
     async function processFile(file) {
       if (!file) return;
       if (!window.pdfjsLib) { status.textContent = 'ספריית PDF לא נטענה'; return; }
@@ -151,34 +319,64 @@
         const pdf = await pdfjsLib.getDocument({ data: ab }).promise;
         const n   = pdf.numPages;
         let html  = '';
+
+        // First pass: collect all items so we can compute a global body
+        // font size — using a per-document baseline gives stabler heading
+        // detection than a per-page baseline.
+        const perPageItems = [];
         for (let i = 1; i <= n; i++) {
-          bar.style.width = (5 + (i / n) * 85) + '%';
+          bar.style.width = (5 + (i / n) * 40) + '%';
           const page    = await pdf.getPage(i);
           const content = await page.getTextContent();
-          const text    = content.items.map(it => it.str).join(' ');
-          html += `<h3 style="margin:18px 0 6px;">עמוד ${i}</h3><p style="white-space:pre-wrap;direction:auto;line-height:1.8;">${text}</p><hr style="border:none;border-top:1px solid #eee;margin:12px 0;">`;
+          perPageItems.push(content.items);
+        }
+
+        const allItems = [].concat.apply([], perPageItems);
+        const allLinesForBody = _buildLinesFromItems(allItems);
+        const bodySize = _bodyFontSize(allLinesForBody);
+
+        // Second pass: build per-page HTML using the global body size.
+        for (let i = 1; i <= n; i++) {
+          bar.style.width = (45 + (i / n) * 50) + '%';
+          const lines = _buildLinesFromItems(perPageItems[i - 1]);
+          const pageHtml = _linesToHtml(lines, bodySize);
+          if (n > 1) {
+            html += '<p style="font-size:11px;color:#888;text-align:center;margin:20px 0 10px;direction:ltr;">— page ' + i + ' / ' + n + ' —</p>';
+          }
+          html += pageHtml;
         }
         bar.style.width = '100%';
+
+        const titleHtml = _escHtml(file.name.replace(/\.pdf$/i, ''));
         const docHtml = [
-          `<html xmlns:o='urn:schemas-microsoft-com:office:office'`,
-          ` xmlns:w='urn:schemas-microsoft-com:office:word'`,
-          ` xmlns='http://www.w3.org/TR/REC-html40'>`,
-          `<head><meta charset='utf-8'><title>${file.name}</title>`,
-          `<style>body{font-family:Arial,"Times New Roman",serif;padding:40px;max-width:820px;margin:0 auto;}`,
-          `p,h1,h2,h3,li{unicode-bidi:plaintext;direction:auto;}</style>`,
-          `</head><body dir="auto">`,
-          `<h1 style="font-size:24px;margin-bottom:20px;">${file.name.replace(/\.pdf$/i, '')}</h1>`,
-          html, `</body></html>`
+          "<html xmlns:o='urn:schemas-microsoft-com:office:office'",
+          " xmlns:w='urn:schemas-microsoft-com:office:word'",
+          " xmlns='http://www.w3.org/TR/REC-html40'>",
+          "<head><meta charset='utf-8'><title>" + titleHtml + "</title>",
+          "<style>",
+          "  body { font-family: Arial, 'David', 'Times New Roman', serif; padding:40px; max-width:820px; margin:0 auto; direction:rtl; }",
+          "  h1 { font-size:22pt; font-weight:bold; margin:18px 0 10px; }",
+          "  h2 { font-size:16pt; font-weight:bold; margin:14px 0 8px; }",
+          "  h3 { font-size:13pt; font-weight:bold; margin:10px 0 6px; }",
+          "  p  { font-size:12pt; line-height:1.7; margin:0 0 8px; }",
+          "  p, h1, h2, h3, li { unicode-bidi: plaintext; direction: auto; text-align: right; }",
+          "  strong { font-weight: bold; }",
+          "  em { font-style: italic; }",
+          "</style>",
+          "</head><body dir='rtl'>",
+          "<h1 style='font-size:22pt;text-align:center;margin-bottom:24px;'>" + titleHtml + "</h1>",
+          html, "</body></html>"
         ].join('');
         const blob = new Blob(['﻿', docHtml], { type: 'application/msword' });
         const url  = URL.createObjectURL(blob);
         const a    = document.createElement('a');
         a.href = url; a.download = file.name.replace(/\.pdf$/i, '.doc'); a.click();
         setTimeout(() => URL.revokeObjectURL(url), 2000);
-        status.textContent = `✓ חולץ טקסט מ-${n} עמודים — הורד ${file.name.replace(/\.pdf$/i, '.doc')}`;
+        status.textContent = '✓ חולץ ' + n + ' עמודים תוך שמירה על מבנה — הורד ' + file.name.replace(/\.pdf$/i, '.doc');
         status.style.color = 'var(--sage-deep)';
       } catch (e) {
-        status.textContent = 'שגיאה בקריאת ה-PDF — ייתכן שהוא מוגן בסיסמה';
+        console.error('[pdf2word]', e);
+        status.textContent = 'שגיאה: ' + (e && e.message ? e.message : 'לא ניתן לקרוא את ה-PDF') + ' (אולי מוגן בסיסמה?)';
         status.style.color = '#c00';
         bar.style.width = '0';
       }
@@ -212,7 +410,7 @@
       ]),
       fileInput, zone, status, bar,
       App.el('p', { style: { fontSize: '12px', color: 'var(--ink-mute)', margin: '10px 0 0', lineHeight: '1.6' } },
-        '⚠️ הערה: הכלי חולץ טקסט בלבד — עיצוב מורכב ותמונות לא ישמרו')
+        '✨ משמר מבנה: שורות, פסקאות, כותרות (לפי גודל פונט), Bold/Italic. תמונות, טבלאות מורכבות וצורות גרפיות לא נכללות.')
     ]);
   }
 
@@ -3427,33 +3625,34 @@ self.onmessage = async function(e) {
   }
 
   // ── Page hero ─────────────────────────────────────────────────────────────
-  // Chips behave as tabs: clicking a chip shows the corresponding tool
-  // card and hides the others. Caller passes in the cards object so the
-  // hero can wire visibility on click.
+  // Chips behave as tabs over the *toggleable* cards (Word→PDF /
+  // PDF→Word / תרגום PDF). The transcriber card lives below them and is
+  // always visible — it's the primary tool, the user asked for it to
+  // stay fixed.
   //
   // RTL note: the document is <html dir="rtl">, so flex-direction:row
-  // places the first array item on the RIGHT. Workflow order 1→4 in the
-  // array therefore renders right→left as the user numbered.
-  function buildHero(cards, defaultId) {
+  // places the first array item on the RIGHT.
+  function buildHero(cards) {
     const tools = [
       { icon: '📝', label: 'Word → PDF',   bg: 'linear-gradient(135deg,#FADADD,#F3B7BD)', target: 'tool-w2p' }, // 1 (rightmost)
       { icon: '📄', label: 'PDF → Word',   bg: 'linear-gradient(135deg,#E6DDF4,#C9B8E3)', target: 'tool-p2w' }, // 2
-      { icon: '🌐', label: 'תרגום PDF',    bg: 'linear-gradient(135deg,#FFF3C4,#F5DF8C)', target: 'tool-ptr' }, // 3
-      { icon: '🎙', label: 'תמלול וידאו',  bg: 'linear-gradient(135deg,#CFE4F7,#A9CEEE)', target: 'tool-vtr' }  // 4 (leftmost)
+      { icon: '🌐', label: 'תרגום PDF',    bg: 'linear-gradient(135deg,#FFF3C4,#F5DF8C)', target: 'tool-ptr' }  // 3
     ];
 
     const buttons = [];
-    let activeId = defaultId;
+    let activeId = null;   // start with no chip selected
 
     function _setActive(id) {
+      // Clicking the active chip again toggles it off (back to "only
+      // the transcriber is shown").
+      if (id === activeId) id = null;
       activeId = id;
-      // Show only the matching card.
+      // Show only the matching card; hide the other toggleable ones.
       Object.keys(cards).forEach(function(cid) {
         cards[cid].style.display = (cid === id) ? '' : 'none';
       });
       // Update chip styling.
       buttons.forEach(function(b) {
-        var t = tools.find(function(x){ return x.target === b._target; });
         var active = b._target === id;
         if (active) {
           b.style.background = '#fff';
@@ -3582,16 +3781,17 @@ self.onmessage = async function(e) {
     _wrapWithAccent(ptr, 'linear-gradient(90deg,#FFF3C4,#F5DF8C)');
     _wrapWithAccent(vtr, 'linear-gradient(90deg,#CFE4F7,#A9CEEE)');
 
-    // Hero acts as a tab bar; default to the transcriber card per user
-    // preference (they explicitly asked that 'תמלול' stay open like
-    // it already does).
-    const cardsById = {
+    // Toggleable cards (managed by hero chips). Hidden until a chip is
+    // clicked. The transcriber is NOT in this map — it's always open.
+    const toggleCards = {
       'tool-w2p': w2p,
       'tool-p2w': p2w,
-      'tool-ptr': ptr,
-      'tool-vtr': vtr
+      'tool-ptr': ptr
     };
-    const hero = buildHero(cardsById, 'tool-vtr');
+    Object.keys(toggleCards).forEach(function(id) {
+      toggleCards[id].style.display = 'none';
+    });
+    const hero = buildHero(toggleCards);
 
     root.append(App.el('div', { class: 'stack stack-lg' }, [
       hero,
