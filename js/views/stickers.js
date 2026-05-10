@@ -1293,7 +1293,11 @@ self.onmessage = async function(e) {
       throw new Error('לא הצלחתי למצוא גבולות frame תקינים');
     }
 
-    const CHUNK_BYTES = 90 * 1024 * 1024;
+    // Cloudflare Worker free plan has 128MB memory cap. base64 doubles the
+    // bytes, so a 30MB upload becomes ~70MB heap inside the Worker — safe.
+    // Larger uploads (we tried 90MB) blow the Worker's RAM and the request
+    // dies with "Failed to fetch" client-side.
+    const CHUNK_BYTES = 30 * 1024 * 1024;
     const sliceLen = sliceEnd - sliceStart;
     const boundaries = [];
     if (sliceLen <= CHUNK_BYTES) {
@@ -1369,12 +1373,13 @@ self.onmessage = async function(e) {
     return buffer;
   }
 
-  // Chunked Whisper-via-Worker. Splits PCM into ≤40-minute pieces (each
-  // becomes ~76MB WAV — safely under the 100MB Worker body limit), uploads
-  // each, and stitches the transcripts with cumulative-time offsets.
+  // Chunked Whisper-via-Worker. Splits PCM into ~15-minute pieces (each
+  // becomes ~28MB WAV — safely under the 128MB Worker memory cap once the
+  // base64 expansion is accounted for), uploads each, and stitches the
+  // transcripts with cumulative-time offsets.
   async function _transcribeViaWorkerChunked(workerUrl, pcm, sampleRate, language, onProgress) {
     const totalSec = pcm.length / sampleRate;
-    const CHUNK_DUR = 40 * 60;  // 40 min per chunk
+    const CHUNK_DUR = 15 * 60;  // 15 min per chunk → ~28MB WAV
     const boundaries = [];
     for (let s = 0; s < totalSec; s += CHUNK_DUR) {
       boundaries.push([s, Math.min(totalSec, s + CHUNK_DUR)]);
