@@ -3457,8 +3457,10 @@ self.onmessage = async function(e) {
     });
 
     return App.el('div', {
+      // direction:rtl makes flex-row place the first array item on the
+      // right (matching the workflow numbering 1=Word→PDF on the right).
       style: {
-        position: 'relative', overflow: 'hidden',
+        position: 'relative', overflow: 'hidden', direction: 'rtl',
         background: 'linear-gradient(135deg,#FAF6F0 0%,#FFE9DA 35%,#E6DDF4 70%,#CFE4F7 100%)',
         borderRadius: 'var(--r-lg)',
         padding: '32px 36px',
@@ -3468,14 +3470,15 @@ self.onmessage = async function(e) {
     }, [
       App.el('div', {
         style: { fontSize: '34px', marginBottom: '6px', letterSpacing: '-0.5px',
-                 fontFamily: 'var(--font-head)', fontWeight: '600', color: 'var(--ink)' }
+                 fontFamily: 'var(--font-head)', fontWeight: '600', color: 'var(--ink)',
+                 textAlign: 'right' }
       }, 'כלים ליצירת מסמכים'),
       App.el('div', {
         style: { fontSize: '14.5px', color: 'var(--ink-soft)', marginBottom: '18px',
-                 lineHeight: '1.6', maxWidth: '640px' }
+                 lineHeight: '1.6', maxWidth: '640px', textAlign: 'right' }
       }, 'המרה, תרגום ותמלול בעברית — כל הכלים רצים ישר בדפדפן או בענן, בלי להעלות קבצים לאן שלא צריך.'),
       App.el('div', {
-        style: { display: 'flex', flexWrap: 'wrap', gap: '8px' }
+        style: { display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'flex-start' }
       }, chips)
     ]);
   }
