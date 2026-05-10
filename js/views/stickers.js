@@ -906,20 +906,63 @@ self.onmessage = async function(e) {
   // Returns the same { text, chunks } shape the local Whisper Worker produces.
   async function _transcribeViaWorker(workerUrl, fileBuffer, language, onProgress) {
     var url = workerUrl.replace(/\/+$/, '') + '/?language=' + encodeURIComponent(language || 'he');
-    // base64-encode in the browser (no CPU limit here) and send as text/plain.
-    // The Worker passes this string straight to AI.run without any encoding
-    // work of its own, side-stepping Cloudflare's stricter CPU cap on
-    // browser-origin requests.
-    if (onProgress) onProgress('מקודד base64 בדפדפן…');
-    var audioBase64 = _arrayBufferToBase64(fileBuffer);
-    var sizeMB = (audioBase64.length / 1024 / 1024).toFixed(1);
-    if (onProgress) onProgress('שולח ' + sizeMB + ' MB ל-Cloudflare…');
+    var u8 = new Uint8Array(fileBuffer);
+    var sizeMB = (u8.length / 1024 / 1024).toFixed(1);
 
-    var r = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: audioBase64
-    });
+    // Try streaming upload first (Chromium-only). Encodes base64 lazily as
+    // the request body is being uploaded — no full base64 string in memory,
+    // no idle timeout because bytes flow continuously. Falls back to
+    // buffered upload on browsers that don't support duplex streams.
+    var streamingSupported = (typeof ReadableStream === 'function');
+    var r;
+
+    if (streamingSupported) {
+      try {
+        if (onProgress) onProgress('שולח ' + sizeMB + ' MB ל-Cloudflare (streaming)…');
+        // Each non-final chunk must be a multiple of 3 input bytes so the
+        // resulting base64 chunks concatenate into valid base64.
+        const CHUNK_INPUT = 30000;
+        let pos = 0;
+        const tenc = new TextEncoder();
+        const stream = new ReadableStream({
+          pull: function(controller) {
+            if (pos >= u8.length) { controller.close(); return; }
+            const end = Math.min(pos + CHUNK_INPUT, u8.length);
+            const slice = u8.subarray(pos, end);
+            let bin = '';
+            for (let i = 0; i < slice.length; i++) bin += String.fromCharCode(slice[i]);
+            controller.enqueue(tenc.encode(btoa(bin)));
+            pos = end;
+            if (onProgress) {
+              const pct = Math.round((pos / u8.length) * 100);
+              onProgress('שולח ' + sizeMB + ' MB ל-Cloudflare (streaming · ' + pct + '%)…');
+            }
+          }
+        });
+        r = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' },
+          body: stream,
+          duplex: 'half'
+        });
+      } catch (streamErr) {
+        console.warn('[transcribe] stream upload failed, falling back to buffered:', streamErr);
+        r = null;
+      }
+    }
+
+    if (!r) {
+      // Buffered fallback (Firefox / older Chromium). Builds the full base64
+      // string in memory and sends it as a single body.
+      if (onProgress) onProgress('מקודד base64 בדפדפן…');
+      var audioBase64 = _arrayBufferToBase64(fileBuffer);
+      if (onProgress) onProgress('שולח ' + (audioBase64.length / 1024 / 1024).toFixed(1) + ' MB ל-Cloudflare…');
+      r = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: audioBase64
+      });
+    }
     if (!r.ok) {
       var errBody = '';
       try { errBody = await r.text(); } catch (_) {}
