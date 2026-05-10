@@ -1780,6 +1780,77 @@ self.onmessage = async function(e) {
   }
 
   async function _cutVideoClip(file, startSec, endSec, onProgress) {
+    // Use ffmpeg.wasm with stream copy — completes in seconds, not real time.
+    const ffmpeg = await _loadFfmpeg(onProgress);
+
+    const ext = ((file.name.match(/\.[^.]+$/) || ['.mp4'])[0]).toLowerCase();
+    const inputName = 'cut_input' + ext;
+    const outputName = 'cut_output.mp4';
+
+    if (onProgress) onProgress('מעלה ל-ffmpeg ' + (file.size / 1024 / 1024).toFixed(1) + ' MB…');
+    const buf = new Uint8Array(await file.arrayBuffer());
+    await ffmpeg.writeFile(inputName, buf);
+
+    const duration = endSec - startSec;
+    const onProg = function(e) {
+      if (e && typeof e.progress === 'number') {
+        const pct = Math.max(0, Math.min(100, e.progress * 100));
+        if (onProgress) onProgress('חותך: ' + pct.toFixed(0) + '%');
+      }
+    };
+    ffmpeg.on('progress', onProg);
+
+    function cleanup() {
+      try { ffmpeg.off('progress', onProg); } catch (_) {}
+      try { ffmpeg.deleteFile(inputName); } catch (_) {}
+      try { ffmpeg.deleteFile(outputName); } catch (_) {}
+    }
+
+    try {
+      // Stream copy first (fast, lossless). Input-side -ss is fast but seeks
+      // to nearest keyframe — for cuts of seconds-long this is fine.
+      if (onProgress) onProgress('מבצע חיתוך מהיר (stream copy, ללא re-encoding)…');
+      try {
+        await ffmpeg.exec([
+          '-ss', String(startSec),
+          '-i', inputName,
+          '-t', String(duration),
+          '-c', 'copy',
+          '-avoid_negative_ts', 'make_zero',
+          '-movflags', '+faststart',
+          outputName
+        ]);
+      } catch (firstErr) {
+        if (onProgress) onProgress('stream copy נכשל — re-encoding (איטי יותר)…');
+        await ffmpeg.exec([
+          '-i', inputName,
+          '-ss', String(startSec),
+          '-t', String(duration),
+          '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23',
+          '-c:a', 'aac', '-b:a', '128k',
+          '-movflags', '+faststart',
+          outputName
+        ]);
+      }
+
+      if (onProgress) onProgress('קורא קובץ פלט…');
+      const data = await ffmpeg.readFile(outputName);
+      const blob = new Blob([data.buffer], { type: 'video/mp4' });
+      cleanup();
+      return {
+        blob: blob,
+        ext: '.mp4',
+        mimeType: 'video/mp4',
+        sizeMB: (blob.size / 1024 / 1024).toFixed(1)
+      };
+    } catch (e) {
+      cleanup();
+      throw e;
+    }
+  }
+
+  // Legacy MediaRecorder-based cut (kept as reference, not used)
+  async function _cutVideoClipLegacy(file, startSec, endSec, onProgress) {
     if (typeof MediaRecorder === 'undefined') {
       throw new Error('הדפדפן הזה לא תומך ב-MediaRecorder — נסה Chrome/Brave/Edge עדכניים');
     }
@@ -1787,18 +1858,14 @@ self.onmessage = async function(e) {
     var video = document.createElement('video');
     video.src = blobUrl;
     video.preload = 'auto';
-    video.muted = false;  // raw audio needed for Web Audio capture path
+    video.muted = false;
     video.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;';
     document.body.appendChild(video);
 
-    // Route the element's audio through Web Audio to a MediaStream destination
-    // — but never connect to context.destination, so the user hears nothing
-    // while the recorder still gets the full audio track.
     var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     var audioSource = audioCtx.createMediaElementSource(video);
     var audioDest = audioCtx.createMediaStreamDestination();
     audioSource.connect(audioDest);
-    // (No connection to audioCtx.destination → silent for the user)
 
     function cleanup() {
       try { URL.revokeObjectURL(blobUrl); } catch (_) {}
@@ -2896,27 +2963,16 @@ self.onmessage = async function(e) {
 
       const totalSec = ranges.reduce(function(t, r){ return t + (r[1] - r[0]); }, 0);
 
-      // Pre-flight warning if total recording time will be substantial
-      if (totalSec > 5 * 60) {
-        const totalMin = (totalSec / 60).toFixed(0);
-        const ok = window.confirm(
-          'תזכורת: חיתוך וידאו רץ בזמן אמת.\n\n' +
-          'הקליפים שביקשת = ' + totalMin + ' דקות סה"כ → ' + totalMin + ' דקות הקלטה.\n\n' +
-          'אל תסגור את הטאב במהלך ההקלטה. רוצה להמשיך?'
-        );
-        if (!ok) return;
-      }
-
       _vcRunning = true;
       vcGoBtn.disabled = true;
-      vcGoBtn.textContent = '⏳ מקליט…';
+      vcGoBtn.textContent = '⏳ חותך…';
       let saved = 0, cancelled = 0;
       const baseStem = _vcFile.name.replace(/\.[^.]+$/, '');
       try {
         for (let i = 0; i < ranges.length; i++) {
           const s = ranges[i][0], e = ranges[i][1];
           const tag = _formatHMS(s).replace(/:/g, '-') + '_to_' + _formatHMS(e).replace(/:/g, '-');
-          _vcStatus('🎬 קליפ ' + (i+1) + '/' + ranges.length + ' (' + _formatHMS(s) + '–' + _formatHMS(e) + ') · מקליט…');
+          _vcStatus('🎬 קליפ ' + (i+1) + '/' + ranges.length + ' (' + _formatHMS(s) + '–' + _formatHMS(e) + ') · חותך עם ffmpeg…');
           const result = await _cutVideoClip(_vcFile, s, e, function(msg){
             _vcStatus('🎬 קליפ ' + (i+1) + '/' + ranges.length + ' · ' + msg);
           });
@@ -2944,8 +3000,8 @@ self.onmessage = async function(e) {
       _stepHowto([
         'גרור קובץ <b>MP4 / WebM / MOV</b> לתיבה למטה (וידאו עם פסקול)',
         'הוסף טווחי זמן <b>בכל אורך</b>. דוגמאות: <code style="background:#eee;padding:1px 4px;border-radius:3px;">2:00</code>–<code style="background:#eee;padding:1px 4px;border-radius:3px;">5:00</code> · <code style="background:#eee;padding:1px 4px;border-radius:3px;">10:00</code>–<code style="background:#eee;padding:1px 4px;border-radius:3px;">50:00</code> · <code style="background:#eee;padding:1px 4px;border-radius:3px;">5:00</code>–<code style="background:#eee;padding:1px 4px;border-radius:3px;">1:35:00</code>. אין מקסימום — מותר עד אורך הקובץ',
-        '⚠️ <b>החיתוך רץ בזמן אמת:</b> 40 דק׳ קליפ = 40 דקות הקלטה. 90 דק׳ = 90 דק׳ הקלטה. אל תסגור את הטאב במהלך ההקלטה. (לאודיו בלבד יש דרך מהירה — ראה השלב למעלה)',
-        'הקליפים נשמרים כ-WebM (תואם לכל הדפדפנים) או MP4 אם הדפדפן תומך'
+        'לחץ "<b>🎬 חתוך וידאו ושמור</b>" — ffmpeg.wasm מבצע <b>stream copy</b> (העתק בייט-בייט בלי לפענח/לקודד). חיתוך של 40 דק׳ מסתיים תוך <b>שניות</b>',
+        'פעם ראשונה ffmpeg יורד (~30MB, חד-פעמי, נשמר ב-cache). אחר כך — מיידי. הקליפים נשמרים כ-MP4'
       ]),
       vcFileInput, vcZone, vcFileLabel,
       App.el('div', { style: { fontSize: '12px', color: '#777', marginTop: '12px', marginBottom: '4px', fontWeight: '600' } },
