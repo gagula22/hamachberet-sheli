@@ -1650,6 +1650,122 @@ self.onmessage = async function(e) {
       description: 'MP3 audio', extension: '.mp3', mimeType: 'audio/mpeg'
     });
   }
+  function _saveVideoViaPicker(blob, suggestedName, ext) {
+    ext = ext || '.webm';
+    var mime = ext === '.mp4' ? 'video/mp4' : 'video/webm';
+    return _saveBlobViaPicker(blob, suggestedName, {
+      description: ext === '.mp4' ? 'MP4 video' : 'WebM video',
+      extension: ext, mimeType: mime
+    });
+  }
+
+  // ── Video cut: re-record a time range from a video file via MediaRecorder
+  // Plays the video at 1x in real time, captures the stream (video + audio),
+  // and writes a WebM (or MP4 where the browser supports it) for the slice.
+  // Real-time bound: a 5-min slice takes 5 minutes of wall clock to record.
+  async function _cutVideoClip(file, startSec, endSec, onProgress) {
+    if (typeof MediaRecorder === 'undefined') {
+      throw new Error('הדפדפן הזה לא תומך ב-MediaRecorder — נסה Chrome/Brave/Edge עדכניים');
+    }
+    var blobUrl = URL.createObjectURL(file);
+    var video = document.createElement('video');
+    video.src = blobUrl;
+    video.preload = 'auto';
+    video.muted = false;
+    video.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;';
+    document.body.appendChild(video);
+
+    function cleanup() {
+      try { URL.revokeObjectURL(blobUrl); } catch (_) {}
+      try { video.remove(); } catch (_) {}
+    }
+
+    try {
+      // Wait for metadata + data ready
+      await new Promise(function(resolve, reject) {
+        var settled = false;
+        function done(err) {
+          if (settled) return; settled = true;
+          if (err) reject(err); else resolve();
+        }
+        video.oncanplay = function(){ done(); };
+        video.onerror = function(){ done(new Error('הדפדפן לא הצליח לטעון את הקובץ הזה כוידאו')); };
+        try { video.load(); } catch (e) { done(e); }
+        setTimeout(function(){ done(new Error('זמן טעינה ארוך מדי')); }, 30000);
+      });
+
+      if (!isFinite(video.duration) || video.duration === 0) {
+        throw new Error('הקובץ לא מכיל משך תקין');
+      }
+      if (endSec > video.duration + 0.5) {
+        throw new Error('זמן סיום (' + endSec + ') חורג ממשך הקובץ (' + video.duration.toFixed(1) + ')');
+      }
+
+      // captureStream: prefer standard, fallback to mozCaptureStream
+      var stream = (typeof video.captureStream === 'function')
+        ? video.captureStream()
+        : (typeof video.mozCaptureStream === 'function' ? video.mozCaptureStream() : null);
+      if (!stream) throw new Error('captureStream לא נתמך בדפדפן הזה');
+
+      // Pick best supported MIME type (WebM/Opus is usually safest)
+      var mimeCandidates = [
+        'video/webm;codecs=vp9,opus',
+        'video/webm;codecs=vp8,opus',
+        'video/webm',
+        'video/mp4;codecs=h264,aac',
+        'video/mp4'
+      ];
+      var mimeType = '';
+      for (var mi = 0; mi < mimeCandidates.length; mi++) {
+        if (MediaRecorder.isTypeSupported(mimeCandidates[mi])) { mimeType = mimeCandidates[mi]; break; }
+      }
+      if (!mimeType) throw new Error('אף mime type של MediaRecorder לא נתמך');
+
+      var recorder = new MediaRecorder(stream, { mimeType: mimeType });
+      var chunks = [];
+      recorder.ondataavailable = function(e) { if (e.data && e.data.size > 0) chunks.push(e.data); };
+
+      // Seek to start
+      video.currentTime = startSec;
+      await new Promise(function(r){ video.onseeked = r; });
+
+      // Start recording, then play. Stop when we've passed endSec.
+      var recPromise = new Promise(function(resolve, reject) {
+        recorder.onstop = resolve;
+        recorder.onerror = reject;
+      });
+      recorder.start(250);  // emit chunks every 250ms (more accurate stop)
+
+      await video.play();
+
+      var totalSec = endSec - startSec;
+      await new Promise(function(resolve) {
+        var t = setInterval(function() {
+          var elapsed = video.currentTime - startSec;
+          var pct = Math.min(100, Math.max(0, (elapsed / totalSec) * 100));
+          if (onProgress) {
+            var remaining = Math.max(0, totalSec - elapsed);
+            onProgress('מקליט וידאו: ' + pct.toFixed(0) + '% · נשארו ~' + remaining.toFixed(0) + ' שנ׳');
+          }
+          if (video.currentTime >= endSec || video.ended) {
+            clearInterval(t);
+            try { video.pause(); } catch (_) {}
+            try { recorder.stop(); } catch (_) {}
+            resolve();
+          }
+        }, 200);
+      });
+
+      await recPromise;
+      var ext = mimeType.indexOf('mp4') >= 0 ? '.mp4' : '.webm';
+      var blob = new Blob(chunks, { type: mimeType.split(';')[0] });
+      cleanup();
+      return { blob: blob, ext: ext, mimeType: mimeType, sizeMB: (blob.size / 1024 / 1024).toFixed(1) };
+    } catch (e) {
+      cleanup();
+      throw e;
+    }
+  }
 
   // Filter Whisper chunks by user-selected time ranges and group into sections.
   // Returns array of { name, chunks } — each section becomes a heading in DOCX.
@@ -2519,6 +2635,182 @@ self.onmessage = async function(e) {
       cutStatusEl
     ]);
 
+    // ── Video cut tool: outputs MP4/WebM clips with both video + audio ────
+    let _vcFile = null;
+    let _vcDuration = 0;
+    let _vcRunning = false;
+
+    const vcFileLabel = document.createElement('div');
+    vcFileLabel.style.cssText = 'font-size:12px;color:#888;margin-top:8px;min-height:16px;';
+    const vcStatusEl = document.createElement('div');
+    vcStatusEl.style.cssText = 'font-size:12px;color:var(--ink-mute);margin-top:8px;line-height:1.55;min-height:16px;';
+    function _vcStatus(msg, color) {
+      vcStatusEl.textContent = msg;
+      vcStatusEl.style.color = color || 'var(--ink-mute)';
+    }
+
+    async function _vcLoadFile(file) {
+      if (!file || _vcRunning) return;
+      _vcFile = file;
+      _vcDuration = 0;
+      vcFileLabel.textContent = '🎬 ' + file.name + ' · ' + (file.size/1024/1024).toFixed(1) + ' MB · קורא…';
+      _vcStatus('⏳ טוען וידאו…');
+      try {
+        // Probe duration via a temp video element
+        const blobUrl = URL.createObjectURL(file);
+        const probe = document.createElement('video');
+        probe.preload = 'metadata';
+        probe.src = blobUrl;
+        await new Promise(function(resolve, reject) {
+          probe.onloadedmetadata = resolve;
+          probe.onerror = function(){ reject(new Error('הדפדפן לא הצליח לטעון את הקובץ כוידאו')); };
+          setTimeout(function(){ reject(new Error('טעינה ארוכה מדי')); }, 30000);
+        });
+        _vcDuration = probe.duration;
+        URL.revokeObjectURL(blobUrl);
+        const min = (_vcDuration / 60).toFixed(1);
+        vcFileLabel.textContent = '🎬 ' + file.name + ' · ' + (file.size/1024/1024).toFixed(1) + ' MB · משך: ' + min + ' דקות';
+        _vcStatus('✓ מוכן · הוסף טווחים ולחץ "חתוך וידאו". זכור — חיתוך וידאו רץ בזמן אמת.', '#2d7a2d');
+      } catch (e) {
+        _vcStatus('❌ ' + e.message, '#c00');
+        vcFileLabel.textContent = '';
+      }
+    }
+
+    const vcFileInput = document.createElement('input');
+    vcFileInput.type = 'file';
+    vcFileInput.accept = '.mp4,.webm,.mov,.mkv,.avi';
+    vcFileInput.style.display = 'none';
+    vcFileInput.addEventListener('change', function(){ _vcLoadFile(vcFileInput.files[0]); vcFileInput.value = ''; });
+
+    const vcZone = App.el('div', {
+      style: { border: '2px dashed var(--line)', borderRadius: 'var(--r-md)',
+               padding: '20px', textAlign: 'center', cursor: 'pointer',
+               transition: 'all 180ms', background: 'var(--cream)',
+               marginTop: '10px' },
+      onClick: function() { if (!_vcRunning) vcFileInput.click(); }
+    }, [
+      App.el('div', { style: { fontSize: '28px', marginBottom: '4px' } }, '🎬'),
+      App.el('div', { style: { fontWeight: 600, fontSize: '13px', marginBottom: '2px' } },
+        'גרור וידאו לחיתוך לכאן'),
+      App.el('div', { style: { fontSize: '11px', color: 'var(--ink-mute)' } },
+        'MP4 / WebM / MOV · הקליפים יישמרו עם וידאו+קול במקום שתבחר')
+    ]);
+    vcZone.addEventListener('dragover',  function(e) { e.preventDefault(); vcZone.style.borderColor = '#5ba3d0'; vcZone.style.background = '#cfe4f7'; });
+    vcZone.addEventListener('dragleave', function()  { vcZone.style.borderColor = 'var(--line)'; vcZone.style.background = 'var(--cream)'; });
+    vcZone.addEventListener('drop', function(e) {
+      e.preventDefault(); vcZone.style.borderColor = 'var(--line)'; vcZone.style.background = 'var(--cream)';
+      _vcLoadFile(e.dataTransfer.files[0]);
+    });
+
+    const vcRangesContainer = document.createElement('div');
+    vcRangesContainer.style.cssText = 'display:flex;flex-direction:column;gap:6px;margin-top:10px;';
+    function _vcAddRangeRow(start, end) {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;gap:6px;align-items:center;';
+      const startBox = document.createElement('input');
+      startBox.type = 'text';
+      startBox.placeholder = 'התחלה (1:30)';
+      startBox.value = start || '';
+      startBox.style.cssText = 'flex:1;padding:6px 10px;border:1px solid #5ba3d0;border-radius:8px;font-size:13px;background:#f0f6fb;direction:ltr;text-align:center;';
+      const endBox = document.createElement('input');
+      endBox.type = 'text';
+      endBox.placeholder = 'סיום (3:00)';
+      endBox.value = end || '';
+      endBox.style.cssText = startBox.style.cssText;
+      const rmBtn = document.createElement('button');
+      rmBtn.textContent = '×';
+      rmBtn.title = 'הסר קטע';
+      rmBtn.style.cssText = 'width:32px;height:32px;background:#cfe4f7;border:1px solid #5ba3d0;border-radius:8px;font-size:16px;cursor:pointer;color:#888;flex-shrink:0;';
+      rmBtn.onclick = function(){ row.remove(); };
+      row.appendChild(startBox); row.appendChild(endBox); row.appendChild(rmBtn);
+      row.__startBox = startBox; row.__endBox = endBox;
+      vcRangesContainer.appendChild(row);
+    }
+    _vcAddRangeRow();
+
+    const vcAddBtn = document.createElement('button');
+    vcAddBtn.textContent = '＋ הוסף קטע';
+    vcAddBtn.style.cssText = 'padding:6px 14px;background:#fff;border:1px dashed #5ba3d0;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;color:#2d6f9c;margin-top:6px;align-self:flex-start;';
+    vcAddBtn.onclick = function(){ _vcAddRangeRow(); };
+
+    const vcGoBtn = document.createElement('button');
+    vcGoBtn.textContent = '🎬 חתוך וידאו ושמור';
+    vcGoBtn.style.cssText = 'padding:10px 22px;background:linear-gradient(135deg,#cfe4f7,#5ba3d0);border:1px solid #2d6f9c;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;color:#fff;margin-top:12px;align-self:flex-start;';
+
+    async function _vcGo() {
+      if (_vcRunning) return;
+      if (!_vcFile) { _vcStatus('❌ גרור קובץ וידאו קודם', '#c00'); return; }
+
+      const ranges = [];
+      const rows = vcRangesContainer.children;
+      for (let i = 0; i < rows.length; i++) {
+        const rs = rows[i].__startBox.value.trim();
+        const re = rows[i].__endBox.value.trim();
+        if (!rs && !re) continue;
+        const s = _parseTimeInput(rs);
+        const e = _parseTimeInput(re);
+        if (Number.isNaN(s) || s == null) { _vcStatus('❌ זמן התחלה לא תקין: ' + rs, '#c00'); return; }
+        if (Number.isNaN(e) || e == null) { _vcStatus('❌ זמן סיום לא תקין: ' + re, '#c00'); return; }
+        if (s >= e) { _vcStatus('❌ סיום לפני התחלה (' + rs + '–' + re + ')', '#c00'); return; }
+        if (e > _vcDuration + 0.5) {
+          _vcStatus('❌ ' + re + ' חורג ממשך הקובץ (' + _formatHMS(_vcDuration) + ')', '#c00');
+          return;
+        }
+        ranges.push([s, e]);
+      }
+      if (!ranges.length) { _vcStatus('❌ הוסף לפחות טווח אחד', '#c00'); return; }
+
+      const totalSec = ranges.reduce(function(t, r){ return t + (r[1] - r[0]); }, 0);
+      _vcRunning = true;
+      vcGoBtn.disabled = true;
+      vcGoBtn.textContent = '⏳ מקליט…';
+      let saved = 0, cancelled = 0;
+      const baseStem = _vcFile.name.replace(/\.[^.]+$/, '');
+      try {
+        for (let i = 0; i < ranges.length; i++) {
+          const s = ranges[i][0], e = ranges[i][1];
+          const tag = _formatHMS(s).replace(/:/g, '-') + '_to_' + _formatHMS(e).replace(/:/g, '-');
+          _vcStatus('🎬 קליפ ' + (i+1) + '/' + ranges.length + ' (' + _formatHMS(s) + '–' + _formatHMS(e) + ') · מקליט…');
+          const result = await _cutVideoClip(_vcFile, s, e, function(msg){
+            _vcStatus('🎬 קליפ ' + (i+1) + '/' + ranges.length + ' · ' + msg);
+          });
+          _vcStatus('💾 קליפ ' + (i+1) + '/' + ranges.length + ' · ' + result.sizeMB + ' MB ' + result.ext + ' · בחר היכן לשמור…');
+          const clipName = baseStem + '_' + tag + result.ext;
+          const saveRes = await _saveVideoViaPicker(result.blob, clipName, result.ext);
+          if (saveRes.method === 'cancelled') cancelled++;
+          else saved++;
+        }
+        _vcStatus('✓ נשמרו ' + saved + '/' + ranges.length + ' קליפי וידאו' + (cancelled ? ' · ' + cancelled + ' ביטולים' : ''), '#2d7a2d');
+      } catch (err) {
+        _vcStatus('❌ ' + err.message, '#c00');
+      } finally {
+        _vcRunning = false;
+        vcGoBtn.disabled = false;
+        vcGoBtn.textContent = '🎬 חתוך וידאו ושמור';
+      }
+    }
+    vcGoBtn.addEventListener('click', _vcGo);
+
+    const videoCutSection = App.el('div', {
+      style: { marginTop: '20px', paddingTop: '18px', borderTop: '1px solid var(--line)' }
+    }, [
+      _stepHeader('🎬', 'חיתוך וידאו (וידאו+קול)', '#5ba3d0'),
+      _stepHowto([
+        'גרור קובץ <b>MP4 / WebM / MOV</b> לתיבה למטה (וידאו עם פסקול)',
+        'הוסף טווחי זמן (אותו פורמט: <code style="background:#eee;padding:1px 4px;border-radius:3px;">1:30</code> עד <code style="background:#eee;padding:1px 4px;border-radius:3px;">3:00</code>)',
+        'לחץ "<b>🎬 חתוך וידאו ושמור</b>" · החיתוך רץ <b>בזמן אמת</b> (5 דקות קליפ = 5 דקות הקלטה) — אל תסגור את הטאב',
+        'הקליפים נשמרים כ-WebM (תואם לכל הדפדפנים) או MP4 אם הדפדפן תומך'
+      ]),
+      vcFileInput, vcZone, vcFileLabel,
+      App.el('div', { style: { fontSize: '12px', color: '#777', marginTop: '12px', marginBottom: '4px', fontWeight: '600' } },
+        'טווחי החיתוך:'),
+      vcRangesContainer,
+      vcAddBtn,
+      vcGoBtn,
+      vcStatusEl
+    ]);
+
     const infoBanner = App.el('div', {
       style: { background: '#f0f6fb', border: '1px solid #a0c8e8',
                borderRadius: 'var(--r-sm)', padding: '10px 14px', marginBottom: '14px', lineHeight: '1.55' }
@@ -2549,7 +2841,8 @@ self.onmessage = async function(e) {
       ]),
       infoBanner,
       ytSection,         // Step 1: download from YouTube
-      cutSection,        // Step 2: cut into clips (optional)
+      cutSection,        // Step 2: cut audio (WAV/MP3 output) — optional
+      videoCutSection,   // Bonus: cut video (MP4/WebM output) — optional
       transcribeSection  // Step 3: transcribe in cloud
     ]);
   }
