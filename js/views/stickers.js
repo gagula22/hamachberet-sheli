@@ -1827,25 +1827,9 @@ self.onmessage = async function(e) {
             const isCompressedAudio = ['.mp3', '.m4a', '.wav', '.aac', '.ogg', '.flac'].indexOf(ext) >= 0;
             const sizeMB = (file.size / 1024 / 1024).toFixed(1);
 
-            // ── PRE-FLIGHT: tiny 1MB POST to verify the Worker is reachable
-            // and not currently 503'ing. We deliberately keep it small (well
-            // under the 2MB threshold where Cloudflare's CPU cap kicks in
-            // for browser-origin requests).
-            statusEl.textContent = 'בודק חיבור ל-Worker…';
-            _vtShowProgress(3, 'בודק חיבור ל-Worker (1MB טסט)…');
-            console.log('[transcribe] preflight start', adv.workerUrl);
-            const probe = await _preflightWorker(adv.workerUrl, 1, function(msg){
-              if (document.body.contains(statusEl)) statusEl.textContent = msg;
-            });
-            console.log('[transcribe] preflight result', probe);
-            if (!probe.ok && probe.code !== 500) {
-              // 500 = Whisper rejected fake silent bytes (expected, Worker is fine)
-              // Anything else (503, fetch error, network) = real problem.
-              const why = probe.fetchErr
-                ? 'הדפדפן דחה את ה-fetch: "' + probe.fetchErr + '"'
-                : ('Worker החזיר HTTP ' + probe.code + (probe.body ? ' · ' + probe.body : ''));
-              throw new Error('בדיקת Worker נכשלה: ' + why + '. אם מופיע 503/1102 — Cloudflare מגביל CPU מתחת ל-30ms. הפיתרון: עדכן את ה-Worker ל-v4 (Uint8Array ישיר, ללא base64). תכתוב "פתח לי את v4" לקוד.');
-            }
+            // (Pre-flight removed — it was blocking on transient Cloudflare
+            // failures even when the real chunked transcription would have
+            // succeeded via the retry mechanism.)
 
             // ── MP3 BYTE-SLICE PATH: works for any MP3 size, with or without
             // trim. Avoids decoding entirely (which Chrome fails on long MP3s),
