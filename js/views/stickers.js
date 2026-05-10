@@ -1432,6 +1432,33 @@ self.onmessage = async function(e) {
     } catch (_) { return false; }
   }
 
+  // Pre-flight test: send a tiny 5MB silent payload to the Worker. If this
+  // fails, transcription is going to fail too — surface a precise reason
+  // (CPU/RAM cap → deploy Worker v4) instead of a generic "Failed to fetch"
+  // halfway through chunk 1.
+  async function _preflightWorker(workerUrl, sizeMB, onProgress) {
+    sizeMB = sizeMB || 5;
+    if (onProgress) onProgress('בודק חיבור ל-Worker עם payload של ' + sizeMB + 'MB…');
+    // Build a silent WAV at 16kHz mono, sized roughly to sizeMB
+    const samples = sizeMB * 1024 * 1024 / 2;  // int16 = 2 bytes/sample
+    const pcm = new Float32Array(Math.floor(samples));  // all zeros = silence
+    const wavBuf = _pcmToWavBytes(pcm, 16000);
+    try {
+      const r = await fetch(workerUrl.replace(/\/+$/, '') + '/?language=he', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: wavBuf
+      });
+      if (!r.ok) {
+        const txt = await r.text().catch(function(){ return ''; });
+        return { ok: false, code: r.status, body: txt.slice(0, 300) };
+      }
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, fetchErr: e.message };
+    }
+  }
+
   // POST a YouTube URL to the Worker /youtube endpoint — Worker fetches the
   // audio from YouTube directly (zero load on user's machine) and runs Whisper.
   async function _transcribeYouTubeViaWorker(workerUrl, ytUrl, language, onProgress) {
@@ -1785,6 +1812,24 @@ self.onmessage = async function(e) {
             const isCompressedAudio = ['.mp3', '.m4a', '.wav', '.aac', '.ogg', '.flac'].indexOf(ext) >= 0;
             const sizeMB = (file.size / 1024 / 1024).toFixed(1);
 
+            // ── PRE-FLIGHT: confirm Worker can handle a 5MB payload before we
+            // commit to a long upload run. If the Worker hits CPU/RAM caps,
+            // surface a clear instruction now rather than a vague "Failed to
+            // fetch" mid-chunk.
+            statusEl.textContent = 'בודק חיבור ל-Worker (5MB silent payload)…';
+            _vtShowProgress(3, 'בודק חיבור ל-Worker עם 5MB טסט…');
+            console.log('[transcribe] preflight start', adv.workerUrl);
+            const probe = await _preflightWorker(adv.workerUrl, 5, function(msg){
+              if (document.body.contains(statusEl)) statusEl.textContent = msg;
+            });
+            console.log('[transcribe] preflight result', probe);
+            if (!probe.ok) {
+              const why = probe.fetchErr
+                ? 'הדפדפן דחה את ה-fetch: "' + probe.fetchErr + '" — סביר ש-Cloudflare Worker חרג ממגבלות (CPU 10ms / RAM 128MB) בעת קידוד base64.'
+                : ('Worker החזיר HTTP ' + probe.code + (probe.body ? ' · ' + probe.body : ''));
+              throw new Error('בדיקת Worker נכשלה: ' + why + '. הפיתרון: עדכן את קוד ה-Worker ל-v4 (משתמש ב-Uint8Array ישיר ללא base64). ביקש ממני קודם — תאמר "פתח לי את v4" ואני אתן את הקוד שוב.');
+            }
+
             // ── MP3 BYTE-SLICE PATH: works for any MP3 size, with or without
             // trim. Avoids decoding entirely (which Chrome fails on long MP3s),
             // validates trim against actual duration, and produces correct
@@ -1792,7 +1837,7 @@ self.onmessage = async function(e) {
             let mp3meta = null;
             if (ext === '.mp3') {
               statusEl.textContent = 'בודק metadata של MP3 (' + sizeMB + ' MB)…';
-              _vtShowProgress(5, 'בודק metadata של MP3…');
+              _vtShowProgress(8, 'בודק metadata של MP3…');
               try { mp3meta = await _readMp3Metadata(file); } catch (_) {}
             }
 
