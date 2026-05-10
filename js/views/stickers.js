@@ -905,7 +905,7 @@ self.onmessage = async function(e) {
   // (whisper-large-v3-turbo) on Cloudflare's GPUs and returns transcript JSON.
   // Returns the same { text, chunks } shape the local Whisper Worker produces.
   async function _transcribeViaWorker(workerUrl, fileBuffer, language, onProgress) {
-    var url = workerUrl.replace(/\/+$/, '') + '/?language=' + encodeURIComponent(language || 'he');
+    var url = workerUrl.replace(/\/+$/, '') + '/?language=' + encodeURIComponent(language || 'auto');
     var u8 = new Uint8Array(fileBuffer);
     var sizeMB = (u8.length / 1024 / 1024).toFixed(1);
 
@@ -1011,7 +1011,32 @@ self.onmessage = async function(e) {
         chunks.push({ timestamp: [_hmsToSec(m[1]), _hmsToSec(m[2])], text: ' ' + m[3].replace(/\n/g,' ').trim() });
       }
     }
-    return { text: text, chunks: chunks, raw: data };
+    return { text: text, chunks: chunks, raw: data, detectedLanguage: (data.transcription_info && data.transcription_info.language) || null };
+  }
+
+  // Call the Worker's /translate endpoint (Llama-3 based) to translate a
+  // block of text to a target language. Used when source audio's detected
+  // language is not the user's preferred output language.
+  async function _translateViaWorker(workerUrl, text, targetLang, onProgress) {
+    var url = workerUrl.replace(/\/+$/, '') + '/translate';
+    if (onProgress) onProgress('שולח טקסט לתרגום ל-' + (targetLang || 'he') + ' (Llama 3)…');
+    var r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: text, target_language: targetLang || 'he' })
+    });
+    if (!r.ok) {
+      var errBody = '';
+      try { errBody = await r.text(); } catch(_) {}
+      throw new Error('Worker translate שגיאה ' + r.status + ': ' + errBody.slice(0, 200));
+    }
+    var data = await r.json();
+    if (data.error) throw new Error('Translate: ' + data.error);
+    return {
+      translation: (data.translation || '').trim(),
+      targetLanguage: data.target_language,
+      targetName: data.target_name
+    };
   }
 
   // ── Audio decode + WAV encode (browser-side) ─────────────────────────────
@@ -1365,6 +1390,7 @@ self.onmessage = async function(e) {
 
     const allText = [];
     const allChunks = [];
+    let _firstLang = null;
     for (let i = 0; i < boundaries.length; i++) {
       const cs = boundaries[i][0], ce = boundaries[i][1];
       const chunkBytes = mp3meta.bytes.buffer.slice(cs, ce);
@@ -1411,12 +1437,20 @@ self.onmessage = async function(e) {
           });
         }
       }
+      // Capture detected language from the first chunk
+      if (i === 0 && result.detectedLanguage) {
+        _firstLang = result.detectedLanguage;
+      }
       // Brief pacing between chunks to avoid edge rate-limit
       if (i < boundaries.length - 1) {
         await new Promise(function(r){ setTimeout(r, 800); });
       }
     }
-    return { text: allText.filter(Boolean).join(' '), chunks: allChunks };
+    return {
+      text: allText.filter(Boolean).join(' '),
+      chunks: allChunks,
+      detectedLanguage: _firstLang
+    };
   }
 
   function _slicePcmSec(pcm, startSec, endSec, sampleRate) {
@@ -1466,6 +1500,7 @@ self.onmessage = async function(e) {
 
     const allText = [];
     const allChunks = [];
+    let _firstLang = null;
     for (let i = 0; i < boundaries.length; i++) {
       const [s, e] = boundaries[i];
       const headLine = boundaries.length === 1
@@ -1485,8 +1520,9 @@ self.onmessage = async function(e) {
           });
         }
       }
+      if (i === 0 && result.detectedLanguage) _firstLang = result.detectedLanguage;
     }
-    return { text: allText.filter(Boolean).join(' '), chunks: allChunks };
+    return { text: allText.filter(Boolean).join(' '), chunks: allChunks, detectedLanguage: _firstLang };
   }
 
   // Quick health check — returns true if Worker URL responds (any 2xx/4xx OK)
@@ -1881,6 +1917,8 @@ self.onmessage = async function(e) {
       (async function() {
         try {
           var text, chunks, offsetSec, docTitleSrc;
+          var detectedLang = null;
+          var translation = null;
 
           if (adv.source === 'cloud') {
             const FAST_LIMIT_BYTES = 95 * 1024 * 1024;
@@ -1915,7 +1953,7 @@ self.onmessage = async function(e) {
               _vtShowProgress(15, 'מתמלל ' + rangeMin + ' דקות MP3 בענן…');
 
               const cloudResult = await _transcribeMp3ByteSliced(
-                adv.workerUrl, mp3meta, startSec, endSec, 'he',
+                adv.workerUrl, mp3meta, startSec, endSec, 'auto',
                 function(msg){
                   if (document.body.contains(statusEl)) statusEl.textContent = msg;
                   _vtShowProgress(60, msg);
@@ -1923,22 +1961,24 @@ self.onmessage = async function(e) {
               );
               text   = cloudResult.text;
               chunks = cloudResult.chunks;
+              detectedLang = cloudResult.detectedLanguage || null;
               offsetSec = 0;  // already absolute (helper added startSec to each chunk)
-              docTitleSrc = 'תמלול עברית · Cloudflare Workers AI · whisper-large-v3-turbo';
+              docTitleSrc = 'תמלול · Cloudflare Workers AI · whisper-large-v3-turbo';
             } else if (file.size <= FAST_LIMIT_BYTES && noTrim && isCompressedAudio) {
               // ── FAST PATH for non-MP3 compressed audio ≤95MB
               statusEl.textContent = 'מעלה ' + sizeMB + ' MB ל-Cloudflare (ללא פענוח)…';
               barFill.style.width  = '15%';
               _vtShowProgress(15, 'מעלה ' + sizeMB + ' MB ל-Cloudflare (מסלול מהיר — ללא פענוח)…');
               const ab = await file.arrayBuffer();
-              const cloudResult = await _transcribeViaWorker(adv.workerUrl, ab, 'he', function(msg){
+              const cloudResult = await _transcribeViaWorker(adv.workerUrl, ab, 'auto', function(msg){
                 if (document.body.contains(statusEl)) statusEl.textContent = msg;
                 _vtShowProgress(60, msg);
               });
               text   = cloudResult.text;
               chunks = cloudResult.chunks;
+              detectedLang = cloudResult.detectedLanguage || null;
               offsetSec = 0;
-              docTitleSrc = 'תמלול עברית · Cloudflare Workers AI · whisper-large-v3-turbo';
+              docTitleSrc = 'תמלול · Cloudflare Workers AI · whisper-large-v3-turbo';
             } else {
             // ── CHUNKED PATH: decode → downsample → ~40-min WAV chunks ─────
             // Used for non-MP3 large files, video files, or partial-range trims
@@ -1963,7 +2003,7 @@ self.onmessage = async function(e) {
             _vtShowProgress(20, 'מתמלל ' + totalMin + ' דקות בענן…');
 
             const cloudResult = await _transcribeViaWorkerChunked(
-              adv.workerUrl, pcm, decoded.sampleRate, 'he',
+              adv.workerUrl, pcm, decoded.sampleRate, 'auto',
               function(msg){
                 if (document.body.contains(statusEl)) statusEl.textContent = msg;
                 _vtShowProgress(60, msg);
@@ -1971,6 +2011,7 @@ self.onmessage = async function(e) {
             );
             text   = cloudResult.text;
             chunks = cloudResult.chunks;
+            detectedLang = cloudResult.detectedLanguage || null;
             // Apply offset to chunks if user trimmed (timestamps stay absolute
             // from start of original file, like the local path)
             if (offsetSec && chunks) {
@@ -1978,8 +2019,31 @@ self.onmessage = async function(e) {
                 return { timestamp: [c.timestamp[0] + offsetSec, c.timestamp[1] + offsetSec], text: c.text };
               });
             }
-            docTitleSrc = 'תמלול עברית · Cloudflare Workers AI · whisper-large-v3-turbo';
+            docTitleSrc = 'תמלול · Cloudflare Workers AI · whisper-large-v3-turbo';
             }  // end of CHUNKED PATH
+
+            // ── AUTO-TRANSLATE TO HEBREW if source language detected and != 'he' ──
+            if (detectedLang && detectedLang !== 'he' && detectedLang !== 'iw' && text && text.trim().length > 0) {
+              statusEl.textContent = '🌍 מזוהה: ' + detectedLang + ' · מתרגם לעברית באמצעות Llama 3…';
+              _vtShowProgress(85, '🌍 מזוהה: ' + detectedLang + ' · מתרגם לעברית…');
+              try {
+                const translateResult = await _translateViaWorker(adv.workerUrl, text, 'he', function(msg){
+                  if (document.body.contains(statusEl)) statusEl.textContent = '🌍 ' + msg;
+                  _vtShowProgress(90, '🌍 ' + msg);
+                });
+                translation = {
+                  text: translateResult.translation,
+                  sourceLang: detectedLang,
+                  targetLang: 'he',
+                  targetName: translateResult.targetName || 'Hebrew'
+                };
+                docTitleSrc += ' · תרגום לעברית: Llama 3';
+              } catch (translateErr) {
+                console.warn('[transcribe] translation failed:', translateErr);
+                // Don't abort — just skip translation and proceed with original transcript
+                statusEl.textContent = '⚠️ תרגום נכשל: ' + translateErr.message + ' · ממשיך בלי תרגום';
+              }
+            }
           } else {
             // ── Local path: decode in browser, run Whisper in Web Worker ─────
             statusEl.textContent = 'מפענח קובץ אודיו…';
@@ -2025,6 +2089,28 @@ self.onmessage = async function(e) {
           const dateStr   = new Date().toLocaleDateString('he-IL');
           const paragraphs = _buildTimestampedHtml(chunks, offsetSec, null, text);
 
+          // Build optional translation block (auto-translate when source != Hebrew)
+          let translationBlock = '';
+          if (translation && translation.text) {
+            const langLabel = ({ en: 'אנגלית', ar: 'ערבית', ru: 'רוסית', fr: 'צרפתית', es: 'ספרדית', de: 'גרמנית' })[detectedLang] || detectedLang;
+            const transParas = translation.text.split(/\n+/).filter(function(p){ return p.trim(); }).map(function(p){
+              return '<p style="direction:rtl;text-align:right;font-family:Arial,sans-serif;font-size:14px;line-height:1.9;margin:0 0 12px;unicode-bidi:plaintext;">' + _esc(p.trim()) + '</p>';
+            }).join('');
+            translationBlock =
+              '<hr style="border:none;border-top:2px solid #2d7a2d;margin:36px 0 18px;">' +
+              '<h2 style="font-size:18px;margin:0 0 4px;direction:rtl;text-align:right;color:#2d7a2d;">🌍 תרגום לעברית</h2>' +
+              '<p style="font-size:11px;color:#999;margin:0 0 18px;direction:rtl;text-align:right;">תורגם אוטומטית מ' + _esc(langLabel) + ' באמצעות Llama 3 על Cloudflare Workers AI</p>' +
+              transParas;
+          }
+
+          // Section header for transcript when translation exists (so the user
+          // sees clearly that the first section is the source-language transcript)
+          let transcriptHeader = '';
+          if (translation && translation.text && detectedLang && detectedLang !== 'he') {
+            const sourceLabel = ({ en: 'אנגלית', ar: 'ערבית', ru: 'רוסית', fr: 'צרפתית', es: 'ספרדית', de: 'גרמנית' })[detectedLang] || detectedLang;
+            transcriptHeader = '<h2 style="font-size:18px;margin:0 0 4px;direction:rtl;text-align:right;color:#2d6f9c;">🎙 תמלול במקור (' + _esc(sourceLabel) + ')</h2>';
+          }
+
           const docHtml = [
             `<html xmlns:o='urn:schemas-microsoft-com:office:office'`,
             ` xmlns:w='urn:schemas-microsoft-com:office:word'`,
@@ -2037,7 +2123,9 @@ self.onmessage = async function(e) {
             `<p style="font-size:11px;color:#999;margin:0 0 28px;direction:ltr;text-align:left;">`,
             `${_esc(docTitleSrc)} · ${dateStr}</p>`,
             `<hr style="border:none;border-top:1px solid #e0e0e0;margin-bottom:24px;">`,
+            transcriptHeader,
             paragraphs,
+            translationBlock,
             `</body></html>`
           ].join('');
 
@@ -2048,7 +2136,11 @@ self.onmessage = async function(e) {
             barFill.style.width    = '100%';
             bgBadge.style.display  = 'none';
             statusEl.style.color   = 'var(--sky-deep,#2d6f9c)';
-            statusEl.textContent   = `✓ תמלול הושלם · ${Math.round(text.split(/\s+/).length)} מילים · ראה הודעה בפינה`;
+            const wordCount = Math.round(text.split(/\s+/).length);
+            const transNote = translation && translation.text
+              ? ' + תרגום לעברית (' + (detectedLang || '?') + '→he)'
+              : '';
+            statusEl.textContent   = `✓ תמלול הושלם · ${wordCount} מילים${transNote} · ראה הודעה בפינה`;
           }
           _vtShowDone(dlName, blob);
 
