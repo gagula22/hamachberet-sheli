@@ -2762,6 +2762,18 @@ self.onmessage = async function(e) {
       if (!ranges.length) { _vcStatus('❌ הוסף לפחות טווח אחד', '#c00'); return; }
 
       const totalSec = ranges.reduce(function(t, r){ return t + (r[1] - r[0]); }, 0);
+
+      // Pre-flight warning if total recording time will be substantial
+      if (totalSec > 5 * 60) {
+        const totalMin = (totalSec / 60).toFixed(0);
+        const ok = window.confirm(
+          'תזכורת: חיתוך וידאו רץ בזמן אמת.\n\n' +
+          'הקליפים שביקשת = ' + totalMin + ' דקות סה"כ → ' + totalMin + ' דקות הקלטה.\n\n' +
+          'אל תסגור את הטאב במהלך ההקלטה. רוצה להמשיך?'
+        );
+        if (!ok) return;
+      }
+
       _vcRunning = true;
       vcGoBtn.disabled = true;
       vcGoBtn.textContent = '⏳ מקליט…';
