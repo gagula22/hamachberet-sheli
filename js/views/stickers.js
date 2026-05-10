@@ -3291,27 +3291,204 @@ self.onmessage = async function(e) {
       advPanel
     ]);
 
-    return App.el('div', { class: 'card' }, [
-      App.el('div', { class: 'row row-between', style: { marginBottom: '16px' } }, [
-        App.el('h2', {}, '🎙  תמלול וידאו בעברית'),
-        App.el('span', { class: 'chip sky' }, 'Whisper AI · ענן · ללא עלות')
+    // ── Tabbed layout — only one section visible at a time ──────────────
+    // Strip the dividers/margins each section was using when stacked.
+    [ytSection, cutSection, videoCutSection, mergeSection, transcribeSection].forEach(function(s) {
+      s.style.marginTop  = '0';
+      s.style.paddingTop = '0';
+      s.style.borderTop  = 'none';
+    });
+
+    const tabDefs = [
+      { id: 'trans', icon: '📝', label: 'תמלול',          section: transcribeSection, color: '#2d7a2d' },
+      { id: 'yt',    icon: '📥', label: 'הורדה מיוטיוב', section: ytSection,         color: '#5ba3d0' },
+      { id: 'cut',   icon: '✂️',  label: 'חיתוך אודיו',    section: cutSection,        color: '#9b8bb8' },
+      { id: 'vcut',  icon: '🎬', label: 'חיתוך וידאו',   section: videoCutSection,   color: '#5ba3d0' },
+      { id: 'merge', icon: '🎞️', label: 'חיבור סרטונים', section: mergeSection,      color: '#f5c842' }
+    ];
+
+    const _activeTabBg = '#fff';
+    const _activeShadow = '0 2px 8px rgba(60,50,40,.08)';
+
+    const tabBtns = [];
+    const tabPanels = [];
+
+    function _setActiveTab(id) {
+      tabDefs.forEach(function(t, i) {
+        var active = t.id === id;
+        tabPanels[i].style.display = active ? 'block' : 'none';
+        var b = tabBtns[i];
+        b.style.background = active ? _activeTabBg : 'transparent';
+        b.style.color      = active ? 'var(--ink)' : 'var(--ink-soft)';
+        b.style.boxShadow  = active ? _activeShadow : 'none';
+        b.style.borderColor= active ? t.color : 'transparent';
+      });
+    }
+
+    tabDefs.forEach(function(t, i) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.innerHTML = '<span style="font-size:15px;">' + t.icon + '</span>&nbsp;' + t.label;
+      btn.style.cssText = [
+        'padding:9px 16px',
+        'border-radius:999px',
+        'font-size:13px',
+        'font-weight:600',
+        'cursor:pointer',
+        'white-space:nowrap',
+        'transition:all 180ms',
+        'border:1.5px solid transparent',
+        'background:transparent',
+        'color:var(--ink-soft)',
+        'display:inline-flex',
+        'align-items:center'
+      ].join(';');
+      btn.onmouseover = function(){ if (btn.style.background === 'transparent') btn.style.background = 'rgba(255,255,255,.5)'; };
+      btn.onmouseout  = function(){ _setActiveTab(_currentTab); };
+      btn.onclick = function(){ _currentTab = t.id; _setActiveTab(t.id); };
+      tabBtns.push(btn);
+
+      var panel = App.el('div', {}, [t.section]);
+      panel.style.display = i === 0 ? 'block' : 'none';
+      tabPanels.push(panel);
+    });
+
+    let _currentTab = tabDefs[0].id;
+
+    const tabStrip = App.el('div', {
+      style: {
+        display: 'flex', flexWrap: 'wrap', gap: '4px',
+        padding: '5px', background: 'var(--cream)',
+        borderRadius: '999px', marginBottom: '22px',
+        border: '1px solid var(--line)'
+      }
+    }, tabBtns);
+
+    // Initial active styling
+    setTimeout(function(){ _setActiveTab(_currentTab); }, 0);
+
+    const heroHeader = App.el('div', {
+      style: {
+        display: 'flex', alignItems: 'center', gap: '14px',
+        flexWrap: 'wrap', marginBottom: '8px'
+      }
+    }, [
+      App.el('div', {
+        style: {
+          width: '52px', height: '52px', borderRadius: '14px',
+          background: 'linear-gradient(135deg,#cfe4f7,#a9ceee)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: '28px', flexShrink: '0',
+          boxShadow: '0 4px 12px rgba(90,140,200,.18)'
+        }
+      }, '🎙'),
+      App.el('div', { style: { flex: '1', minWidth: '180px' } }, [
+        App.el('h2', { style: { margin: '0 0 2px', fontSize: '21px' } }, 'תמלול וידאו בעברית'),
+        App.el('div', { style: { fontSize: '13px', color: 'var(--ink-soft)', lineHeight: '1.5' } },
+          'Whisper AI בענן · איכות גבוהה · ללא עומס על המחשב')
       ]),
-      infoBanner,
-      ytSection,         // Step 1: download from YouTube
-      cutSection,        // Step 2: cut audio (WAV/MP3 output) — optional
-      videoCutSection,   // Bonus: cut video (MP4/WebM output) — optional
-      mergeSection,      // Bonus: merge multiple videos into one (ffmpeg.wasm)
-      transcribeSection  // Step 3: transcribe in cloud
+      App.el('span', { class: 'chip sky' }, 'ללא עלות')
     ]);
+
+    const flowHint = document.createElement('p');
+    flowHint.style.cssText = 'font-size:12.5px;color:var(--ink-mute);margin:0 0 18px;line-height:1.65;';
+    flowHint.innerHTML = 'זרימה מומלצת: <b>הורדה מיוטיוב</b> → <b>חיתוך</b> (אופציונלי) → <b>תמלול</b>. כל שלב עצמאי — אם הקובץ כבר אצלך, גש ישר לטאב "תמלול".';
+
+    return App.el('div', { class: 'card' }, [
+      heroHeader,
+      flowHint,
+      tabStrip
+    ].concat(tabPanels));
+  }
+
+  // ── Page hero ─────────────────────────────────────────────────────────────
+  function buildHero() {
+    const tools = [
+      { icon: '📝', label: 'Word → PDF',     bg: 'linear-gradient(135deg,#FADADD,#F3B7BD)' },
+      { icon: '📄', label: 'PDF → Word',     bg: 'linear-gradient(135deg,#E6DDF4,#C9B8E3)' },
+      { icon: '🌐', label: 'תרגום PDF',      bg: 'linear-gradient(135deg,#FFF3C4,#F5DF8C)' },
+      { icon: '🎙', label: 'תמלול וידאו',    bg: 'linear-gradient(135deg,#CFE4F7,#A9CEEE)' }
+    ];
+
+    const chips = tools.map(function(t) {
+      return App.el('div', {
+        style: {
+          display: 'inline-flex', alignItems: 'center', gap: '8px',
+          padding: '8px 14px', borderRadius: '999px',
+          background: 'rgba(255,255,255,.7)', border: '1px solid var(--line)',
+          fontSize: '13px', fontWeight: '600', color: 'var(--ink)',
+          backdropFilter: 'blur(4px)'
+        }
+      }, [
+        App.el('span', {
+          style: {
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            width: '24px', height: '24px', borderRadius: '50%',
+            background: t.bg, fontSize: '13px'
+          }
+        }, t.icon),
+        App.el('span', {}, t.label)
+      ]);
+    });
+
+    return App.el('div', {
+      style: {
+        position: 'relative', overflow: 'hidden',
+        background: 'linear-gradient(135deg,#FAF6F0 0%,#FFE9DA 35%,#E6DDF4 70%,#CFE4F7 100%)',
+        borderRadius: 'var(--r-lg)',
+        padding: '32px 36px',
+        border: '1px solid var(--line)',
+        boxShadow: 'var(--shadow-sm)'
+      }
+    }, [
+      App.el('div', {
+        style: { fontSize: '34px', marginBottom: '6px', letterSpacing: '-0.5px',
+                 fontFamily: 'var(--font-head)', fontWeight: '600', color: 'var(--ink)' }
+      }, 'כלים ליצירת מסמכים'),
+      App.el('div', {
+        style: { fontSize: '14.5px', color: 'var(--ink-soft)', marginBottom: '18px',
+                 lineHeight: '1.6', maxWidth: '640px' }
+      }, 'המרה, תרגום ותמלול בעברית — כל הכלים רצים ישר בדפדפן או בענן, בלי להעלות קבצים לאן שלא צריך.'),
+      App.el('div', {
+        style: { display: 'flex', flexWrap: 'wrap', gap: '8px' }
+      }, chips)
+    ]);
+  }
+
+  // ── Helper: wrap a tool card with a colored top accent stripe ─────────────
+  function _wrapWithAccent(card, gradient) {
+    // Add an inline gradient stripe at the top of the card.
+    const stripe = App.el('div', {
+      style: {
+        height: '4px', borderTopLeftRadius: 'var(--r-md)',
+        borderTopRightRadius: 'var(--r-md)',
+        background: gradient,
+        margin: '-24px -24px 18px'  // pull into card padding
+      }
+    });
+    if (card && card.firstChild) card.insertBefore(stripe, card.firstChild);
+    else if (card) card.appendChild(stripe);
+    return card;
   }
 
   // ── Main render ───────────────────────────────────────────────────────────
   function render(root) {
+    const w2p = buildWordToPdf();
+    const p2w = buildPdfToWord();
+    const ptr = buildPdfTranslator();
+    const vtr = buildVideoTranscriber();
+
+    _wrapWithAccent(w2p, 'linear-gradient(90deg,#FADADD,#F3B7BD)');
+    _wrapWithAccent(p2w, 'linear-gradient(90deg,#E6DDF4,#C9B8E3)');
+    _wrapWithAccent(ptr, 'linear-gradient(90deg,#FFF3C4,#F5DF8C)');
+    _wrapWithAccent(vtr, 'linear-gradient(90deg,#CFE4F7,#A9CEEE)');
+
     root.append(App.el('div', { class: 'stack stack-lg' }, [
-      buildWordToPdf(),
-      buildPdfToWord(),
-      buildPdfTranslator(),
-      buildVideoTranscriber()
+      buildHero(),
+      w2p,
+      p2w,
+      ptr,
+      vtr
     ]));
   }
 
