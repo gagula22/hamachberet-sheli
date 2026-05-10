@@ -1300,11 +1300,11 @@ self.onmessage = async function(e) {
       throw new Error('לא הצלחתי למצוא גבולות frame תקינים');
     }
 
-    // With Worker v6 (browser does base64), the Worker only does request.text()
-    // and a single AI.run subrequest — both cheap. We can safely chunk at
-    // 20MB without overshooting the CPU/memory cap. Larger chunks = fewer
-    // round-trips and faster overall transcription.
-    const CHUNK_BYTES = 20 * 1024 * 1024;
+    // 3MB binary → 4MB base64 string → ~12MB peak browser RAM during encode.
+    // Larger chunks (we tried 20MB = ~80MB peak) trigger memory pressure on
+    // low-RAM machines and the browser silently aborts fetch with "Failed to
+    // fetch" — even though the Worker can handle 30MB+ once the bytes arrive.
+    const CHUNK_BYTES = 3 * 1024 * 1024;
     const sliceLen = sliceEnd - sliceStart;
     const boundaries = [];
     if (sliceLen <= CHUNK_BYTES) {
@@ -1409,12 +1409,12 @@ self.onmessage = async function(e) {
     return buffer;
   }
 
-  // Chunked Whisper-via-Worker. Splits PCM into ~10-minute pieces (each
-  // becomes ~19MB WAV — Worker v6 does no encoding so CPU/memory cap aren't
-  // a worry, and bigger chunks mean fewer round-trips.
+  // Chunked Whisper-via-Worker. ~1.5-min PCM pieces → ~2.9MB WAV each → safe
+  // for low-RAM machines where the browser silently aborts fetch under
+  // memory pressure.
   async function _transcribeViaWorkerChunked(workerUrl, pcm, sampleRate, language, onProgress) {
     const totalSec = pcm.length / sampleRate;
-    const CHUNK_DUR = 10 * 60;  // 10 min per chunk → ~19MB WAV
+    const CHUNK_DUR = 90;  // 1.5 min per chunk → ~2.9MB WAV
     const boundaries = [];
     for (let s = 0; s < totalSec; s += CHUNK_DUR) {
       boundaries.push([s, Math.min(totalSec, s + CHUNK_DUR)]);
