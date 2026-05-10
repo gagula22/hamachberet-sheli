@@ -1160,9 +1160,46 @@ self.onmessage = async function(e) {
     return { bitrate: bitrate, sampleRate: sampleRate, versionId: versionId };
   }
 
-  // Read full MP3 file, parse header, sample for VBR, compute duration.
-  // Returns { bytes, bitrate, sampleRate, durationSec, dataStart, bytesPerSec }
-  // or null if file is not a clean CBR MP3.
+  // Parse Xing/Info VBR header inside the first MP3 frame.
+  // Returns { frames, audioBytes } or null. Lets us compute accurate duration
+  // for VBR files where bytes/sec varies.
+  function _parseXingHeader(bytes, frameOffset, header) {
+    const channelMode = (bytes[frameOffset + 3] >> 6) & 0x03;
+    const isMono = (channelMode === 3);
+    // Side-info length depends on MPEG version + channel mode
+    let sideInfoLen;
+    if (header.versionId === 3) {            // MPEG1
+      sideInfoLen = isMono ? 17 : 32;
+    } else {                                  // MPEG2 / 2.5
+      sideInfoLen = isMono ? 9 : 17;
+    }
+    const off = frameOffset + 4 + sideInfoLen;
+    if (off + 8 > bytes.length) return null;
+    // "Xing" (CBR-padded) or "Info" (true VBR)
+    const isXing = bytes[off]   === 0x58 && bytes[off+1] === 0x69 &&
+                   bytes[off+2] === 0x6E && bytes[off+3] === 0x67;
+    const isInfo = bytes[off]   === 0x49 && bytes[off+1] === 0x6E &&
+                   bytes[off+2] === 0x66 && bytes[off+3] === 0x6F;
+    if (!isXing && !isInfo) return null;
+
+    const flags = (bytes[off+4] << 24) | (bytes[off+5] << 16) |
+                  (bytes[off+6] << 8)  |  bytes[off+7];
+    let pos = off + 8;
+    let frames = 0, audioBytes = 0;
+    if (flags & 0x01) {
+      frames = (bytes[pos] << 24) | (bytes[pos+1] << 16) | (bytes[pos+2] << 8) | bytes[pos+3];
+      pos += 4;
+    }
+    if (flags & 0x02) {
+      audioBytes = (bytes[pos] << 24) | (bytes[pos+1] << 16) | (bytes[pos+2] << 8) | bytes[pos+3];
+      pos += 4;
+    }
+    return { frames: frames, audioBytes: audioBytes, kind: isXing ? 'Xing' : 'Info' };
+  }
+
+  // Read full MP3 file, parse header, compute duration. Accepts CBR + VBR.
+  // Returns { bytes, bitrate, sampleRate, durationSec, dataStart, bytesPerSec, isVbr }
+  // or null if file isn't a usable MP3.
   async function _readMp3Metadata(file) {
     const ext = ((file.name || '').match(/\.[^.]+$/) || [''])[0].toLowerCase();
     if (ext !== '.mp3') return null;
@@ -1174,31 +1211,62 @@ self.onmessage = async function(e) {
     const header = _parseMp3FrameHeader(bytes, firstFrame);
     if (!header) return null;
 
-    // Sample 4 spots in the file to detect VBR
-    const sampleBitrates = [];
-    for (let f = 1; f <= 4; f++) {
-      const pos = firstFrame + Math.floor((bytes.length - firstFrame) * f / 5);
-      const fr = _findMp3FrameNear(bytes, pos, 65536);
-      if (fr >= 0) {
-        const h = _parseMp3FrameHeader(bytes, fr);
-        if (h) sampleBitrates.push(h.bitrate);
-      }
-    }
-    const isCBR = sampleBitrates.length === 0 ||
-                  sampleBitrates.every(function(b){ return Math.abs(b - header.bitrate) < header.bitrate * 0.05; });
-    if (!isCBR) return null;
+    let bitrate;
+    let durationSec;
+    let isVbr = false;
+    let bytesPerSec;
+    let dataStart = firstFrame;
 
-    const audioBytes = bytes.length - firstFrame;
-    const bytesPerSec = header.bitrate / 8;
-    const durationSec = audioBytes / bytesPerSec;
+    // Try Xing/Info header first — gives accurate VBR metrics
+    const xing = _parseXingHeader(bytes, firstFrame, header);
+    if (xing && xing.frames > 0) {
+      const samplesPerFrame = (header.versionId === 3) ? 1152 : 576;
+      durationSec = (xing.frames * samplesPerFrame) / header.sampleRate;
+      const audioBytes = xing.audioBytes > 0 ? xing.audioBytes : (bytes.length - firstFrame);
+      bitrate = (audioBytes * 8) / durationSec;
+      bytesPerSec = audioBytes / durationSec;
+      isVbr = (xing.kind === 'Xing');  // "Info" tag means CBR with header
+      // Skip the Xing frame itself when computing time→byte (it's silent)
+      // First "real" audio frame is right after the Xing frame.
+      const xingFrameEnd = firstFrame + _mp3FrameLen(bytes, firstFrame, header);
+      const nextFrame = _findMp3FrameNear(bytes, xingFrameEnd, 65536);
+      if (nextFrame > firstFrame) dataStart = nextFrame;
+    } else {
+      // No Xing header → estimate from sampled bitrates
+      const sampleBitrates = [header.bitrate];
+      for (let f = 1; f <= 6; f++) {
+        const pos = firstFrame + Math.floor((bytes.length - firstFrame) * f / 7);
+        const fr = _findMp3FrameNear(bytes, pos, 65536);
+        if (fr >= 0) {
+          const h = _parseMp3FrameHeader(bytes, fr);
+          if (h && h.bitrate) sampleBitrates.push(h.bitrate);
+        }
+      }
+      bitrate = sampleBitrates.reduce(function(a, b){ return a + b; }, 0) / sampleBitrates.length;
+      const audioBytes = bytes.length - firstFrame;
+      bytesPerSec = bitrate / 8;
+      durationSec = audioBytes / bytesPerSec;
+      // Mark as VBR if any sample deviates >5% from the average
+      isVbr = sampleBitrates.some(function(b){ return Math.abs(b - bitrate) > bitrate * 0.05; });
+    }
+
     return {
       bytes: bytes,
-      bitrate: header.bitrate,
+      bitrate: bitrate,
       sampleRate: header.sampleRate,
       durationSec: durationSec,
-      dataStart: firstFrame,
-      bytesPerSec: bytesPerSec
+      dataStart: dataStart,
+      bytesPerSec: bytesPerSec,
+      isVbr: isVbr
     };
+  }
+
+  // Length in bytes of the MP3 frame at `offset`. Used to skip the Xing
+  // sentinel frame so it doesn't show up as silence at second 0.
+  function _mp3FrameLen(bytes, offset, header) {
+    const samplesPerFrame = (header.versionId === 3) ? 1152 : 576;
+    const padding = (bytes[offset + 2] >> 1) & 0x01;
+    return Math.floor((samplesPerFrame * header.bitrate) / (8 * header.sampleRate)) + padding;
   }
 
   // Slice an MP3 by time range. Returns ArrayBuffer of valid MP3 bytes.
@@ -2055,9 +2123,11 @@ self.onmessage = async function(e) {
           _cutDecoded = { durationSec: mp3.durationSec };  // for range validation
           const min = (mp3.durationSec / 60).toFixed(1);
           const kbps = Math.round(mp3.bitrate / 1000);
+          const vbrTag = mp3.isVbr ? ' VBR' : ' CBR';
           cutFileLabel.textContent = '📁 ' + file.name + ' · ' + (file.size/1024/1024).toFixed(1) +
-            ' MB · משך: ' + min + ' דקות · MP3 ' + kbps + 'kbps · חיתוך ישיר ללא פענוח';
-          _cutStatus('✓ מוכן (מסלול MP3 מהיר) — הקליפים יישמרו כ-MP3', '#2d7a2d');
+            ' MB · משך: ' + min + ' דקות · MP3 ' + kbps + 'kbps' + vbrTag + ' · חיתוך ישיר';
+          const vbrNote = mp3.isVbr ? ' (VBR — קצוות עשויים לסטות בשנייה־שתיים)' : '';
+          _cutStatus('✓ מוכן (מסלול MP3 מהיר)' + vbrNote + ' — הקליפים יישמרו כ-MP3', '#2d7a2d');
           return;
         }
         // Slow path: full decode — used for non-MP3 / VBR MP3 / video files
