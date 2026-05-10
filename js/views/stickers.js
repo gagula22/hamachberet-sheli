@@ -2621,10 +2621,10 @@ self.onmessage = async function(e) {
     }, [
       _stepHeader(2, 'לחתוך לקליפים (אופציונלי)', '#9b8bb8'),
       _stepHowto([
-        'גרור את הקובץ שהורדת לתיבה למטה — <b>MP3 / MP4 / WAV / M4A / WebM</b> (MP4 וידאו נתמך, פענוח לוקח קצת יותר זמן)',
-        'הוסף טווחי זמן — לדוגמה <code style="background:#eee;padding:1px 4px;border-radius:3px;">1:30</code> עד <code style="background:#eee;padding:1px 4px;border-radius:3px;">3:00</code>. לחץ "<b>＋ הוסף קטע</b>" לעוד.',
-        'לחץ "<b>✂️ חתוך ושמור קליפים</b>" · לכל קליפ ייפתח דיאלוג שמירה — בחר תיקייה ושם',
-        'מתי להשתמש: לתמלל רק חלקים מסוימים, או כשהקובץ ארוך מאוד'
+        'גרור את הקובץ שהורדת לתיבה למטה — <b>MP3 / MP4 / WAV / M4A / WebM</b>',
+        'הוסף טווחי זמן <b>בכל אורך</b> שתרצה. דוגמאות: <code style="background:#eee;padding:1px 4px;border-radius:3px;">1:30</code>–<code style="background:#eee;padding:1px 4px;border-radius:3px;">3:00</code> · <code style="background:#eee;padding:1px 4px;border-radius:3px;">5:00</code>–<code style="background:#eee;padding:1px 4px;border-radius:3px;">45:00</code> · <code style="background:#eee;padding:1px 4px;border-radius:3px;">10:00</code>–<code style="background:#eee;padding:1px 4px;border-radius:3px;">1:35:00</code> (90 דק׳!). אין גבול עליון — רק שזמן הסיום ≤ אורך הקובץ',
+        '<b>טיפ למהירות:</b> אם הקובץ MP3 — חיתוך ארוך (40 דק׳+) מסתיים ב<b>שניות</b> (byte-slicing). אם MP4 ארוך — מומלץ להוריד מחדש כ-MP3 דרך vidssave',
+        'לחץ "<b>✂️ חתוך ושמור קליפים</b>" · לכל קליפ ייפתח דיאלוג שמירה — בחר תיקייה ושם'
       ]),
       cutFileInput, cutZone, cutFileLabel,
       App.el('div', { style: { fontSize: '12px', color: '#777', marginTop: '12px', marginBottom: '4px', fontWeight: '600' } },
@@ -2810,8 +2810,8 @@ self.onmessage = async function(e) {
       _stepHeader('🎬', 'חיתוך וידאו (וידאו+קול)', '#5ba3d0'),
       _stepHowto([
         'גרור קובץ <b>MP4 / WebM / MOV</b> לתיבה למטה (וידאו עם פסקול)',
-        'הוסף טווחי זמן (אותו פורמט: <code style="background:#eee;padding:1px 4px;border-radius:3px;">1:30</code> עד <code style="background:#eee;padding:1px 4px;border-radius:3px;">3:00</code>)',
-        'לחץ "<b>🎬 חתוך וידאו ושמור</b>" · החיתוך רץ <b>בזמן אמת</b> (5 דקות קליפ = 5 דקות הקלטה) — אל תסגור את הטאב',
+        'הוסף טווחי זמן <b>בכל אורך</b>. דוגמאות: <code style="background:#eee;padding:1px 4px;border-radius:3px;">2:00</code>–<code style="background:#eee;padding:1px 4px;border-radius:3px;">5:00</code> · <code style="background:#eee;padding:1px 4px;border-radius:3px;">10:00</code>–<code style="background:#eee;padding:1px 4px;border-radius:3px;">50:00</code> · <code style="background:#eee;padding:1px 4px;border-radius:3px;">5:00</code>–<code style="background:#eee;padding:1px 4px;border-radius:3px;">1:35:00</code>. אין מקסימום — מותר עד אורך הקובץ',
+        '⚠️ <b>החיתוך רץ בזמן אמת:</b> 40 דק׳ קליפ = 40 דקות הקלטה. 90 דק׳ = 90 דק׳ הקלטה. אל תסגור את הטאב במהלך ההקלטה. (לאודיו בלבד יש דרך מהירה — ראה השלב למעלה)',
         'הקליפים נשמרים כ-WebM (תואם לכל הדפדפנים) או MP4 אם הדפדפן תומך'
       ]),
       vcFileInput, vcZone, vcFileLabel,
