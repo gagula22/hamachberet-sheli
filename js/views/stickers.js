@@ -416,9 +416,13 @@
         console.warn('[pdf2word] getOperatorList failed:', e);
         return [];
       }
+
+      // Phase 1: walk operators synchronously to collect every image
+      // reference (objId + the CTM that positions it). No awaits here —
+      // we only need the worker once for getOperatorList itself.
       var ctm = [1,0,0,1,0,0];
       var stack = [];
-      var images = [];
+      var refs = [];   // [{ objId, ctm }]
       for (var i = 0; i < opList.fnArray.length; i++) {
         var op = opList.fnArray[i];
         var args = opList.argsArray[i];
@@ -429,21 +433,43 @@
         } else if (op === OPS.transform) {
           ctm = _matMul(ctm, args);
         } else if (op === OPS.paintImageXObject || op === OPS.paintImageMaskXObject) {
-          var objId = args[0];
-          var imgObj = await _resolvePageObj(page, objId);
-          if (imgObj) {
-            var dataUrl = _imgObjToDataUrl(imgObj);
-            if (dataUrl) {
-              images.push({
-                x: ctm[4],
-                y: ctm[5],
-                width: Math.abs(ctm[0]),
-                height: Math.abs(ctm[3]),
-                dataUrl: dataUrl
-              });
-            }
-          }
+          refs.push({ objId: args[0], ctm: ctm.slice() });
         }
+      }
+      if (!refs.length) return [];
+
+      // Phase 2: resolve every UNIQUE image once, in parallel. Decoding
+      // the same logo twice (header on every page, etc.) would be a
+      // waste, so we cache the dataURL by objId.
+      var uniqueIds = {};
+      refs.forEach(function(r) { uniqueIds[r.objId] = true; });
+      var idList = Object.keys(uniqueIds);
+      var resolvedById = {};
+      await Promise.all(idList.map(async function(objId) {
+        try {
+          var imgObj = await _resolvePageObj(page, objId);
+          if (!imgObj) return;
+          var dataUrl = _imgObjToDataUrl(imgObj);
+          if (dataUrl) resolvedById[objId] = dataUrl;
+        } catch (e) {
+          // Single-image failures shouldn't kill the whole page.
+        }
+      }));
+
+      // Phase 3: emit one image record per reference using the cached
+      // dataURL.
+      var images = [];
+      for (var k = 0; k < refs.length; k++) {
+        var r = refs[k];
+        var url = resolvedById[r.objId];
+        if (!url) continue;
+        images.push({
+          x: r.ctm[4],
+          y: r.ctm[5],
+          width: Math.abs(r.ctm[0]),
+          height: Math.abs(r.ctm[3]),
+          dataUrl: url
+        });
       }
       return images;
     }
@@ -584,7 +610,7 @@
         const perPageItems   = new Array(n);
         const perPageImages  = new Array(n);
         const perPageWidth   = new Array(n);
-        const CONCURRENCY    = 4;
+        const CONCURRENCY    = 6;
         let nextPage         = 1;
         let donePages        = 0;
 
