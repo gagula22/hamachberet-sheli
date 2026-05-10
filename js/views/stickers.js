@@ -906,12 +906,19 @@ self.onmessage = async function(e) {
   // Returns the same { text, chunks } shape the local Whisper Worker produces.
   async function _transcribeViaWorker(workerUrl, fileBuffer, language, onProgress) {
     var url = workerUrl.replace(/\/+$/, '') + '/?language=' + encodeURIComponent(language || 'he');
-    if (onProgress) onProgress('שולח אודיו לענן…');
+    // base64-encode in the browser (no CPU limit here) and send as text/plain.
+    // The Worker passes this string straight to AI.run without any encoding
+    // work of its own, side-stepping Cloudflare's stricter CPU cap on
+    // browser-origin requests.
+    if (onProgress) onProgress('מקודד base64 בדפדפן…');
+    var audioBase64 = _arrayBufferToBase64(fileBuffer);
+    var sizeMB = (audioBase64.length / 1024 / 1024).toFixed(1);
+    if (onProgress) onProgress('שולח ' + sizeMB + ' MB ל-Cloudflare…');
 
     var r = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/octet-stream' },
-      body: fileBuffer
+      headers: { 'Content-Type': 'text/plain' },
+      body: audioBase64
     });
     if (!r.ok) {
       var errBody = '';
@@ -1293,11 +1300,11 @@ self.onmessage = async function(e) {
       throw new Error('לא הצלחתי למצוא גבולות frame תקינים');
     }
 
-    // Cloudflare Workers Free CPU limit is stricter when the request comes
-    // with an Origin header (~30ms vs ~50ms server-to-server). Empirically
-    // verified by curl tests: 2MB POST with Origin → 200, 3MB → 503/1102.
-    // 2MB chunks keep us comfortably under the threshold.
-    const CHUNK_BYTES = 2 * 1024 * 1024;
+    // With Worker v6 (browser does base64), the Worker only does request.text()
+    // and a single AI.run subrequest — both cheap. We can safely chunk at
+    // 20MB without overshooting the CPU/memory cap. Larger chunks = fewer
+    // round-trips and faster overall transcription.
+    const CHUNK_BYTES = 20 * 1024 * 1024;
     const sliceLen = sliceEnd - sliceStart;
     const boundaries = [];
     if (sliceLen <= CHUNK_BYTES) {
@@ -1402,12 +1409,12 @@ self.onmessage = async function(e) {
     return buffer;
   }
 
-  // Chunked Whisper-via-Worker. Splits PCM into ~1-minute pieces (each
-  // becomes ~1.9MB WAV — safely under the Worker CPU cap that gets stricter
-  // when an Origin header is present (verified ~30ms threshold = 2MB).
+  // Chunked Whisper-via-Worker. Splits PCM into ~10-minute pieces (each
+  // becomes ~19MB WAV — Worker v6 does no encoding so CPU/memory cap aren't
+  // a worry, and bigger chunks mean fewer round-trips.
   async function _transcribeViaWorkerChunked(workerUrl, pcm, sampleRate, language, onProgress) {
     const totalSec = pcm.length / sampleRate;
-    const CHUNK_DUR = 60;  // 1 min per chunk → ~1.9MB WAV
+    const CHUNK_DUR = 10 * 60;  // 10 min per chunk → ~19MB WAV
     const boundaries = [];
     for (let s = 0; s < totalSec; s += CHUNK_DUR) {
       boundaries.push([s, Math.min(totalSec, s + CHUNK_DUR)]);
@@ -1472,6 +1479,18 @@ self.onmessage = async function(e) {
     } catch (e) {
       return { ok: false, fetchErr: e.message };
     }
+  }
+
+  // base64-encode an ArrayBuffer in chunks (avoids the 64KB stack limit of
+  // String.fromCharCode.apply when the buffer is large).
+  function _arrayBufferToBase64(buf) {
+    const u8 = new Uint8Array(buf);
+    const chunkSize = 0x8000;
+    const parts = [];
+    for (let i = 0; i < u8.length; i += chunkSize) {
+      parts.push(String.fromCharCode.apply(null, u8.subarray(i, i + chunkSize)));
+    }
+    return btoa(parts.join(''));
   }
 
   // POST a YouTube URL to the Worker /youtube endpoint — Worker fetches the
