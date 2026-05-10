@@ -1324,18 +1324,32 @@ self.onmessage = async function(e) {
         ? '(' + chunkSizeMB + ' MB)'
         : 'חלק ' + (i + 1) + '/' + boundaries.length + ' (' + chunkSizeMB + ' MB · התקדמות ~' + Math.round(((i) / boundaries.length) * 100) + '%)';
 
-      if (onProgress) onProgress(partTag + ' · שולח לענן…');
-      let result;
-      try {
-        result = await _transcribeViaWorker(workerUrl, chunkBytes, language, function(msg){
-          if (onProgress) onProgress(partTag + ' · ' + msg);
-        });
-      } catch (chunkErr) {
-        // Surface a Hebrew error that says exactly which chunk failed
-        var hint = (chunkErr.message === 'Failed to fetch')
-          ? ' (Cloudflare Worker חרג מ-CPU/RAM — אם זה ממשיך, החלף ל-Worker v4 שתומך ב-Uint8Array ישיר)'
+      // Up to 3 attempts per chunk with backoff — Cloudflare's free tier
+      // CPU/rate limits sometimes flake under load, but a brief pause and
+      // a retry usually clears it.
+      let result = null;
+      let lastErr = null;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        const tryTag = attempt === 1 ? partTag : partTag + ' · ניסיון ' + attempt + '/3';
+        if (onProgress) onProgress(tryTag + ' · שולח לענן…');
+        try {
+          result = await _transcribeViaWorker(workerUrl, chunkBytes, language, function(msg){
+            if (onProgress) onProgress(tryTag + ' · ' + msg);
+          });
+          break;
+        } catch (chunkErr) {
+          lastErr = chunkErr;
+          if (attempt < 3) {
+            if (onProgress) onProgress(partTag + ' · ⚠️ נכשל (' + chunkErr.message + ') — ממתין ' + (attempt * 3) + ' שנ׳ ומנסה שוב…');
+            await new Promise(function(r){ setTimeout(r, attempt * 3000); });
+          }
+        }
+      }
+      if (!result) {
+        var hint = (lastErr && lastErr.message === 'Failed to fetch')
+          ? ' (3 ניסיונות נכשלו · Cloudflare Worker מגיע ל-CPU limit · עדכון ל-Worker v4 יפתור סופית)'
           : '';
-        throw new Error('כשל בחלק ' + (i + 1) + '/' + boundaries.length + ': ' + chunkErr.message + hint);
+        throw new Error('כשל בחלק ' + (i + 1) + '/' + boundaries.length + ' אחרי 3 ניסיונות: ' + (lastErr ? lastErr.message : 'unknown') + hint);
       }
       allText.push((result.text || '').trim());
       if (Array.isArray(result.chunks)) {
@@ -1346,6 +1360,10 @@ self.onmessage = async function(e) {
             text: c.text
           });
         }
+      }
+      // Brief pacing between chunks to avoid edge rate-limit
+      if (i < boundaries.length - 1) {
+        await new Promise(function(r){ setTimeout(r, 800); });
       }
     }
     return { text: allText.filter(Boolean).join(' '), chunks: allChunks };
