@@ -258,52 +258,288 @@
       return 'p';
     }
 
-    // Convert lines into HTML, grouping consecutive paragraph lines into
-    // a single <p>, breaking paragraphs at large vertical gaps.
-    function _linesToHtml(lines, bodySize) {
-      if (!lines.length) return '';
-      var html = '';
-      var openTag = null;        // currently open block: 'p' / 'h1' / 'h2' / 'h3'
-      var openParts = [];        // accumulated lines for current block
-      var prevY = null;
-      var prevH = bodySize;
+    // ── List detection ────────────────────────────────────────────────
+    // Returns 'ul' if the line is a bullet, 'ol' if it's a numbered list
+    // item, or null otherwise. Patterns recognized for both English and
+    // Hebrew documents: bullet glyphs, "1." "2)" "12.", and "א." "ב)".
+    var _BULLET_RE = /^\s*([•·◦‣⁃●○▪▫■♦▶►–—\-*])\s+/;
+    var _NUMBER_RE = /^\s*(\d{1,3})[.)\]]\s+/;
+    var _HEB_NUM_RE = /^\s*([א-ת])[.)\]]\s+/;
 
-      function flush() {
-        if (!openTag || !openParts.length) { openTag = null; openParts = []; return; }
+    function _detectListType(line) {
+      if (!line.parts.length) return null;
+      var firstStr = line.parts[0].str || '';
+      if (_BULLET_RE.test(firstStr)) return 'ul';
+      if (_NUMBER_RE.test(firstStr)) return 'ol';
+      if (_HEB_NUM_RE.test(firstStr)) return 'ol';
+      return null;
+    }
+
+    function _stripListMarker(line) {
+      if (!line.parts.length) return line;
+      var p0 = line.parts[0];
+      var stripped = (p0.str || '').replace(_BULLET_RE, '')
+                                   .replace(_NUMBER_RE, '')
+                                   .replace(_HEB_NUM_RE, '');
+      if (stripped === p0.str) return line;
+      var newParts = line.parts.slice();
+      newParts[0] = Object.assign({}, p0, { str: stripped });
+      return Object.assign({}, line, { parts: newParts });
+    }
+
+    // ── Centered-line detection ───────────────────────────────────────
+    // True when the midpoint of the line's text rectangle is within ~8%
+    // of the page horizontal centerline. Used for centered headings.
+    function _isCentered(line, pageWidth) {
+      if (!line.parts.length || !pageWidth) return false;
+      var minX = Infinity, maxX = -Infinity;
+      line.parts.forEach(function(p) {
+        if (p.x < minX) minX = p.x;
+        var endX = p.x + (p.width || 0);
+        if (endX > maxX) maxX = endX;
+      });
+      if (!isFinite(minX) || !isFinite(maxX)) return false;
+      var lineMid = (minX + maxX) / 2;
+      var pageMid = pageWidth / 2;
+      // Also require the line not to span the full page (long paragraphs
+      // tend to be centered around the page center too).
+      var lineWidth = maxX - minX;
+      if (lineWidth > pageWidth * 0.7) return false;
+      return Math.abs(lineMid - pageMid) < pageWidth * 0.08;
+    }
+
+    // ── Image extraction via PDF.js operator list ─────────────────────
+    // We walk the page's drawing operations, tracking the current
+    // transformation matrix (CTM). Whenever we hit paintImageXObject we
+    // know the current CTM positions the unit square (0,0)-(1,1) where
+    // the image sits, so ctm[4]/ctm[5] is the bottom-left in user space
+    // and Math.abs(ctm[0])/Math.abs(ctm[3]) is the rendered size.
+    function _matMul(m1, m2) {
+      return [
+        m1[0]*m2[0] + m1[2]*m2[1],
+        m1[1]*m2[0] + m1[3]*m2[1],
+        m1[0]*m2[2] + m1[2]*m2[3],
+        m1[1]*m2[2] + m1[3]*m2[3],
+        m1[0]*m2[4] + m1[2]*m2[5] + m1[4],
+        m1[1]*m2[4] + m1[3]*m2[5] + m1[5]
+      ];
+    }
+
+    function _imgObjToDataUrl(img) {
+      if (!img || !img.width || !img.height) return null;
+      try {
+        var canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        var ctx = canvas.getContext('2d');
+        if (img.bitmap) {
+          ctx.drawImage(img.bitmap, 0, 0);
+        } else if (img.data) {
+          var imgData = ctx.createImageData(img.width, img.height);
+          var dst = imgData.data;
+          var src = img.data;
+          var kind = img.kind;
+          if (kind === 1) {
+            // Grayscale 8bpp
+            for (var i = 0, j = 0; i < src.length; i++, j += 4) {
+              dst[j] = dst[j+1] = dst[j+2] = src[i];
+              dst[j+3] = 255;
+            }
+          } else if (kind === 2) {
+            // RGB 24bpp
+            for (var i2 = 0, j2 = 0; i2 + 2 < src.length; i2 += 3, j2 += 4) {
+              dst[j2]   = src[i2];
+              dst[j2+1] = src[i2+1];
+              dst[j2+2] = src[i2+2];
+              dst[j2+3] = 255;
+            }
+          } else if (kind === 3) {
+            // RGBA 32bpp
+            var min = Math.min(src.length, dst.length);
+            for (var i3 = 0; i3 < min; i3++) dst[i3] = src[i3];
+          } else {
+            return null;
+          }
+          ctx.putImageData(imgData, 0, 0);
+        } else {
+          return null;
+        }
+        return canvas.toDataURL('image/png');
+      } catch (e) {
+        console.warn('[pdf2word] image decode failed:', e);
+        return null;
+      }
+    }
+
+    function _resolvePageObj(page, objId) {
+      return new Promise(function(resolve) {
+        try {
+          if (page.objs.has && page.objs.has(objId)) {
+            resolve(page.objs.get(objId));
+            return;
+          }
+          // Older API style: get(name, callback)
+          page.objs.get(objId, function(obj) { resolve(obj); });
+        } catch (e) { resolve(null); }
+      });
+    }
+
+    async function _extractPageImages(page) {
+      if (!window.pdfjsLib || !pdfjsLib.OPS) return [];
+      var OPS = pdfjsLib.OPS;
+      var opList;
+      try {
+        opList = await page.getOperatorList();
+      } catch (e) {
+        console.warn('[pdf2word] getOperatorList failed:', e);
+        return [];
+      }
+      var ctm = [1,0,0,1,0,0];
+      var stack = [];
+      var images = [];
+      for (var i = 0; i < opList.fnArray.length; i++) {
+        var op = opList.fnArray[i];
+        var args = opList.argsArray[i];
+        if (op === OPS.save) {
+          stack.push(ctm.slice());
+        } else if (op === OPS.restore) {
+          if (stack.length) ctm = stack.pop();
+        } else if (op === OPS.transform) {
+          ctm = _matMul(ctm, args);
+        } else if (op === OPS.paintImageXObject || op === OPS.paintImageMaskXObject) {
+          var objId = args[0];
+          var imgObj = await _resolvePageObj(page, objId);
+          if (imgObj) {
+            var dataUrl = _imgObjToDataUrl(imgObj);
+            if (dataUrl) {
+              images.push({
+                x: ctm[4],
+                y: ctm[5],
+                width: Math.abs(ctm[0]),
+                height: Math.abs(ctm[3]),
+                dataUrl: dataUrl
+              });
+            }
+          }
+        }
+      }
+      return images;
+    }
+
+    // Convert the lines and images of a page into HTML, interleaving
+    // images with text by Y coordinate so figures appear roughly in the
+    // same place as in the source document.
+    function _pageToHtml(lines, images, bodySize, pageWidth) {
+      var blocks = [];
+      images.forEach(function(im) {
+        blocks.push({ kind: 'image', y: im.y + im.height, image: im });
+      });
+      lines.forEach(function(L) {
+        blocks.push({ kind: 'line', y: L.y, line: L });
+      });
+      // PDF Y is bottom-up, so descending Y == top-to-bottom on screen.
+      blocks.sort(function(a, b) { return b.y - a.y; });
+
+      var html = '';
+      var openTag = null, openParts = [], openCentered = false;
+      var listType = null, listItems = [];
+      var prevY = null, prevH = bodySize;
+
+      function flushPara() {
+        if (!openTag || !openParts.length) { openTag = null; openParts = []; openCentered = false; return; }
         var inner = openParts.join('<br>');
         var style = 'unicode-bidi:plaintext;direction:auto;margin:0 0 8px;';
         if (openTag === 'p') style += 'line-height:1.7;';
+        if (openCentered) style += 'text-align:center;';
         html += '<' + openTag + ' style="' + style + '">' + inner + '</' + openTag + '>';
-        openTag = null;
-        openParts = [];
+        openTag = null; openParts = []; openCentered = false;
       }
+      function flushList() {
+        if (!listType || !listItems.length) { listType = null; listItems = []; return; }
+        var lis = listItems.map(function(it) {
+          return '<li style="unicode-bidi:plaintext;direction:auto;line-height:1.7;margin-bottom:4px;">' + it + '</li>';
+        }).join('');
+        html += '<' + listType + ' style="margin:8px 0;padding-right:28px;padding-left:0;">' + lis + '</' + listType + '>';
+        listType = null; listItems = [];
+      }
+      function flushAll() { flushPara(); flushList(); }
 
-      for (var i = 0; i < lines.length; i++) {
-        var L = lines[i];
-        var tag = _lineTag(L, bodySize);
-        var inlineHtml = _lineToHtml(L.parts, bodySize);
-        if (!inlineHtml.trim()) continue;
-
-        // Detect a paragraph break before this line: vertical gap larger
-        // than 1.4× the previous line's height ⇒ new block.
-        var gapBreak = false;
-        if (prevY !== null) {
-          var gap = prevY - L.y;          // top→bottom is positive in PDF
-          var threshold = prevH * 1.4;
-          if (gap > threshold) gapBreak = true;
+      blocks.forEach(function(b) {
+        if (b.kind === 'image') {
+          flushAll();
+          var im = b.image;
+          // Cap displayed width so giant scans don't blow out the page.
+          var aspect = im.width && im.height ? im.height / im.width : null;
+          var styleAttr = 'max-width:100%;height:auto;';
+          if (aspect) styleAttr += ' aspect-ratio:' + im.width + '/' + im.height + ';';
+          html += '<p style="text-align:center;margin:14px 0;"><img src="' + im.dataUrl + '" style="' + styleAttr + '" /></p>';
+          prevY = im.y;            // bottom of image
+          prevH = im.height;
+          return;
         }
 
-        if (openTag !== tag || gapBreak) {
-          flush();
+        var L = b.line;
+
+        // List handling first — bullet/number prefix on the line.
+        var lt = _detectListType(L);
+        if (lt) {
+          flushPara();
+          var stripped = _stripListMarker(L);
+          var liHtml = _lineToHtml(stripped.parts, bodySize);
+          if (!liHtml.trim()) return;
+          if (listType === lt) {
+            listItems.push(liHtml);
+          } else {
+            flushList();
+            listType = lt;
+            listItems = [liHtml];
+          }
+          prevY = L.y; prevH = L.h;
+          return;
+        }
+
+        // Continuation line of an active list (similar indent, no marker)
+        // — append to the last list item rather than break the list.
+        if (listType && listItems.length) {
+          var firstX = L.parts[0] ? L.parts[0].x : 0;
+          var prevListLineX = 0;       // approx — we don't track per-item
+          // For simplicity, only continue list if the line is within a
+          // small Y gap; otherwise close the list and treat as paragraph.
+          if (prevY !== null && (prevY - L.y) < prevH * 1.6) {
+            var contHtml = _lineToHtml(L.parts, bodySize);
+            if (contHtml.trim()) {
+              listItems[listItems.length - 1] += ' ' + contHtml;
+              prevY = L.y; prevH = L.h;
+              return;
+            }
+          }
+          flushList();
+        }
+
+        // Regular paragraph / heading block.
+        var tag = _lineTag(L, bodySize);
+        var centered = _isCentered(L, pageWidth);
+        var inlineHtml = _lineToHtml(L.parts, bodySize);
+        if (!inlineHtml.trim()) return;
+
+        var gapBreak = false;
+        if (prevY !== null) {
+          var gap = prevY - L.y;
+          if (gap > prevH * 1.4) gapBreak = true;
+        }
+
+        if (openTag !== tag || openCentered !== centered || gapBreak) {
+          flushPara();
           openTag = tag;
+          openCentered = centered;
           openParts = [inlineHtml];
         } else {
           openParts.push(inlineHtml);
         }
-        prevY = L.y;
-        prevH = L.h;
-      }
-      flush();
+        prevY = L.y; prevH = L.h;
+      });
+
+      flushAll();
       return html;
     }
 
@@ -320,26 +556,41 @@
         const n   = pdf.numPages;
         let html  = '';
 
-        // First pass: collect all items so we can compute a global body
-        // font size — using a per-document baseline gives stabler heading
-        // detection than a per-page baseline.
-        const perPageItems = [];
+        // First pass: collect text items, page widths, and embedded
+        // images. Three pieces of per-page data drive the second pass.
+        const perPageItems   = [];
+        const perPageImages  = [];
+        const perPageWidth   = [];
         for (let i = 1; i <= n; i++) {
-          bar.style.width = (5 + (i / n) * 40) + '%';
+          bar.style.width = (5 + (i / n) * 50) + '%';
+          status.textContent = 'מנתח עמוד ' + i + ' / ' + n + '…';
           const page    = await pdf.getPage(i);
           const content = await page.getTextContent();
           perPageItems.push(content.items);
+          // page.view = [x0, y0, x1, y1] in user-space units
+          var v = page.view || [0, 0, 612, 792];
+          perPageWidth.push(v[2] - v[0]);
+          // Image extraction is best-effort; if it fails the text still
+          // gets through.
+          try {
+            perPageImages.push(await _extractPageImages(page));
+          } catch (e) {
+            console.warn('[pdf2word] images for page ' + i + ':', e);
+            perPageImages.push([]);
+          }
         }
 
         const allItems = [].concat.apply([], perPageItems);
         const allLinesForBody = _buildLinesFromItems(allItems);
         const bodySize = _bodyFontSize(allLinesForBody);
 
-        // Second pass: build per-page HTML using the global body size.
+        // Second pass: build per-page HTML using the global body size,
+        // interleaving text and images by Y coordinate.
+        status.textContent = 'בונה את מסמך ה-Word…';
         for (let i = 1; i <= n; i++) {
-          bar.style.width = (45 + (i / n) * 50) + '%';
+          bar.style.width = (55 + (i / n) * 40) + '%';
           const lines = _buildLinesFromItems(perPageItems[i - 1]);
-          const pageHtml = _linesToHtml(lines, bodySize);
+          const pageHtml = _pageToHtml(lines, perPageImages[i - 1], bodySize, perPageWidth[i - 1]);
           if (n > 1) {
             html += '<p style="font-size:11px;color:#888;text-align:center;margin:20px 0 10px;direction:ltr;">— page ' + i + ' / ' + n + ' —</p>';
           }
@@ -410,7 +661,7 @@
       ]),
       fileInput, zone, status, bar,
       App.el('p', { style: { fontSize: '12px', color: 'var(--ink-mute)', margin: '10px 0 0', lineHeight: '1.6' } },
-        '✨ משמר מבנה: שורות, פסקאות, כותרות (לפי גודל פונט), Bold/Italic. תמונות, טבלאות מורכבות וצורות גרפיות לא נכללות.')
+        '✨ משמר מבנה: שורות, פסקאות, כותרות, רשימות (• / 1.), כותרות ממורכזות, Bold/Italic, ותמונות מוטמעות (PNG/JPEG). טבלאות מורכבות וצורות גרפיות עדיין לא נתמכות.')
     ]);
   }
 
