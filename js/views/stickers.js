@@ -1664,11 +1664,10 @@ self.onmessage = async function(e) {
   // and writes a WebM (or MP4 where the browser supports it) for the slice.
   // Real-time bound: a 5-min slice takes 5 minutes of wall clock to record.
   // ── ffmpeg.wasm loader (lazy: only loads when first used) ────────────────
-  // Single-threaded core for GitHub Pages compatibility (no SharedArrayBuffer).
-  // All cross-origin assets (including the worker JS chunk that ffmpeg spawns
-  // internally) are pre-fetched and converted to same-origin Blob URLs via
-  // toBlobURL, otherwise the browser blocks `new Worker()` with
-  // "Script ... cannot be accessed from origin ...".
+  // Files are SELF-HOSTED in /vendor/ffmpeg/ — same origin as the page,
+  // which avoids the entire null-origin / blob URL / cross-origin Worker
+  // mess that broke earlier attempts (importScripts inside a blob-URL Worker
+  // can't reach cross-origin scripts on most browsers).
   let _ffmpegInstance = null;
   let _ffmpegLoading = null;
   async function _loadFfmpeg(onProgress) {
@@ -1685,38 +1684,28 @@ self.onmessage = async function(e) {
         });
       }
 
-      const ffmpegBaseURL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd';
-      const coreBaseURL   = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd';
-      const utilBaseURL   = 'https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/dist/umd';
+      // Resolve repo-local paths regardless of where the page itself was
+      // loaded from (works for /, /index.html, /#/stickers, etc.)
+      const here = location.href.replace(/#.*$/, '').replace(/\?.*$/, '');
+      const dir  = here.replace(/[^/]*$/, '');         // strip filename if any
+      const vendorBase = dir + 'vendor/ffmpeg/';
 
-      if (onProgress) onProgress('טוען ffmpeg.wasm (פעם אחת, ~30MB)…');
-      if (!window.FFmpegWASM) await loadScript(ffmpegBaseURL + '/ffmpeg.js');
-      if (!window.FFmpegUtil) await loadScript(utilBaseURL + '/index.js');
+      if (onProgress) onProgress('טוען ffmpeg.wasm מהריפו (~30MB, פעם אחת, נשמר ב-cache)…');
+      if (!window.FFmpegWASM) await loadScript(vendorBase + 'ffmpeg.js');
+      if (!window.FFmpegUtil) await loadScript(vendorBase + 'util.js');
 
-      const FFmpeg    = window.FFmpegWASM && window.FFmpegWASM.FFmpeg;
-      const toBlobURL = window.FFmpegUtil && window.FFmpegUtil.toBlobURL;
-      if (!FFmpeg)    throw new Error('FFmpeg class לא נטען');
-      if (!toBlobURL) throw new Error('toBlobURL לא נטען (חבילת @ffmpeg/util)');
+      const FFmpeg = window.FFmpegWASM && window.FFmpegWASM.FFmpeg;
+      if (!FFmpeg) throw new Error('FFmpeg class לא נטען מ-' + vendorBase + 'ffmpeg.js');
 
       const ffmpeg = new FFmpeg();
       ffmpeg.on('log', function(e){ if (e && e.message) console.log('[ffmpeg]', e.message); });
 
-      if (onProgress) onProgress('מוריד core + worker (~25MB) ועוטף ב-Blob URLs לעקיפת CORS…');
-
-      // Pre-fetch all cross-origin assets and wrap as Blob URLs so the
-      // internally-spawned Worker passes browser same-origin checks.
-      const results = await Promise.all([
-        toBlobURL(coreBaseURL   + '/ffmpeg-core.js',   'text/javascript'),
-        toBlobURL(coreBaseURL   + '/ffmpeg-core.wasm', 'application/wasm'),
-        toBlobURL(ffmpegBaseURL + '/814.ffmpeg.js',    'text/javascript')
-      ]);
-      const coreURL = results[0], wasmURL = results[1], workerURL = results[2];
-
-      if (onProgress) onProgress('מאתחל ffmpeg…');
+      if (onProgress) onProgress('מאתחל ffmpeg core (single-threaded)…');
+      // All paths are now same-origin → no Blob URL gymnastics needed.
       await ffmpeg.load({
-        coreURL:        coreURL,
-        wasmURL:        wasmURL,
-        classWorkerURL: workerURL
+        coreURL:        vendorBase + 'ffmpeg-core.js',
+        wasmURL:        vendorBase + 'ffmpeg-core.wasm',
+        classWorkerURL: vendorBase + '814.ffmpeg.js'
       });
 
       _ffmpegInstance = ffmpeg;
@@ -3086,7 +3075,7 @@ self.onmessage = async function(e) {
     const videoCutSection = App.el('div', {
       style: { marginTop: '20px', paddingTop: '18px', borderTop: '1px solid var(--line)' }
     }, [
-      _stepHeader('🎬', 'חיתוך וידאו (וידאו+קול) · v10 (per-stage errors)', '#5ba3d0'),
+      _stepHeader('🎬', 'חיתוך וידאו (וידאו+קול) · v11 (self-hosted ffmpeg)', '#5ba3d0'),
       _stepHowto([
         'גרור קובץ <b>MP4 / WebM / MOV</b> לתיבה למטה (וידאו עם פסקול)',
         'הוסף טווחי זמן <b>בכל אורך</b>. דוגמאות: <code style="background:#eee;padding:1px 4px;border-radius:3px;">2:00</code>–<code style="background:#eee;padding:1px 4px;border-radius:3px;">5:00</code> · <code style="background:#eee;padding:1px 4px;border-radius:3px;">10:00</code>–<code style="background:#eee;padding:1px 4px;border-radius:3px;">50:00</code> · <code style="background:#eee;padding:1px 4px;border-radius:3px;">5:00</code>–<code style="background:#eee;padding:1px 4px;border-radius:3px;">1:35:00</code>. אין מקסימום — מותר עד אורך הקובץ',
