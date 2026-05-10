@@ -3428,11 +3428,16 @@ self.onmessage = async function(e) {
 
   // ── Page hero ─────────────────────────────────────────────────────────────
   function buildHero() {
+    // Order chosen so that with default LTR flex rendering the visual
+    // sequence right-to-left matches the workflow numbering the user
+    // marked: 1=Word→PDF on the right, 4=תמלול וידאו on the left.
+    // (We can't rely on direction:rtl propagating through inline styles —
+    // the surrounding layout sets the document direction differently.)
     const tools = [
-      { icon: '📝', label: 'Word → PDF',     bg: 'linear-gradient(135deg,#FADADD,#F3B7BD)' },
-      { icon: '📄', label: 'PDF → Word',     bg: 'linear-gradient(135deg,#E6DDF4,#C9B8E3)' },
-      { icon: '🌐', label: 'תרגום PDF',      bg: 'linear-gradient(135deg,#FFF3C4,#F5DF8C)' },
-      { icon: '🎙', label: 'תמלול וידאו',    bg: 'linear-gradient(135deg,#CFE4F7,#A9CEEE)' }
+      { icon: '🎙', label: 'תמלול וידאו',    bg: 'linear-gradient(135deg,#CFE4F7,#A9CEEE)' }, // leftmost (4)
+      { icon: '🌐', label: 'תרגום PDF',      bg: 'linear-gradient(135deg,#FFF3C4,#F5DF8C)' }, // (3)
+      { icon: '📄', label: 'PDF → Word',     bg: 'linear-gradient(135deg,#E6DDF4,#C9B8E3)' }, // (2)
+      { icon: '📝', label: 'Word → PDF',     bg: 'linear-gradient(135deg,#FADADD,#F3B7BD)' }  // rightmost (1)
     ];
 
     const chips = tools.map(function(t) {
@@ -3457,10 +3462,8 @@ self.onmessage = async function(e) {
     });
 
     return App.el('div', {
-      // direction:rtl makes flex-row place the first array item on the
-      // right (matching the workflow numbering 1=Word→PDF on the right).
       style: {
-        position: 'relative', overflow: 'hidden', direction: 'rtl',
+        position: 'relative', overflow: 'hidden',
         background: 'linear-gradient(135deg,#FAF6F0 0%,#FFE9DA 35%,#E6DDF4 70%,#CFE4F7 100%)',
         borderRadius: 'var(--r-lg)',
         padding: '32px 36px',
@@ -3477,8 +3480,10 @@ self.onmessage = async function(e) {
         style: { fontSize: '14.5px', color: 'var(--ink-soft)', marginBottom: '18px',
                  lineHeight: '1.6', maxWidth: '640px', textAlign: 'right' }
       }, 'המרה, תרגום ותמלול בעברית — כל הכלים רצים ישר בדפדפן או בענן, בלי להעלות קבצים לאן שלא צריך.'),
+      // Chips justified to the right so the rightmost chip (last in the
+      // array → Word→PDF) sits flush against the right edge of the hero.
       App.el('div', {
-        style: { display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'flex-start' }
+        style: { display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'flex-end' }
       }, chips)
     ]);
   }
