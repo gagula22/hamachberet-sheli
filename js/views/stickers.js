@@ -1802,92 +1802,134 @@ self.onmessage = async function(e) {
     return blob;
   }
 
-  async function _cutVideoClip(file, startSec, endSec, onProgress) {
-    // Use ffmpeg.wasm with stream copy — completes in seconds, not real time.
-    const ffmpeg = await _loadFfmpeg(onProgress);
-
-    const ext = ((file.name.match(/\.[^.]+$/) || ['.mp4'])[0]).toLowerCase();
-    const inputName = 'cut_input' + ext;
-    const outputName = 'cut_output.mp4';
-
-    if (onProgress) onProgress('מעלה ל-ffmpeg ' + (file.size / 1024 / 1024).toFixed(1) + ' MB…');
-    const buf = new Uint8Array(await file.arrayBuffer());
-    await ffmpeg.writeFile(inputName, buf);
-
-    const duration = endSec - startSec;
-    const onProg = function(e) {
-      if (e && typeof e.progress === 'number') {
-        const pct = Math.max(0, Math.min(100, e.progress * 100));
-        if (onProgress) onProgress('חותך: ' + pct.toFixed(0) + '%');
-      }
-    };
-    ffmpeg.on('progress', onProg);
-
-    function cleanup() {
-      try { ffmpeg.off('progress', onProg); } catch (_) {}
-      try { ffmpeg.deleteFile(inputName); } catch (_) {}
-      try { ffmpeg.deleteFile(outputName); } catch (_) {}
+  // Helper: extract every available shred of info from an error object
+  function _explainErr(err) {
+    if (!err) return '(שגיאה ריקה — נזרק null/undefined)';
+    if (typeof err === 'string') return err;
+    if (typeof err === 'number') return 'exit code ' + err;
+    const bits = [];
+    if (err.message && err.message !== 'undefined') bits.push(err.message);
+    if (err.name && err.name !== 'Error' && err.name !== err.message) bits.push('[' + err.name + ']');
+    if (err.code) bits.push('code=' + err.code);
+    if (err.stack && bits.length === 0) bits.push(err.stack.split('\n')[0]);
+    if (!bits.length) {
+      try {
+        const j = JSON.stringify(err);
+        if (j && j !== '{}' && j !== '"undefined"' && j !== 'null') bits.push(j);
+      } catch (_) {}
     }
+    return bits.length ? bits.join(' · ') : '(אובייקט שגיאה ריק — בדוק Console לפרטים מלאים)';
+  }
+
+  async function _cutVideoClip(file, startSec, endSec, onProgress) {
+    // Track every stage so on failure the error message names exactly where
+    // the run died. ffmpeg.wasm sometimes throws shapes without a message,
+    // so the stage name itself is the most reliable diagnostic.
+    let stage = 'init';
 
     try {
-      // Stream copy first (fast, lossless). Input-side -ss is fast but seeks
-      // to nearest keyframe — for cuts of seconds-long this is fine.
-      if (onProgress) onProgress('מבצע חיתוך מהיר (stream copy, ללא re-encoding)…');
-      let firstErrInfo = null;
+      stage = '1/5 טעינת ffmpeg.wasm';
+      if (onProgress) onProgress('שלב 1/5: טוען ffmpeg.wasm…');
+      const ffmpeg = await _loadFfmpeg(onProgress);
+
+      const ext = ((file.name.match(/\.[^.]+$/) || ['.mp4'])[0]).toLowerCase();
+      const inputName = 'cut_input' + ext;
+      const outputName = 'cut_output.mp4';
+
+      stage = '2/5 העלאת הקובץ ל-ffmpeg FS';
+      if (onProgress) onProgress('שלב 2/5: מעלה ל-ffmpeg ' + (file.size / 1024 / 1024).toFixed(1) + ' MB…');
+      const buf = new Uint8Array(await file.arrayBuffer());
+      await ffmpeg.writeFile(inputName, buf);
+
+      const duration = endSec - startSec;
+      const onProg = function(e) {
+        if (e && typeof e.progress === 'number') {
+          const pct = Math.max(0, Math.min(100, e.progress * 100));
+          if (onProgress) onProgress('שלב 3/5: חותך · ' + pct.toFixed(0) + '%');
+        }
+      };
+      ffmpeg.on('progress', onProg);
+
+      function cleanup() {
+        try { ffmpeg.off('progress', onProg); } catch (_) {}
+        try { ffmpeg.deleteFile(inputName); } catch (_) {}
+        try { ffmpeg.deleteFile(outputName); } catch (_) {}
+      }
+
       try {
-        await ffmpeg.exec([
-          '-ss', String(startSec),
-          '-i', inputName,
-          '-t', String(duration),
-          '-c', 'copy',
-          '-avoid_negative_ts', 'make_zero',
-          '-movflags', '+faststart',
-          outputName
-        ]);
-      } catch (firstErr) {
-        firstErrInfo = firstErr;
-        console.warn('[video cut] stream copy failed, trying re-encode:', firstErr);
-        if (onProgress) onProgress('stream copy נכשל — re-encoding (איטי יותר)…');
+        stage = '3a/5 stream copy (חיתוך ללא re-encoding)';
+        if (onProgress) onProgress('שלב 3/5: מבצע stream copy (העתקת בייטים, מהיר)…');
+        let firstErrInfo = null;
         try {
           await ffmpeg.exec([
-            '-i', inputName,
             '-ss', String(startSec),
+            '-i', inputName,
             '-t', String(duration),
-            '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23',
-            '-c:a', 'aac', '-b:a', '128k',
+            '-c', 'copy',
+            '-avoid_negative_ts', 'make_zero',
             '-movflags', '+faststart',
             outputName
           ]);
-        } catch (secondErr) {
-          console.error('[video cut] both stream copy AND re-encode failed', { firstErr, secondErr });
-          throw new Error(
-            'ffmpeg חיתוך נכשל. stream copy: ' + (firstErrInfo && firstErrInfo.message ? firstErrInfo.message : 'unknown') +
-            ' · re-encode: ' + (secondErr && secondErr.message ? secondErr.message : 'unknown')
-          );
+        } catch (firstErr) {
+          firstErrInfo = firstErr;
+          console.warn('[video cut] stream copy failed:', firstErr);
+          stage = '3b/5 re-encoding ב-libx264 (אחרי כשל stream copy)';
+          if (onProgress) onProgress('שלב 3/5: stream copy נכשל (' + _explainErr(firstErr) + ') · עובר ל-re-encoding…');
+          try {
+            await ffmpeg.exec([
+              '-i', inputName,
+              '-ss', String(startSec),
+              '-t', String(duration),
+              '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23',
+              '-c:a', 'aac', '-b:a', '128k',
+              '-movflags', '+faststart',
+              outputName
+            ]);
+          } catch (secondErr) {
+            console.error('[video cut] both stream copy AND re-encode failed', { firstErr, secondErr });
+            throw new Error(
+              'שני נסיונות החיתוך נכשלו. ' +
+              'stream copy: ' + _explainErr(firstErrInfo) + ' · ' +
+              're-encode: ' + _explainErr(secondErr)
+            );
+          }
         }
-      }
 
-      if (onProgress) onProgress('קורא קובץ פלט…');
-      let data;
-      try {
-        data = await ffmpeg.readFile(outputName);
-      } catch (readErr) {
-        throw new Error('ffmpeg רץ אבל הקובץ הסופי לא נוצר: ' + (readErr && readErr.message ? readErr.message : 'unknown'));
+        stage = '4/5 קריאת קובץ הפלט מ-ffmpeg FS';
+        if (onProgress) onProgress('שלב 4/5: קורא קובץ פלט…');
+        let data;
+        try {
+          data = await ffmpeg.readFile(outputName);
+        } catch (readErr) {
+          throw new Error('ffmpeg רץ אבל לא יצר קובץ פלט: ' + _explainErr(readErr) +
+            ' (נראה ש-ffmpeg החזיר exit code שאינו 0)');
+        }
+        if (!data || (data.byteLength === 0 && (!data.buffer || data.buffer.byteLength === 0))) {
+          throw new Error('ffmpeg יצר קובץ ריק (0 בייטים). הסיבה הסבירה: codec של MP4 שלא נתמך, או הטווח שביקשת מחוץ לתחום הקובץ.');
+        }
+
+        stage = '5/5 בניית Blob';
+        const blob = new Blob([data.buffer || data], { type: 'video/mp4' });
+        cleanup();
+        return {
+          blob: blob,
+          ext: '.mp4',
+          mimeType: 'video/mp4',
+          sizeMB: (blob.size / 1024 / 1024).toFixed(1)
+        };
+      } catch (e) {
+        cleanup();
+        throw e;
       }
-      if (!data || (data.byteLength === 0 && (!data.buffer || data.buffer.byteLength === 0))) {
-        throw new Error('ffmpeg יצר קובץ ריק (0 בייטים) — קודקים לא נתמכים? נסה קובץ אחר');
-      }
-      const blob = new Blob([data.buffer || data], { type: 'video/mp4' });
-      cleanup();
-      return {
-        blob: blob,
-        ext: '.mp4',
-        mimeType: 'video/mp4',
-        sizeMB: (blob.size / 1024 / 1024).toFixed(1)
-      };
-    } catch (e) {
-      cleanup();
-      throw e;
+    } catch (outerErr) {
+      // Wrap every error with the stage name so the caller knows what failed
+      console.error('[video cut v9] failed at stage:', stage, 'error:', outerErr);
+      const explained = _explainErr(outerErr);
+      const msg = 'נכשל ב' + stage + ': ' + explained;
+      const wrapped = new Error(msg);
+      wrapped.stage = stage;
+      wrapped.original = outerErr;
+      throw wrapped;
     }
   }
 
@@ -3026,31 +3068,13 @@ self.onmessage = async function(e) {
         }
         _vcStatus('✓ נשמרו ' + saved + '/' + ranges.length + ' קליפי וידאו' + (cancelled ? ' · ' + cancelled + ' ביטולים' : ''), '#2d7a2d');
       } catch (err) {
-        // Aggressive error extraction — ffmpeg.wasm can throw weird shapes
-        console.error('[video cut v9] full error:', err);
-        console.error('[video cut v9] err.message:', err && err.message);
-        console.error('[video cut v9] err.name:', err && err.name);
-        console.error('[video cut v9] typeof:', typeof err);
-        try { console.error('[video cut v9] JSON:', JSON.stringify(err)); } catch (_) {}
-
-        const parts = [];
-        if (err) {
-          if (err.message && err.message !== 'undefined') parts.push(err.message);
-          if (err.name && err.name !== 'Error' && err.name !== err.message) parts.push('[' + err.name + ']');
-          if (typeof err === 'string') parts.push(err);
-          if (typeof err === 'number') parts.push('exit code ' + err);
-          if (!parts.length) {
-            try {
-              const j = JSON.stringify(err);
-              if (j && j !== '{}' && j !== '"undefined"') parts.push(j);
-            } catch (_) {}
-          }
-        }
-        let msg = parts.join(' ').trim();
-        if (!msg || msg === 'undefined') {
-          msg = 'ffmpeg חתך וזרק שגיאה ללא טקסט. פתח F12 → Console — שם רשמתי לוגים מפורטים. הסיבות הנפוצות: (1) הקובץ MP4 עם codec לא נתמך ע״י stream copy, (2) ffmpeg.wasm לא הצליח לטעון את ה-Worker ב-blob URL';
-        }
-        _vcStatus('❌ ' + msg, '#c00');
+        // _cutVideoClip wraps every failure with its stage name and a helpful
+        // explanation, so err.message should already be informative.
+        console.error('[video cut v9] failed:', err);
+        console.error('[video cut v9] stage:', err && err.stage);
+        console.error('[video cut v9] original:', err && err.original);
+        const display = _explainErr(err);
+        _vcStatus('❌ ' + display, '#c00');
       } finally {
         _vcRunning = false;
         vcGoBtn.disabled = false;
@@ -3062,7 +3086,7 @@ self.onmessage = async function(e) {
     const videoCutSection = App.el('div', {
       style: { marginTop: '20px', paddingTop: '18px', borderTop: '1px solid var(--line)' }
     }, [
-      _stepHeader('🎬', 'חיתוך וידאו (וידאו+קול) · v9', '#5ba3d0'),
+      _stepHeader('🎬', 'חיתוך וידאו (וידאו+קול) · v10 (per-stage errors)', '#5ba3d0'),
       _stepHowto([
         'גרור קובץ <b>MP4 / WebM / MOV</b> לתיבה למטה (וידאו עם פסקול)',
         'הוסף טווחי זמן <b>בכל אורך</b>. דוגמאות: <code style="background:#eee;padding:1px 4px;border-radius:3px;">2:00</code>–<code style="background:#eee;padding:1px 4px;border-radius:3px;">5:00</code> · <code style="background:#eee;padding:1px 4px;border-radius:3px;">10:00</code>–<code style="background:#eee;padding:1px 4px;border-radius:3px;">50:00</code> · <code style="background:#eee;padding:1px 4px;border-radius:3px;">5:00</code>–<code style="background:#eee;padding:1px 4px;border-radius:3px;">1:35:00</code>. אין מקסימום — מותר עד אורך הקובץ',
