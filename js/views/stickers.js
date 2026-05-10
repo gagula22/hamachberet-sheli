@@ -3428,37 +3428,74 @@ self.onmessage = async function(e) {
 
   // ── Page hero ─────────────────────────────────────────────────────────────
   function buildHero() {
+    // Each chip jumps to the corresponding tool card via #anchor.
     // Order chosen so that with default LTR flex rendering the visual
-    // sequence right-to-left matches the workflow numbering the user
-    // marked: 1=Word→PDF on the right, 4=תמלול וידאו on the left.
-    // (We can't rely on direction:rtl propagating through inline styles —
-    // the surrounding layout sets the document direction differently.)
+    // sequence right-to-left matches the workflow numbering: 1=Word→PDF
+    // on the right, 4=תמלול וידאו on the left.
     const tools = [
-      { icon: '🎙', label: 'תמלול וידאו',    bg: 'linear-gradient(135deg,#CFE4F7,#A9CEEE)' }, // leftmost (4)
-      { icon: '🌐', label: 'תרגום PDF',      bg: 'linear-gradient(135deg,#FFF3C4,#F5DF8C)' }, // (3)
-      { icon: '📄', label: 'PDF → Word',     bg: 'linear-gradient(135deg,#E6DDF4,#C9B8E3)' }, // (2)
-      { icon: '📝', label: 'Word → PDF',     bg: 'linear-gradient(135deg,#FADADD,#F3B7BD)' }  // rightmost (1)
+      { icon: '🎙', label: 'תמלול וידאו',  bg: 'linear-gradient(135deg,#CFE4F7,#A9CEEE)', target: 'tool-vtr' },
+      { icon: '🌐', label: 'תרגום PDF',    bg: 'linear-gradient(135deg,#FFF3C4,#F5DF8C)', target: 'tool-ptr' },
+      { icon: '📄', label: 'PDF → Word',   bg: 'linear-gradient(135deg,#E6DDF4,#C9B8E3)', target: 'tool-p2w' },
+      { icon: '📝', label: 'Word → PDF',   bg: 'linear-gradient(135deg,#FADADD,#F3B7BD)', target: 'tool-w2p' }
     ];
 
+    function _scrollToCard(id) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      // Brief highlight pulse so the user can see which card they landed on.
+      var prevBoxShadow = el.style.boxShadow;
+      var prevTransition = el.style.transition;
+      el.style.transition = 'box-shadow 200ms ease-out';
+      el.style.boxShadow = '0 0 0 3px rgba(169,206,238,.55), var(--shadow)';
+      setTimeout(function(){
+        el.style.boxShadow = prevBoxShadow;
+        setTimeout(function(){ el.style.transition = prevTransition; }, 220);
+      }, 900);
+    }
+
     const chips = tools.map(function(t) {
-      return App.el('div', {
-        style: {
-          display: 'inline-flex', alignItems: 'center', gap: '8px',
-          padding: '8px 14px', borderRadius: '999px',
-          background: 'rgba(255,255,255,.7)', border: '1px solid var(--line)',
-          fontSize: '13px', fontWeight: '600', color: 'var(--ink)',
-          backdropFilter: 'blur(4px)'
-        }
-      }, [
-        App.el('span', {
-          style: {
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            width: '24px', height: '24px', borderRadius: '50%',
-            background: t.bg, fontSize: '13px'
-          }
-        }, t.icon),
-        App.el('span', {}, t.label)
-      ]);
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.style.cssText = [
+        'display:inline-flex',
+        'align-items:center',
+        'gap:8px',
+        'padding:8px 14px',
+        'border-radius:999px',
+        'background:rgba(255,255,255,.75)',
+        'border:1px solid var(--line)',
+        'font-size:13px',
+        'font-weight:600',
+        'color:var(--ink)',
+        'cursor:pointer',
+        'font-family:inherit',
+        'transition:transform 160ms ease-out, box-shadow 160ms ease-out, background 160ms'
+      ].join(';');
+
+      var iconSpan = document.createElement('span');
+      iconSpan.textContent = t.icon;
+      iconSpan.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:' + t.bg + ';font-size:13px;';
+
+      var labelSpan = document.createElement('span');
+      labelSpan.textContent = t.label;
+
+      btn.appendChild(iconSpan);
+      btn.appendChild(labelSpan);
+
+      btn.onmouseover = function(){
+        btn.style.background = '#fff';
+        btn.style.transform = 'translateY(-1px)';
+        btn.style.boxShadow = '0 4px 12px rgba(60,50,40,.10)';
+      };
+      btn.onmouseout = function(){
+        btn.style.background = 'rgba(255,255,255,.75)';
+        btn.style.transform = 'translateY(0)';
+        btn.style.boxShadow = 'none';
+      };
+      btn.onclick = function(){ _scrollToCard(t.target); };
+
+      return btn;
     });
 
     return App.el('div', {
@@ -3510,6 +3547,17 @@ self.onmessage = async function(e) {
     const p2w = buildPdfToWord();
     const ptr = buildPdfTranslator();
     const vtr = buildVideoTranscriber();
+
+    // IDs are the scroll targets for the hero chips.
+    w2p.id = 'tool-w2p';
+    p2w.id = 'tool-p2w';
+    ptr.id = 'tool-ptr';
+    vtr.id = 'tool-vtr';
+    // Add scroll-margin-top so the sticky header doesn't cover the card
+    // when scrollIntoView lands on it.
+    [w2p, p2w, ptr, vtr].forEach(function(c) {
+      c.style.scrollMarginTop = '24px';
+    });
 
     _wrapWithAccent(w2p, 'linear-gradient(90deg,#FADADD,#F3B7BD)');
     _wrapWithAccent(p2w, 'linear-gradient(90deg,#E6DDF4,#C9B8E3)');
