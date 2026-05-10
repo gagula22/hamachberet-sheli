@@ -1,7 +1,10 @@
-/* ── Page-level zoom: entire page scales as ONE unit, no per-component reflow ── */
-html {
-  zoom: 0.8;            /* scale everything uniformly — like browser 80% zoom   */
-  min-width: 1280px;    /* prevent inner collapse; scrollbar appears if needed   */
+/* ── Page-level zoom: entire page scales as ONE unit, no per-component reflow ──
+   Desktop only — on mobile the device viewport is the source of truth.        */
+@media (min-width: 901px) {
+  html {
+    zoom: 0.8;            /* scale everything uniformly — like browser 80% zoom   */
+    min-width: 1280px;    /* prevent inner collapse; scrollbar appears if needed   */
+  }
 }
 
 body {
@@ -170,6 +173,28 @@ body {
   animation: fadeIn 180ms ease-out;
 }
 body.nav-open .nav-overlay { display: block; }
+
+/* ── Mobile safety: prevent any element from causing horizontal scroll ── */
+@media (max-width: 900px) {
+  html, body { overflow-x: hidden; max-width: 100vw; }
+  /* Guard the main column so wide children (tables, images, code blocks) don't
+     blow out the viewport. Keeps the page width to the device width on Android. */
+  .main, .view { max-width: 100%; min-width: 0; }
+  .view > * { max-width: 100%; }
+  /* Long words and URLs wrap instead of stretching the page */
+  .view, .card, .note-body, .nb-editor { overflow-wrap: anywhere; word-break: break-word; }
+  /* Tables inside notebook editor: scroll horizontally inside the card,
+     not the whole page */
+  .nb-editor table, .note-body table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  /* Images in notebooks scale down to the column width */
+  figure.nb-img { max-width: 100% !important; width: auto; }
+  figure.nb-img img { max-width: 100%; height: auto; }
+}
 
 /* ── Bottom navigation bar ───────────────────────────────────────────── */
 .bottom-nav { display: none; }

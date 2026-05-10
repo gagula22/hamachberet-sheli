@@ -954,9 +954,15 @@ figure.nb-img.nb-img-dragging { opacity: 0.35; pointer-events: none; }
   .card h2 { font-size: 17px; margin-bottom: var(--sp-2); }
   .card h3 { font-size: 14px; }
 
-  /* ── Grids ── */
+  /* ── Grids ──
+     Override inline `style="grid-template-columns: 2fr 1fr"` from views like
+     todos.js + budget.js. On a phone there's no room for 2 columns. */
+  .grid                    { grid-template-columns: 1fr !important; }
+  .grid-2, .grid-3         { grid-template-columns: 1fr !important; }
   .grid-4 { grid-template-columns: repeat(2, 1fr); }
   .grid-6 { grid-template-columns: repeat(3, 1fr); }
+  /* Notes layout: tighter spacing on phone */
+  .notes-layout { gap: var(--sp-3); }
 
   /* ── Stats ── */
   .stat { min-height: 88px; padding: var(--sp-3) var(--sp-4); }
