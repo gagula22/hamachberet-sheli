@@ -3026,16 +3026,29 @@ self.onmessage = async function(e) {
         }
         _vcStatus('✓ נשמרו ' + saved + '/' + ranges.length + ' קליפי וידאו' + (cancelled ? ' · ' + cancelled + ' ביטולים' : ''), '#2d7a2d');
       } catch (err) {
-        // Surface the most informative form of the error — ffmpeg sometimes
-        // throws non-Error objects with no `message` field.
-        console.error('[video cut] full error:', err);
-        var msg;
-        if (err && err.message) msg = err.message;
-        else if (err && err.name) msg = err.name;
-        else if (typeof err === 'string') msg = err;
-        else { try { msg = JSON.stringify(err); } catch(_) { msg = String(err); } }
-        if (!msg || msg === '{}' || msg === 'undefined') {
-          msg = 'ffmpeg זרק שגיאה ללא הודעה — בדוק Console (F12) לפרטים מלאים';
+        // Aggressive error extraction — ffmpeg.wasm can throw weird shapes
+        console.error('[video cut v9] full error:', err);
+        console.error('[video cut v9] err.message:', err && err.message);
+        console.error('[video cut v9] err.name:', err && err.name);
+        console.error('[video cut v9] typeof:', typeof err);
+        try { console.error('[video cut v9] JSON:', JSON.stringify(err)); } catch (_) {}
+
+        const parts = [];
+        if (err) {
+          if (err.message && err.message !== 'undefined') parts.push(err.message);
+          if (err.name && err.name !== 'Error' && err.name !== err.message) parts.push('[' + err.name + ']');
+          if (typeof err === 'string') parts.push(err);
+          if (typeof err === 'number') parts.push('exit code ' + err);
+          if (!parts.length) {
+            try {
+              const j = JSON.stringify(err);
+              if (j && j !== '{}' && j !== '"undefined"') parts.push(j);
+            } catch (_) {}
+          }
+        }
+        let msg = parts.join(' ').trim();
+        if (!msg || msg === 'undefined') {
+          msg = 'ffmpeg חתך וזרק שגיאה ללא טקסט. פתח F12 → Console — שם רשמתי לוגים מפורטים. הסיבות הנפוצות: (1) הקובץ MP4 עם codec לא נתמך ע״י stream copy, (2) ffmpeg.wasm לא הצליח לטעון את ה-Worker ב-blob URL';
         }
         _vcStatus('❌ ' + msg, '#c00');
       } finally {
@@ -3049,7 +3062,7 @@ self.onmessage = async function(e) {
     const videoCutSection = App.el('div', {
       style: { marginTop: '20px', paddingTop: '18px', borderTop: '1px solid var(--line)' }
     }, [
-      _stepHeader('🎬', 'חיתוך וידאו (וידאו+קול)', '#5ba3d0'),
+      _stepHeader('🎬', 'חיתוך וידאו (וידאו+קול) · v9', '#5ba3d0'),
       _stepHowto([
         'גרור קובץ <b>MP4 / WebM / MOV</b> לתיבה למטה (וידאו עם פסקול)',
         'הוסף טווחי זמן <b>בכל אורך</b>. דוגמאות: <code style="background:#eee;padding:1px 4px;border-radius:3px;">2:00</code>–<code style="background:#eee;padding:1px 4px;border-radius:3px;">5:00</code> · <code style="background:#eee;padding:1px 4px;border-radius:3px;">10:00</code>–<code style="background:#eee;padding:1px 4px;border-radius:3px;">50:00</code> · <code style="background:#eee;padding:1px 4px;border-radius:3px;">5:00</code>–<code style="background:#eee;padding:1px 4px;border-radius:3px;">1:35:00</code>. אין מקסימום — מותר עד אורך הקובץ',
