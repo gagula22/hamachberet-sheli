@@ -3299,12 +3299,14 @@ self.onmessage = async function(e) {
       s.style.borderTop  = 'none';
     });
 
+    // Only the transcription pipeline lives inside the transcriber card.
+    // Video cut and video merge are returned as separate top-level cards
+    // (see the return statement) so they remain visible at the bottom of
+    // the page without the user having to discover them inside a tab.
     const tabDefs = [
       { id: 'trans', icon: '📝', label: 'תמלול',          section: transcribeSection, color: '#2d7a2d' },
       { id: 'yt',    icon: '📥', label: 'הורדה מיוטיוב', section: ytSection,         color: '#5ba3d0' },
-      { id: 'cut',   icon: '✂️',  label: 'חיתוך אודיו',    section: cutSection,        color: '#9b8bb8' },
-      { id: 'vcut',  icon: '🎬', label: 'חיתוך וידאו',   section: videoCutSection,   color: '#5ba3d0' },
-      { id: 'merge', icon: '🎞️', label: 'חיבור סרטונים', section: mergeSection,      color: '#f5c842' }
+      { id: 'cut',   icon: '✂️',  label: 'חיתוך אודיו',    section: cutSection,        color: '#9b8bb8' }
     ];
 
     const tabBtns = [];
@@ -3413,13 +3415,73 @@ self.onmessage = async function(e) {
 
     const flowHint = document.createElement('p');
     flowHint.style.cssText = 'font-size:12.5px;color:var(--ink-mute);margin:0 0 18px;line-height:1.65;';
-    flowHint.innerHTML = 'זרימה מומלצת: <b>הורדה מיוטיוב</b> → <b>חיתוך</b> (אופציונלי) → <b>תמלול</b>. כל שלב עצמאי — אם הקובץ כבר אצלך, גש ישר לטאב "תמלול".';
+    flowHint.innerHTML = 'זרימה מומלצת: <b>הורדה מיוטיוב</b> → <b>חיתוך אודיו</b> (אופציונלי) → <b>תמלול</b>. אם הקובץ כבר אצלך — גש ישר לטאב "תמלול". לחיתוך וידאו או חיבור סרטונים — גלול למטה.';
 
-    return App.el('div', { class: 'card' }, [
+    const transcribeCard = App.el('div', { class: 'card' }, [
       heroHeader,
       flowHint,
       tabStrip
     ].concat(tabPanels));
+
+    // ── Standalone card: video cut ───────────────────────────────────────
+    const videoCutHeader = App.el('div', {
+      style: {
+        display: 'flex', alignItems: 'center', gap: '14px',
+        flexWrap: 'wrap', marginBottom: '12px'
+      }
+    }, [
+      App.el('div', {
+        style: {
+          width: '46px', height: '46px', borderRadius: '12px',
+          background: 'linear-gradient(135deg,#cfe4f7,#a9ceee)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: '24px', flexShrink: '0',
+          boxShadow: '0 3px 10px rgba(90,140,200,.15)'
+        }
+      }, '🎬'),
+      App.el('div', { style: { flex: '1', minWidth: '180px' } }, [
+        App.el('h2', { style: { margin: '0 0 2px', fontSize: '19px' } }, 'חיתוך וידאו'),
+        App.el('div', { style: { fontSize: '12.5px', color: 'var(--ink-soft)' } },
+          'חתוך קליפ מתוך MP4 / WebM / MOV — שומר וידאו וקול')
+      ]),
+      App.el('span', { class: 'chip sky' }, 'ffmpeg.wasm')
+    ]);
+
+    const videoCutCard = App.el('div', { class: 'card' }, [
+      videoCutHeader,
+      videoCutSection
+    ]);
+
+    // ── Standalone card: merge videos ────────────────────────────────────
+    const mergeHeader = App.el('div', {
+      style: {
+        display: 'flex', alignItems: 'center', gap: '14px',
+        flexWrap: 'wrap', marginBottom: '12px'
+      }
+    }, [
+      App.el('div', {
+        style: {
+          width: '46px', height: '46px', borderRadius: '12px',
+          background: 'linear-gradient(135deg,#FFF3C4,#F5DF8C)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: '24px', flexShrink: '0',
+          boxShadow: '0 3px 10px rgba(200,170,90,.18)'
+        }
+      }, '🎞️'),
+      App.el('div', { style: { flex: '1', minWidth: '180px' } }, [
+        App.el('h2', { style: { margin: '0 0 2px', fontSize: '19px' } }, 'חיבור סרטונים'),
+        App.el('div', { style: { fontSize: '12.5px', color: 'var(--ink-soft)' } },
+          'חבר 2 סרטונים או יותר לקובץ אחד · stream copy מהיר אם הקודק זהה')
+      ]),
+      App.el('span', { class: 'chip butter' }, 'ffmpeg.wasm')
+    ]);
+
+    const mergeCard = App.el('div', { class: 'card' }, [
+      mergeHeader,
+      mergeSection
+    ]);
+
+    return { transcribe: transcribeCard, videoCut: videoCutCard, merge: mergeCard };
   }
 
   // ── Page hero ─────────────────────────────────────────────────────────────
@@ -3497,19 +3559,23 @@ self.onmessage = async function(e) {
     const w2p = buildWordToPdf();
     const p2w = buildPdfToWord();
     const ptr = buildPdfTranslator();
-    const vtr = buildVideoTranscriber();
+    const vtr = buildVideoTranscriber();   // returns { transcribe, videoCut, merge }
 
-    _wrapWithAccent(w2p, 'linear-gradient(90deg,#FADADD,#F3B7BD)');
-    _wrapWithAccent(p2w, 'linear-gradient(90deg,#E6DDF4,#C9B8E3)');
-    _wrapWithAccent(ptr, 'linear-gradient(90deg,#FFF3C4,#F5DF8C)');
-    _wrapWithAccent(vtr, 'linear-gradient(90deg,#CFE4F7,#A9CEEE)');
+    _wrapWithAccent(w2p,           'linear-gradient(90deg,#FADADD,#F3B7BD)');
+    _wrapWithAccent(p2w,           'linear-gradient(90deg,#E6DDF4,#C9B8E3)');
+    _wrapWithAccent(ptr,           'linear-gradient(90deg,#FFF3C4,#F5DF8C)');
+    _wrapWithAccent(vtr.transcribe,'linear-gradient(90deg,#CFE4F7,#A9CEEE)');
+    _wrapWithAccent(vtr.videoCut,  'linear-gradient(90deg,#CFE4F7,#A9CEEE)');
+    _wrapWithAccent(vtr.merge,     'linear-gradient(90deg,#FFF3C4,#F5DF8C)');
 
     root.append(App.el('div', { class: 'stack stack-lg' }, [
       buildHero(),
       w2p,
       p2w,
       ptr,
-      vtr
+      vtr.transcribe,
+      vtr.videoCut,
+      vtr.merge
     ]));
   }
 
