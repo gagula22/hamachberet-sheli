@@ -1833,6 +1833,7 @@ self.onmessage = async function(e) {
       // Stream copy first (fast, lossless). Input-side -ss is fast but seeks
       // to nearest keyframe — for cuts of seconds-long this is fine.
       if (onProgress) onProgress('מבצע חיתוך מהיר (stream copy, ללא re-encoding)…');
+      let firstErrInfo = null;
       try {
         await ffmpeg.exec([
           '-ss', String(startSec),
@@ -1844,21 +1845,39 @@ self.onmessage = async function(e) {
           outputName
         ]);
       } catch (firstErr) {
+        firstErrInfo = firstErr;
+        console.warn('[video cut] stream copy failed, trying re-encode:', firstErr);
         if (onProgress) onProgress('stream copy נכשל — re-encoding (איטי יותר)…');
-        await ffmpeg.exec([
-          '-i', inputName,
-          '-ss', String(startSec),
-          '-t', String(duration),
-          '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23',
-          '-c:a', 'aac', '-b:a', '128k',
-          '-movflags', '+faststart',
-          outputName
-        ]);
+        try {
+          await ffmpeg.exec([
+            '-i', inputName,
+            '-ss', String(startSec),
+            '-t', String(duration),
+            '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23',
+            '-c:a', 'aac', '-b:a', '128k',
+            '-movflags', '+faststart',
+            outputName
+          ]);
+        } catch (secondErr) {
+          console.error('[video cut] both stream copy AND re-encode failed', { firstErr, secondErr });
+          throw new Error(
+            'ffmpeg חיתוך נכשל. stream copy: ' + (firstErrInfo && firstErrInfo.message ? firstErrInfo.message : 'unknown') +
+            ' · re-encode: ' + (secondErr && secondErr.message ? secondErr.message : 'unknown')
+          );
+        }
       }
 
       if (onProgress) onProgress('קורא קובץ פלט…');
-      const data = await ffmpeg.readFile(outputName);
-      const blob = new Blob([data.buffer], { type: 'video/mp4' });
+      let data;
+      try {
+        data = await ffmpeg.readFile(outputName);
+      } catch (readErr) {
+        throw new Error('ffmpeg רץ אבל הקובץ הסופי לא נוצר: ' + (readErr && readErr.message ? readErr.message : 'unknown'));
+      }
+      if (!data || (data.byteLength === 0 && (!data.buffer || data.buffer.byteLength === 0))) {
+        throw new Error('ffmpeg יצר קובץ ריק (0 בייטים) — קודקים לא נתמכים? נסה קובץ אחר');
+      }
+      const blob = new Blob([data.buffer || data], { type: 'video/mp4' });
       cleanup();
       return {
         blob: blob,
@@ -3007,7 +3026,18 @@ self.onmessage = async function(e) {
         }
         _vcStatus('✓ נשמרו ' + saved + '/' + ranges.length + ' קליפי וידאו' + (cancelled ? ' · ' + cancelled + ' ביטולים' : ''), '#2d7a2d');
       } catch (err) {
-        _vcStatus('❌ ' + err.message, '#c00');
+        // Surface the most informative form of the error — ffmpeg sometimes
+        // throws non-Error objects with no `message` field.
+        console.error('[video cut] full error:', err);
+        var msg;
+        if (err && err.message) msg = err.message;
+        else if (err && err.name) msg = err.name;
+        else if (typeof err === 'string') msg = err;
+        else { try { msg = JSON.stringify(err); } catch(_) { msg = String(err); } }
+        if (!msg || msg === '{}' || msg === 'undefined') {
+          msg = 'ffmpeg זרק שגיאה ללא הודעה — בדוק Console (F12) לפרטים מלאים';
+        }
+        _vcStatus('❌ ' + msg, '#c00');
       } finally {
         _vcRunning = false;
         vcGoBtn.disabled = false;
