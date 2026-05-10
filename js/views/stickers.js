@@ -1702,10 +1702,15 @@ self.onmessage = async function(e) {
 
       if (onProgress) onProgress('מאתחל ffmpeg core (single-threaded)…');
       // All paths are now same-origin → no Blob URL gymnastics needed.
+      // IMPORTANT: do NOT pass classWorkerURL here. With classWorkerURL the
+      // library spawns a *module* worker ({type:"module"}), but the bundled
+      // 814.ffmpeg.js worker uses importScripts(), which is only available
+      // in classic workers. Without classWorkerURL the library auto-creates
+      // a classic worker from the publicPath it derived from ffmpeg.js's
+      // <script src>, i.e. our vendorBase, which is exactly what we want.
       await ffmpeg.load({
-        coreURL:        vendorBase + 'ffmpeg-core.js',
-        wasmURL:        vendorBase + 'ffmpeg-core.wasm',
-        classWorkerURL: vendorBase + '814.ffmpeg.js'
+        coreURL: vendorBase + 'ffmpeg-core.js',
+        wasmURL: vendorBase + 'ffmpeg-core.wasm'
       });
 
       _ffmpegInstance = ffmpeg;
@@ -3075,7 +3080,7 @@ self.onmessage = async function(e) {
     const videoCutSection = App.el('div', {
       style: { marginTop: '20px', paddingTop: '18px', borderTop: '1px solid var(--line)' }
     }, [
-      _stepHeader('🎬', 'חיתוך וידאו (וידאו+קול) · v11 (self-hosted ffmpeg)', '#5ba3d0'),
+      _stepHeader('🎬', 'חיתוך וידאו (וידאו+קול) · v12 (classic worker)', '#5ba3d0'),
       _stepHowto([
         'גרור קובץ <b>MP4 / WebM / MOV</b> לתיבה למטה (וידאו עם פסקול)',
         'הוסף טווחי זמן <b>בכל אורך</b>. דוגמאות: <code style="background:#eee;padding:1px 4px;border-radius:3px;">2:00</code>–<code style="background:#eee;padding:1px 4px;border-radius:3px;">5:00</code> · <code style="background:#eee;padding:1px 4px;border-radius:3px;">10:00</code>–<code style="background:#eee;padding:1px 4px;border-radius:3px;">50:00</code> · <code style="background:#eee;padding:1px 4px;border-radius:3px;">5:00</code>–<code style="background:#eee;padding:1px 4px;border-radius:3px;">1:35:00</code>. אין מקסימום — מותר עד אורך הקובץ',
