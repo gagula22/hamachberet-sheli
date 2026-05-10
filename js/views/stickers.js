@@ -3307,9 +3307,6 @@ self.onmessage = async function(e) {
       { id: 'merge', icon: '🎞️', label: 'חיבור סרטונים', section: mergeSection,      color: '#f5c842' }
     ];
 
-    const _activeTabBg = '#fff';
-    const _activeShadow = '0 2px 8px rgba(60,50,40,.08)';
-
     const tabBtns = [];
     const tabPanels = [];
 
@@ -3318,32 +3315,47 @@ self.onmessage = async function(e) {
         var active = t.id === id;
         tabPanels[i].style.display = active ? 'block' : 'none';
         var b = tabBtns[i];
-        b.style.background = active ? _activeTabBg : 'transparent';
-        b.style.color      = active ? 'var(--ink)' : 'var(--ink-soft)';
-        b.style.boxShadow  = active ? _activeShadow : 'none';
-        b.style.borderColor= active ? t.color : 'transparent';
+        if (active) {
+          b.style.background  = t.color;
+          b.style.color       = '#fff';
+          b.style.boxShadow   = '0 2px 8px rgba(60,50,40,.18)';
+          b.style.borderColor = t.color;
+        } else {
+          b.style.background  = '#fff';
+          b.style.color       = 'var(--ink-soft)';
+          b.style.boxShadow   = '0 1px 2px rgba(60,50,40,.04)';
+          b.style.borderColor = 'transparent';
+        }
       });
     }
 
     tabDefs.forEach(function(t, i) {
       var btn = document.createElement('button');
       btn.type = 'button';
-      btn.innerHTML = '<span style="font-size:15px;">' + t.icon + '</span>&nbsp;' + t.label;
+      btn.innerHTML = '<span style="font-size:16px;line-height:1;">' + t.icon + '</span><span>' + t.label + '</span>';
       btn.style.cssText = [
-        'padding:9px 16px',
-        'border-radius:999px',
+        'padding:10px 16px',
+        'border-radius:12px',
         'font-size:13px',
         'font-weight:600',
         'cursor:pointer',
         'white-space:nowrap',
         'transition:all 180ms',
         'border:1.5px solid transparent',
-        'background:transparent',
+        'background:#fff',
         'color:var(--ink-soft)',
         'display:inline-flex',
-        'align-items:center'
+        'align-items:center',
+        'gap:8px',
+        'flex:0 0 auto',
+        'box-shadow:0 1px 2px rgba(60,50,40,.04)'
       ].join(';');
-      btn.onmouseover = function(){ if (btn.style.background === 'transparent') btn.style.background = 'rgba(255,255,255,.5)'; };
+      btn.onmouseover = function(){
+        if (t.id !== _currentTab) {
+          btn.style.background = '#fefcf8';
+          btn.style.color = 'var(--ink)';
+        }
+      };
       btn.onmouseout  = function(){ _setActiveTab(_currentTab); };
       btn.onclick = function(){ _currentTab = t.id; _setActiveTab(t.id); };
       tabBtns.push(btn);
@@ -3355,14 +3367,23 @@ self.onmessage = async function(e) {
 
     let _currentTab = tabDefs[0].id;
 
-    const tabStrip = App.el('div', {
+    // Horizontal scroll strip — tabs never wrap or hide on narrow screens.
+    const tabStripInner = App.el('div', {
       style: {
-        display: 'flex', flexWrap: 'wrap', gap: '4px',
-        padding: '5px', background: 'var(--cream)',
-        borderRadius: '999px', marginBottom: '22px',
-        border: '1px solid var(--line)'
+        display: 'inline-flex', gap: '8px',
+        padding: '6px', minWidth: 'max-content'
       }
     }, tabBtns);
+    const tabStrip = App.el('div', {
+      style: {
+        background: 'var(--cream)',
+        borderRadius: 'var(--r-md)',
+        marginBottom: '22px',
+        border: '1px solid var(--line)',
+        overflowX: 'auto', overflowY: 'hidden',
+        WebkitOverflowScrolling: 'touch'
+      }
+    }, [tabStripInner]);
 
     // Initial active styling
     setTimeout(function(){ _setActiveTab(_currentTab); }, 0);
