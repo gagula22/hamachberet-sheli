@@ -1665,7 +1665,10 @@ self.onmessage = async function(e) {
   // Real-time bound: a 5-min slice takes 5 minutes of wall clock to record.
   // ── ffmpeg.wasm loader (lazy: only loads when first used) ────────────────
   // Single-threaded core for GitHub Pages compatibility (no SharedArrayBuffer).
-  // Runs in a Web Worker — main thread stays responsive during merge.
+  // All cross-origin assets (including the worker JS chunk that ffmpeg spawns
+  // internally) are pre-fetched and converted to same-origin Blob URLs via
+  // toBlobURL, otherwise the browser blocks `new Worker()` with
+  // "Script ... cannot be accessed from origin ...".
   let _ffmpegInstance = null;
   let _ffmpegLoading = null;
   async function _loadFfmpeg(onProgress) {
@@ -1681,26 +1684,46 @@ self.onmessage = async function(e) {
           document.head.appendChild(s);
         });
       }
+
+      const ffmpegBaseURL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd';
+      const coreBaseURL   = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd';
+      const utilBaseURL   = 'https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/dist/umd';
+
       if (onProgress) onProgress('טוען ffmpeg.wasm (פעם אחת, ~30MB)…');
-      if (!window.FFmpegWASM) {
-        await loadScript('https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js');
-      }
-      const FFmpeg = window.FFmpegWASM && window.FFmpegWASM.FFmpeg;
-      if (!FFmpeg) throw new Error('FFmpeg טעינה נכשלה (script נטען אבל ה-class לא זמין)');
+      if (!window.FFmpegWASM) await loadScript(ffmpegBaseURL + '/ffmpeg.js');
+      if (!window.FFmpegUtil) await loadScript(utilBaseURL + '/index.js');
+
+      const FFmpeg    = window.FFmpegWASM && window.FFmpegWASM.FFmpeg;
+      const toBlobURL = window.FFmpegUtil && window.FFmpegUtil.toBlobURL;
+      if (!FFmpeg)    throw new Error('FFmpeg class לא נטען');
+      if (!toBlobURL) throw new Error('toBlobURL לא נטען (חבילת @ffmpeg/util)');
 
       const ffmpeg = new FFmpeg();
       ffmpeg.on('log', function(e){ if (e && e.message) console.log('[ffmpeg]', e.message); });
 
-      if (onProgress) onProgress('טוען ffmpeg core (~25MB)…');
+      if (onProgress) onProgress('מוריד core + worker (~25MB) ועוטף ב-Blob URLs לעקיפת CORS…');
+
+      // Pre-fetch all cross-origin assets and wrap as Blob URLs so the
+      // internally-spawned Worker passes browser same-origin checks.
+      const results = await Promise.all([
+        toBlobURL(coreBaseURL   + '/ffmpeg-core.js',   'text/javascript'),
+        toBlobURL(coreBaseURL   + '/ffmpeg-core.wasm', 'application/wasm'),
+        toBlobURL(ffmpegBaseURL + '/814.ffmpeg.js',    'text/javascript')
+      ]);
+      const coreURL = results[0], wasmURL = results[1], workerURL = results[2];
+
+      if (onProgress) onProgress('מאתחל ffmpeg…');
       await ffmpeg.load({
-        coreURL: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js',
-        wasmURL: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.wasm'
+        coreURL:        coreURL,
+        wasmURL:        wasmURL,
+        classWorkerURL: workerURL
       });
+
       _ffmpegInstance = ffmpeg;
       if (onProgress) onProgress('ffmpeg מוכן ✓');
       return ffmpeg;
     })().catch(function(err){
-      _ffmpegLoading = null;  // allow retry
+      _ffmpegLoading = null;  // allow retry on next call
       throw err;
     });
     return _ffmpegLoading;
