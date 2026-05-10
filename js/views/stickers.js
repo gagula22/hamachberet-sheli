@@ -1663,6 +1663,122 @@ self.onmessage = async function(e) {
   // Plays the video at 1x in real time, captures the stream (video + audio),
   // and writes a WebM (or MP4 where the browser supports it) for the slice.
   // Real-time bound: a 5-min slice takes 5 minutes of wall clock to record.
+  // ── ffmpeg.wasm loader (lazy: only loads when first used) ────────────────
+  // Single-threaded core for GitHub Pages compatibility (no SharedArrayBuffer).
+  // Runs in a Web Worker — main thread stays responsive during merge.
+  let _ffmpegInstance = null;
+  let _ffmpegLoading = null;
+  async function _loadFfmpeg(onProgress) {
+    if (_ffmpegInstance) return _ffmpegInstance;
+    if (_ffmpegLoading) return _ffmpegLoading;
+    _ffmpegLoading = (async function() {
+      function loadScript(src) {
+        return new Promise(function(resolve, reject) {
+          var s = document.createElement('script');
+          s.src = src; s.async = true;
+          s.onload = function(){ resolve(); };
+          s.onerror = function(){ reject(new Error('Failed to load ' + src)); };
+          document.head.appendChild(s);
+        });
+      }
+      if (onProgress) onProgress('טוען ffmpeg.wasm (פעם אחת, ~30MB)…');
+      if (!window.FFmpegWASM) {
+        await loadScript('https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js');
+      }
+      const FFmpeg = window.FFmpegWASM && window.FFmpegWASM.FFmpeg;
+      if (!FFmpeg) throw new Error('FFmpeg טעינה נכשלה (script נטען אבל ה-class לא זמין)');
+
+      const ffmpeg = new FFmpeg();
+      ffmpeg.on('log', function(e){ if (e && e.message) console.log('[ffmpeg]', e.message); });
+
+      if (onProgress) onProgress('טוען ffmpeg core (~25MB)…');
+      await ffmpeg.load({
+        coreURL: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js',
+        wasmURL: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.wasm'
+      });
+      _ffmpegInstance = ffmpeg;
+      if (onProgress) onProgress('ffmpeg מוכן ✓');
+      return ffmpeg;
+    })().catch(function(err){
+      _ffmpegLoading = null;  // allow retry
+      throw err;
+    });
+    return _ffmpegLoading;
+  }
+
+  // Concatenate ordered video files into a single MP4 (stream copy when
+  // possible, re-encode fallback). Runs entirely in the Worker; main thread
+  // stays free.
+  async function _mergeVideos(files, onProgress) {
+    if (!files || files.length < 2) throw new Error('צריך לפחות 2 סרטונים');
+    const ffmpeg = await _loadFfmpeg(onProgress);
+
+    // Write inputs into ffmpeg FS
+    const inputNames = [];
+    for (let i = 0; i < files.length; i++) {
+      if (onProgress) {
+        onProgress('מעלה ל-ffmpeg ' + (i + 1) + '/' + files.length + ': ' +
+                   files[i].name + ' (' + (files[i].size / 1024 / 1024).toFixed(1) + ' MB)…');
+      }
+      const ext = ((files[i].name.match(/\.[^.]+$/) || ['.mp4'])[0]).toLowerCase();
+      const name = 'in_' + i + ext;
+      const buf = new Uint8Array(await files[i].arrayBuffer());
+      await ffmpeg.writeFile(name, buf);
+      inputNames.push(name);
+    }
+
+    // concat list (ffmpeg concat demuxer format)
+    const listText = inputNames.map(function(n){ return "file '" + n + "'"; }).join('\n');
+    await ffmpeg.writeFile('concat_list.txt', new TextEncoder().encode(listText));
+
+    // Track ffmpeg progress events
+    let lastPct = 0;
+    const onProg = function(e){
+      if (e && typeof e.progress === 'number') {
+        lastPct = Math.max(0, Math.min(100, e.progress * 100));
+        if (onProgress) onProgress('ffmpeg מעבד: ' + lastPct.toFixed(0) + '%');
+      }
+    };
+    ffmpeg.on('progress', onProg);
+
+    let success = false;
+    try {
+      // Try stream copy first — fast, lossless, low CPU
+      if (onProgress) onProgress('מנסה איחוד מהיר (stream copy, ללא re-encoding)…');
+      try {
+        await ffmpeg.exec([
+          '-f', 'concat', '-safe', '0', '-i', 'concat_list.txt',
+          '-c', 'copy', '-movflags', '+faststart', 'output.mp4'
+        ]);
+        success = true;
+      } catch (firstErr) {
+        // Fall back to re-encoding (slower, but works for mismatched codecs)
+        if (onProgress) onProgress('stream copy נכשל (קודקים לא תואמים) — מבצע re-encoding…');
+        await ffmpeg.exec([
+          '-f', 'concat', '-safe', '0', '-i', 'concat_list.txt',
+          '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23',
+          '-c:a', 'aac', '-b:a', '128k',
+          '-movflags', '+faststart', 'output.mp4'
+        ]);
+        success = true;
+      }
+    } finally {
+      try { ffmpeg.off('progress', onProg); } catch (_) {}
+    }
+    if (!success) throw new Error('ffmpeg concat failed');
+
+    if (onProgress) onProgress('קורא קובץ פלט…');
+    const data = await ffmpeg.readFile('output.mp4');
+    const blob = new Blob([data.buffer], { type: 'video/mp4' });
+
+    // Cleanup ffmpeg FS
+    for (const n of inputNames) { try { await ffmpeg.deleteFile(n); } catch (_) {} }
+    try { await ffmpeg.deleteFile('concat_list.txt'); } catch (_) {}
+    try { await ffmpeg.deleteFile('output.mp4'); } catch (_) {}
+
+    return blob;
+  }
+
   async function _cutVideoClip(file, startSec, endSec, onProgress) {
     if (typeof MediaRecorder === 'undefined') {
       throw new Error('הדפדפן הזה לא תומך ב-MediaRecorder — נסה Chrome/Brave/Edge עדכניים');
@@ -2840,6 +2956,178 @@ self.onmessage = async function(e) {
       vcStatusEl
     ]);
 
+    // ── Merge: combine multiple video files into one ──────────────────────
+    let _mergeFiles = [];
+    let _mergeRunning = false;
+
+    const mergeStatusEl = document.createElement('div');
+    mergeStatusEl.style.cssText = 'font-size:12px;color:var(--ink-mute);margin-top:8px;line-height:1.55;min-height:16px;';
+    function _mergeStatus(msg, color) {
+      mergeStatusEl.textContent = msg;
+      mergeStatusEl.style.color = color || 'var(--ink-mute)';
+    }
+
+    const mergeFileInput = document.createElement('input');
+    mergeFileInput.type = 'file';
+    mergeFileInput.accept = '.mp4,.webm,.mov,.mkv';
+    mergeFileInput.multiple = true;
+    mergeFileInput.style.display = 'none';
+    mergeFileInput.addEventListener('change', function(){
+      _mergeAddFiles(Array.from(mergeFileInput.files));
+      mergeFileInput.value = '';
+    });
+
+    const mergeZone = App.el('div', {
+      style: { border: '2px dashed var(--line)', borderRadius: 'var(--r-md)',
+               padding: '20px', textAlign: 'center', cursor: 'pointer',
+               transition: 'all 180ms', background: 'var(--cream)',
+               marginTop: '10px' },
+      onClick: function() { if (!_mergeRunning) mergeFileInput.click(); }
+    }, [
+      App.el('div', { style: { fontSize: '28px', marginBottom: '4px' } }, '🎞️'),
+      App.el('div', { style: { fontWeight: 600, fontSize: '13px', marginBottom: '2px' } },
+        'גרור או בחר 2+ סרטונים לאיחוד'),
+      App.el('div', { style: { fontSize: '11px', color: 'var(--ink-mute)' } },
+        'MP4 / WebM / MOV · הקובץ הסופי יישמר כ-MP4')
+    ]);
+    mergeZone.addEventListener('dragover',  function(e) { e.preventDefault(); mergeZone.style.borderColor = '#f5c842'; mergeZone.style.background = '#fff7d6'; });
+    mergeZone.addEventListener('dragleave', function()  { mergeZone.style.borderColor = 'var(--line)'; mergeZone.style.background = 'var(--cream)'; });
+    mergeZone.addEventListener('drop', function(e) {
+      e.preventDefault(); mergeZone.style.borderColor = 'var(--line)'; mergeZone.style.background = 'var(--cream)';
+      _mergeAddFiles(Array.from(e.dataTransfer.files));
+    });
+
+    const mergeListContainer = document.createElement('div');
+    mergeListContainer.style.cssText = 'display:flex;flex-direction:column;gap:4px;margin-top:12px;';
+
+    function _mergeAddFiles(files) {
+      for (const f of files) {
+        if (f && f.size > 0) _mergeFiles.push(f);
+      }
+      _renderMergeList();
+    }
+
+    function _renderMergeList() {
+      mergeListContainer.innerHTML = '';
+      if (_mergeFiles.length === 0) {
+        const empty = document.createElement('div');
+        empty.textContent = 'עדיין לא נבחרו סרטונים';
+        empty.style.cssText = 'font-size:12px;color:#999;font-style:italic;text-align:center;padding:8px;';
+        mergeListContainer.appendChild(empty);
+        return;
+      }
+      _mergeFiles.forEach(function(file, i) {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;gap:6px;align-items:center;padding:8px 10px;background:#fff;border:1px solid #e0d4a0;border-radius:6px;';
+
+        const num = document.createElement('span');
+        num.textContent = (i + 1) + '.';
+        num.style.cssText = 'min-width:24px;color:#666;font-weight:700;font-size:13px;';
+        row.appendChild(num);
+
+        const upBtn = document.createElement('button');
+        upBtn.innerHTML = '▲';
+        upBtn.disabled = (i === 0);
+        upBtn.title = 'הזז למעלה';
+        upBtn.style.cssText = 'width:26px;height:26px;background:#fff7d6;border:1px solid #d0c080;border-radius:4px;cursor:pointer;font-size:10px;color:#5a4a00;' + (i === 0 ? 'opacity:0.4;' : '');
+        upBtn.onclick = function() {
+          if (i > 0) {
+            const tmp = _mergeFiles[i - 1];
+            _mergeFiles[i - 1] = _mergeFiles[i];
+            _mergeFiles[i] = tmp;
+            _renderMergeList();
+          }
+        };
+        row.appendChild(upBtn);
+
+        const downBtn = document.createElement('button');
+        downBtn.innerHTML = '▼';
+        downBtn.disabled = (i === _mergeFiles.length - 1);
+        downBtn.title = 'הזז למטה';
+        downBtn.style.cssText = upBtn.style.cssText;
+        if (i !== _mergeFiles.length - 1) downBtn.style.opacity = '1';
+        else downBtn.style.opacity = '0.4';
+        downBtn.onclick = function() {
+          if (i < _mergeFiles.length - 1) {
+            const tmp = _mergeFiles[i + 1];
+            _mergeFiles[i + 1] = _mergeFiles[i];
+            _mergeFiles[i] = tmp;
+            _renderMergeList();
+          }
+        };
+        row.appendChild(downBtn);
+
+        const info = document.createElement('span');
+        info.textContent = file.name + ' · ' + (file.size / 1024 / 1024).toFixed(1) + ' MB';
+        info.title = file.name;
+        info.style.cssText = 'flex:1;font-size:12px;color:#444;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:ltr;text-align:right;';
+        row.appendChild(info);
+
+        const rmBtn = document.createElement('button');
+        rmBtn.textContent = '×';
+        rmBtn.title = 'הסר מהרשימה';
+        rmBtn.style.cssText = 'width:28px;height:28px;background:#fff;border:1px solid #ddd;border-radius:6px;cursor:pointer;color:#999;font-size:14px;';
+        rmBtn.onclick = function() { _mergeFiles.splice(i, 1); _renderMergeList(); };
+        row.appendChild(rmBtn);
+
+        mergeListContainer.appendChild(row);
+      });
+    }
+    _renderMergeList();
+
+    const mergeGoBtn = document.createElement('button');
+    mergeGoBtn.textContent = '🎞️ חבר ושמור';
+    mergeGoBtn.style.cssText = 'padding:10px 22px;background:linear-gradient(135deg,#fff1c0,#f5c842);border:1px solid #d0c080;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;color:#3b3a3a;margin-top:12px;align-self:flex-start;';
+
+    async function _mergeGo() {
+      if (_mergeRunning) return;
+      if (_mergeFiles.length < 2) {
+        _mergeStatus('❌ צריך לפחות 2 סרטונים לאיחוד', '#c00');
+        return;
+      }
+      _mergeRunning = true;
+      mergeGoBtn.disabled = true;
+      mergeGoBtn.textContent = '⏳ מעבד…';
+      try {
+        const blob = await _mergeVideos(_mergeFiles, function(msg){ _mergeStatus('⏳ ' + msg); });
+        const sizeMB = (blob.size / 1024 / 1024).toFixed(1);
+        _mergeStatus('💾 קובץ מאוחד מוכן (' + sizeMB + ' MB) · בחר היכן לשמור…');
+        const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
+        const res = await _saveVideoViaPicker(blob, 'merged_' + stamp + '.mp4', '.mp4');
+        if (res.method === 'cancelled') {
+          _mergeStatus('ℹ️ ביטלת את השמירה — הקובץ עדיין בזיכרון, לחץ שוב לשמור', '#888');
+        } else {
+          _mergeStatus('✓ הקובץ המאוחד נשמר! ' + sizeMB + ' MB מ-' + _mergeFiles.length + ' סרטונים', '#2d7a2d');
+        }
+      } catch (err) {
+        _mergeStatus('❌ ' + err.message, '#c00');
+        console.error('[merge]', err);
+      } finally {
+        _mergeRunning = false;
+        mergeGoBtn.disabled = false;
+        mergeGoBtn.textContent = '🎞️ חבר ושמור';
+      }
+    }
+    mergeGoBtn.addEventListener('click', _mergeGo);
+
+    const mergeSection = App.el('div', {
+      style: { marginTop: '20px', paddingTop: '18px', borderTop: '1px solid var(--line)' }
+    }, [
+      _stepHeader('🎞️', 'חיבור כמה סרטונים לסרטון 1', '#f5c842'),
+      _stepHowto([
+        'גרור או בחר <b>2 סרטונים או יותר</b> (MP4 / WebM / MOV) — אפשר להוסיף כמה פעמים',
+        'סדר אותם ברשימה למטה ע"י החיצים <b>▲▼</b> — סדר הרשימה הוא הסדר בקובץ המאוחד',
+        'לחץ "<b>🎞️ חבר ושמור</b>" — ffmpeg.wasm רץ ב-Web Worker (ברקע, אינו מעמיס על הדפדפן). פעם ראשונה: ~30MB ההורדה (cache לתמיד)',
+        'אם כל הסרטונים באותו קודק (כולם מ-YouTube/אותו מקור): <b>שניות</b> (stream copy). אחרת: re-encoding לוקח זמן יותר'
+      ]),
+      mergeFileInput, mergeZone,
+      App.el('div', { style: { fontSize: '12px', color: '#777', marginTop: '12px', marginBottom: '4px', fontWeight: '600' } },
+        'סדר ההופעה בסרטון המאוחד:'),
+      mergeListContainer,
+      mergeGoBtn,
+      mergeStatusEl
+    ]);
+
     const infoBanner = App.el('div', {
       style: { background: '#f0f6fb', border: '1px solid #a0c8e8',
                borderRadius: 'var(--r-sm)', padding: '10px 14px', marginBottom: '14px', lineHeight: '1.55' }
@@ -2872,6 +3160,7 @@ self.onmessage = async function(e) {
       ytSection,         // Step 1: download from YouTube
       cutSection,        // Step 2: cut audio (WAV/MP3 output) — optional
       videoCutSection,   // Bonus: cut video (MP4/WebM output) — optional
+      mergeSection,      // Bonus: merge multiple videos into one (ffmpeg.wasm)
       transcribeSection  // Step 3: transcribe in cloud
     ]);
   }
