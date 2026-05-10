@@ -3427,36 +3427,52 @@ self.onmessage = async function(e) {
   }
 
   // ── Page hero ─────────────────────────────────────────────────────────────
-  function buildHero() {
-    // Each chip jumps to the corresponding tool card via #anchor.
-    // Order chosen so that with default LTR flex rendering the visual
-    // sequence right-to-left matches the workflow numbering: 1=Word→PDF
-    // on the right, 4=תמלול וידאו on the left.
+  // Chips behave as tabs: clicking a chip shows the corresponding tool
+  // card and hides the others. Caller passes in the cards object so the
+  // hero can wire visibility on click.
+  //
+  // RTL note: the document is <html dir="rtl">, so flex-direction:row
+  // places the first array item on the RIGHT. Workflow order 1→4 in the
+  // array therefore renders right→left as the user numbered.
+  function buildHero(cards, defaultId) {
     const tools = [
-      { icon: '🎙', label: 'תמלול וידאו',  bg: 'linear-gradient(135deg,#CFE4F7,#A9CEEE)', target: 'tool-vtr' },
-      { icon: '🌐', label: 'תרגום PDF',    bg: 'linear-gradient(135deg,#FFF3C4,#F5DF8C)', target: 'tool-ptr' },
-      { icon: '📄', label: 'PDF → Word',   bg: 'linear-gradient(135deg,#E6DDF4,#C9B8E3)', target: 'tool-p2w' },
-      { icon: '📝', label: 'Word → PDF',   bg: 'linear-gradient(135deg,#FADADD,#F3B7BD)', target: 'tool-w2p' }
+      { icon: '📝', label: 'Word → PDF',   bg: 'linear-gradient(135deg,#FADADD,#F3B7BD)', target: 'tool-w2p' }, // 1 (rightmost)
+      { icon: '📄', label: 'PDF → Word',   bg: 'linear-gradient(135deg,#E6DDF4,#C9B8E3)', target: 'tool-p2w' }, // 2
+      { icon: '🌐', label: 'תרגום PDF',    bg: 'linear-gradient(135deg,#FFF3C4,#F5DF8C)', target: 'tool-ptr' }, // 3
+      { icon: '🎙', label: 'תמלול וידאו',  bg: 'linear-gradient(135deg,#CFE4F7,#A9CEEE)', target: 'tool-vtr' }  // 4 (leftmost)
     ];
 
-    function _scrollToCard(id) {
-      var el = document.getElementById(id);
-      if (!el) return;
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      // Brief highlight pulse so the user can see which card they landed on.
-      var prevBoxShadow = el.style.boxShadow;
-      var prevTransition = el.style.transition;
-      el.style.transition = 'box-shadow 200ms ease-out';
-      el.style.boxShadow = '0 0 0 3px rgba(169,206,238,.55), var(--shadow)';
-      setTimeout(function(){
-        el.style.boxShadow = prevBoxShadow;
-        setTimeout(function(){ el.style.transition = prevTransition; }, 220);
-      }, 900);
+    const buttons = [];
+    let activeId = defaultId;
+
+    function _setActive(id) {
+      activeId = id;
+      // Show only the matching card.
+      Object.keys(cards).forEach(function(cid) {
+        cards[cid].style.display = (cid === id) ? '' : 'none';
+      });
+      // Update chip styling.
+      buttons.forEach(function(b) {
+        var t = tools.find(function(x){ return x.target === b._target; });
+        var active = b._target === id;
+        if (active) {
+          b.style.background = '#fff';
+          b.style.borderColor = 'var(--ink)';
+          b.style.boxShadow = '0 4px 14px rgba(60,50,40,.14)';
+          b.style.transform = 'translateY(-1px)';
+        } else {
+          b.style.background = 'rgba(255,255,255,.75)';
+          b.style.borderColor = 'var(--line)';
+          b.style.boxShadow = 'none';
+          b.style.transform = 'translateY(0)';
+        }
+      });
     }
 
     const chips = tools.map(function(t) {
       var btn = document.createElement('button');
       btn.type = 'button';
+      btn._target = t.target;
       btn.style.cssText = [
         'display:inline-flex',
         'align-items:center',
@@ -3470,7 +3486,7 @@ self.onmessage = async function(e) {
         'color:var(--ink)',
         'cursor:pointer',
         'font-family:inherit',
-        'transition:transform 160ms ease-out, box-shadow 160ms ease-out, background 160ms'
+        'transition:transform 160ms ease-out, box-shadow 160ms ease-out, background 160ms, border-color 160ms'
       ].join(';');
 
       var iconSpan = document.createElement('span');
@@ -3484,19 +3500,27 @@ self.onmessage = async function(e) {
       btn.appendChild(labelSpan);
 
       btn.onmouseover = function(){
-        btn.style.background = '#fff';
-        btn.style.transform = 'translateY(-1px)';
-        btn.style.boxShadow = '0 4px 12px rgba(60,50,40,.10)';
+        if (btn._target !== activeId) {
+          btn.style.background = '#fff';
+          btn.style.transform = 'translateY(-1px)';
+          btn.style.boxShadow = '0 4px 12px rgba(60,50,40,.10)';
+        }
       };
       btn.onmouseout = function(){
-        btn.style.background = 'rgba(255,255,255,.75)';
-        btn.style.transform = 'translateY(0)';
-        btn.style.boxShadow = 'none';
+        if (btn._target !== activeId) {
+          btn.style.background = 'rgba(255,255,255,.75)';
+          btn.style.transform = 'translateY(0)';
+          btn.style.boxShadow = 'none';
+        }
       };
-      btn.onclick = function(){ _scrollToCard(t.target); };
+      btn.onclick = function(){ _setActive(t.target); };
 
+      buttons.push(btn);
       return btn;
     });
+
+    // Apply initial active state once the DOM is in place.
+    setTimeout(function(){ _setActive(activeId); }, 0);
 
     return App.el('div', {
       style: {
@@ -3510,17 +3534,16 @@ self.onmessage = async function(e) {
     }, [
       App.el('div', {
         style: { fontSize: '34px', marginBottom: '6px', letterSpacing: '-0.5px',
-                 fontFamily: 'var(--font-head)', fontWeight: '600', color: 'var(--ink)',
-                 textAlign: 'right' }
+                 fontFamily: 'var(--font-head)', fontWeight: '600', color: 'var(--ink)' }
       }, 'כלים ליצירת מסמכים'),
       App.el('div', {
         style: { fontSize: '14.5px', color: 'var(--ink-soft)', marginBottom: '18px',
-                 lineHeight: '1.6', maxWidth: '640px', textAlign: 'right' }
+                 lineHeight: '1.6', maxWidth: '640px' }
       }, 'המרה, תרגום ותמלול בעברית — כל הכלים רצים ישר בדפדפן או בענן, בלי להעלות קבצים לאן שלא צריך.'),
-      // Chips justified to the right so the rightmost chip (last in the
-      // array → Word→PDF) sits flush against the right edge of the hero.
+      // RTL doc + justify-content:flex-start ⇒ chips hug the right edge,
+      // first array item (Word→PDF) at the right.
       App.el('div', {
-        style: { display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'flex-end' }
+        style: { display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'flex-start' }
       }, chips)
     ]);
   }
@@ -3548,24 +3571,30 @@ self.onmessage = async function(e) {
     const ptr = buildPdfTranslator();
     const vtr = buildVideoTranscriber();
 
-    // IDs are the scroll targets for the hero chips.
+    // IDs let the hero chips toggle each card on click.
     w2p.id = 'tool-w2p';
     p2w.id = 'tool-p2w';
     ptr.id = 'tool-ptr';
     vtr.id = 'tool-vtr';
-    // Add scroll-margin-top so the sticky header doesn't cover the card
-    // when scrollIntoView lands on it.
-    [w2p, p2w, ptr, vtr].forEach(function(c) {
-      c.style.scrollMarginTop = '24px';
-    });
 
     _wrapWithAccent(w2p, 'linear-gradient(90deg,#FADADD,#F3B7BD)');
     _wrapWithAccent(p2w, 'linear-gradient(90deg,#E6DDF4,#C9B8E3)');
     _wrapWithAccent(ptr, 'linear-gradient(90deg,#FFF3C4,#F5DF8C)');
     _wrapWithAccent(vtr, 'linear-gradient(90deg,#CFE4F7,#A9CEEE)');
 
+    // Hero acts as a tab bar; default to the transcriber card per user
+    // preference (they explicitly asked that 'תמלול' stay open like
+    // it already does).
+    const cardsById = {
+      'tool-w2p': w2p,
+      'tool-p2w': p2w,
+      'tool-ptr': ptr,
+      'tool-vtr': vtr
+    };
+    const hero = buildHero(cardsById, 'tool-vtr');
+
     root.append(App.el('div', { class: 'stack stack-lg' }, [
-      buildHero(),
+      hero,
       w2p,
       p2w,
       ptr,
