@@ -70,12 +70,28 @@
         App.el('button', {
           class: 'btn btn-primary',
           style: { background: '#0a7', borderColor: '#0a7' },
-          onClick: () => {
-            const isOnPC = location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.protocol === 'file:';
-            const msg = isOnPC
-              ? 'להפקת דוח חדש:\n\n1. לחץ על האייקון "🚀 Run Wyckoff Analysis" בשולחן העבודה\n2. או הרץ ידנית:\n   C:\\Users\\user\\trading-agent\\agent\\generate-report.js\n\nהדוח ייפתח אוטומטית כשיסיים (~3-5 דקות)'
-              : 'הפקת דוח חדש פועלת רק מהמחשב הביתי שלך:\n\n1. גש למחשב הביתי\n2. לחץ על האייקון "🚀 Run Wyckoff Analysis" בשולחן העבודה\n3. המתן 3-5 דקות\n4. הדוח יתעדכן אוטומטית באתר';
-            alert(msg);
+          onClick: async (ev) => {
+            const btn = ev.currentTarget;
+            const originalText = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = '⏳ שולח טריגר...';
+            try {
+              const WORKER_URL = 'https://morning-violet-ce94-wyckoff-trigger.gagula22.workers.dev';
+              const res = await fetch(`${WORKER_URL}/trigger`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ symbol: 'BYBIT:BTCUSDT.P' }),
+              });
+              const data = await res.json();
+              if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+              btn.textContent = '✅ נשלח! המתן 3-5 דקות';
+              alert('🚀 הניתוח החל!\n\nהדוח יישלח למייל שלך עם סיום (~3-5 דקות).\nגם יתעדכן באתר אוטומטית.\n\n⚠️ ודא ש:\n• PC ביתי דלוק\n• TradingView Desktop פתוח\n• poll-worker.js רץ ברקע');
+            } catch (e) {
+              btn.textContent = '❌ נכשל';
+              alert('שליחת הטריגר נכשלה:\n' + e.message + '\n\nוודא ש-Cloudflare Worker פעיל.');
+            } finally {
+              setTimeout(() => { btn.disabled = false; btn.textContent = originalText; }, 5000);
+            }
           }
         }, '🚀 הפק ניתוח חדש'),
         App.el('button', {
