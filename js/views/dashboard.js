@@ -1,4 +1,105 @@
 (function () {
+  // ============================================================
+  // Wyckoff Live Progress Modal — polls Worker /progress endpoint
+  // ============================================================
+  window.openWyckoffProgressModal = function(WORKER_URL) {
+    // Remove existing modal if open
+    const existing = document.getElementById('wyckoff-progress-modal');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'wyckoff-progress-modal';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
+    overlay.innerHTML = `
+      <div dir="rtl" style="background:#FAF6F0;border-radius:14px;padding:24px;width:100%;max-width:680px;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 50px rgba(0,0,0,.3);font-family:system-ui,Arial,sans-serif;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+          <h2 style="margin:0;font-size:20px;color:#3B3A3A;">🚀 הפקת ניתוח Wyckoff</h2>
+          <button id="wpm-close" style="border:none;background:transparent;font-size:24px;cursor:pointer;color:#6b7280;line-height:1;padding:4px 8px;">×</button>
+        </div>
+        <div id="wpm-step" style="font-size:14px;color:#3B3A3A;margin-bottom:10px;min-height:20px;">מתחבר ל-Worker...</div>
+        <div style="background:#e5e7eb;border-radius:8px;height:14px;overflow:hidden;margin-bottom:14px;">
+          <div id="wpm-bar" style="height:100%;background:linear-gradient(90deg,#0a7,#d4a017);width:0%;transition:width .5s ease;"></div>
+        </div>
+        <div id="wpm-percent" style="font-size:12px;color:#6b7280;margin-bottom:12px;text-align:left;">0%</div>
+        <div style="font-size:13px;color:#3B3A3A;margin-bottom:6px;">📋 לוג חי:</div>
+        <div id="wpm-log" style="flex:1;overflow-y:auto;background:#1f2937;color:#a7f3d0;border-radius:8px;padding:12px;font-family:'Courier New',Consolas,monospace;font-size:12px;line-height:1.6;direction:ltr;text-align:left;min-height:240px;max-height:380px;">ממתין לתחילת הריצה...</div>
+        <div id="wpm-footer" style="margin-top:12px;font-size:12px;color:#6b7280;text-align:center;">⏳ הניתוח לוקח ~5-7 דקות. תוכל לסגור את החלון — הוא ימשיך לרוץ ברקע.</div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const stepEl = overlay.querySelector('#wpm-step');
+    const barEl = overlay.querySelector('#wpm-bar');
+    const pctEl = overlay.querySelector('#wpm-percent');
+    const logEl = overlay.querySelector('#wpm-log');
+    const footEl = overlay.querySelector('#wpm-footer');
+    const closeBtn = overlay.querySelector('#wpm-close');
+
+    let pollTimer = null;
+    let lastLogLength = 0;
+    let firstRender = true;
+    let done = false;
+
+    function cleanup() {
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    }
+    closeBtn.onclick = () => { cleanup(); overlay.remove(); };
+    overlay.onclick = (e) => { if (e.target === overlay) { cleanup(); overlay.remove(); } };
+
+    async function tick() {
+      try {
+        const res = await fetch(`${WORKER_URL}/progress`, { cache: 'no-store' });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (firstRender) { logEl.innerHTML = ''; firstRender = false; }
+
+        // Update progress bar
+        const pct = Math.max(0, Math.min(100, data.percent || 0));
+        barEl.style.width = pct + '%';
+        pctEl.textContent = pct + '%';
+
+        // Current step
+        if (data.currentStep) stepEl.textContent = data.currentStep;
+
+        // Append new log lines
+        if (Array.isArray(data.log)) {
+          for (let i = lastLogLength; i < data.log.length; i++) {
+            const entry = data.log[i];
+            const msg = (entry && entry.msg) ? entry.msg : String(entry);
+            // Skip internal markers
+            if (msg.startsWith('::PROGRESS')) continue;
+            const line = document.createElement('div');
+            line.textContent = msg;
+            // Colorize errors
+            if (/❌|FATAL|error|failed/i.test(msg)) line.style.color = '#fca5a5';
+            else if (/✅|done|success/i.test(msg)) line.style.color = '#86efac';
+            else if (/⚠️|warn/i.test(msg)) line.style.color = '#fde68a';
+            logEl.appendChild(line);
+          }
+          lastLogLength = data.log.length;
+          logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        // Final states
+        if (data.state === 'done' && !done) {
+          done = true;
+          footEl.innerHTML = '✅ <strong>הניתוח הושלם!</strong> מייל נשלח ל-gagula22@gmail.com';
+          footEl.style.color = '#059669';
+          cleanup();
+        } else if (data.state === 'error' && !done) {
+          done = true;
+          footEl.innerHTML = '❌ <strong>נכשל:</strong> ' + (data.error || 'unknown error');
+          footEl.style.color = '#dc2626';
+          cleanup();
+        }
+      } catch (e) {
+        // network blip — keep trying
+      }
+    }
+    tick();
+    pollTimer = setInterval(tick, 1500);
+  };
+
   function render(root) {
     const today = Store.todayKey();
     const tasks = Store.get('todos') || [];
@@ -75,8 +176,8 @@
             const originalText = btn.textContent;
             btn.disabled = true;
             btn.textContent = '⏳ שולח טריגר...';
+            const WORKER_URL = 'https://morning-violet-ce94-wyckoff-trigger.gagula22.workers.dev';
             try {
-              const WORKER_URL = 'https://morning-violet-ce94-wyckoff-trigger.gagula22.workers.dev';
               const res = await fetch(`${WORKER_URL}/trigger`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -84,8 +185,8 @@
               });
               const data = await res.json();
               if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-              btn.textContent = '✅ נשלח! המתן 3-5 דקות';
-              alert('🚀 הניתוח החל!\n\nהדוח יישלח למייל שלך עם סיום (~3-5 דקות).\nגם יתעדכן באתר אוטומטית.\n\n⚠️ ודא ש:\n• PC ביתי דלוק\n• TradingView Desktop פתוח\n• poll-worker.js רץ ברקע');
+              btn.textContent = '✅ נשלח';
+              window.openWyckoffProgressModal && window.openWyckoffProgressModal(WORKER_URL);
             } catch (e) {
               btn.textContent = '❌ נכשל';
               alert('שליחת הטריגר נכשלה:\n' + e.message + '\n\nוודא ש-Cloudflare Worker פעיל.');
