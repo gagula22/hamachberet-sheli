@@ -1,7 +1,61 @@
 {
-  "generatedAt": "2026-05-30T15:26:09.088Z",
-  "count": 13,
+  "generatedAt": "2026-05-30T15:33:12.815Z",
+  "count": 22,
   "symbols": [
+    {
+      "symbol": "CRYPTOCAP:BTC.D",
+      "label": "CRYPTOCAP:BTC.D",
+      "base": "CRYPTOCAP:BTC.D",
+      "type": "macro"
+    },
+    {
+      "symbol": "CRYPTOCAP:OTHERS",
+      "label": "CRYPTOCAP:OTHERS",
+      "base": "CRYPTOCAP:OTHERS",
+      "type": "macro"
+    },
+    {
+      "symbol": "CRYPTOCAP:OTHERS/CRYPTOCAP:BTC",
+      "label": "CRYPTOCAP:OTHERS/CRYPTOCAP:BTC",
+      "base": "CRYPTOCAP:OTHERS/CRYPTOCAP:BTC",
+      "type": "macro"
+    },
+    {
+      "symbol": "CRYPTOCAP:TOTAL",
+      "label": "CRYPTOCAP:TOTAL",
+      "base": "CRYPTOCAP:TOTAL",
+      "type": "macro"
+    },
+    {
+      "symbol": "CRYPTOCAP:TOTAL2",
+      "label": "CRYPTOCAP:TOTAL2",
+      "base": "CRYPTOCAP:TOTAL2",
+      "type": "macro"
+    },
+    {
+      "symbol": "CRYPTOCAP:TOTAL3",
+      "label": "CRYPTOCAP:TOTAL3",
+      "base": "CRYPTOCAP:TOTAL3",
+      "type": "macro"
+    },
+    {
+      "symbol": "FOREXCOM:USDILS",
+      "label": "FOREXCOM:USDILS",
+      "base": "FOREXCOM:USDILS",
+      "type": "macro"
+    },
+    {
+      "symbol": "TVC:DXY",
+      "label": "TVC:DXY",
+      "base": "TVC:DXY",
+      "type": "macro"
+    },
+    {
+      "symbol": "INDEX:BTCUSD",
+      "label": "INDEX:BTCUSD",
+      "base": "INDEX:BTC",
+      "type": "index"
+    },
     {
       "symbol": "BYBIT:BTCUSDT.P",
       "label": "BTCUSDT.P",
