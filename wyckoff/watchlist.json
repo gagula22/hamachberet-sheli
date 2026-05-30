@@ -1,0 +1,90 @@
+{
+  "generatedAt": "2026-05-30T13:50:12.332Z",
+  "count": 14,
+  "symbols": [
+    {
+      "symbol": "BYBIT:BTCUSDT.P",
+      "label": "BTCUSDT.P",
+      "base": "BTC",
+      "type": "perp"
+    },
+    {
+      "symbol": "BYBIT:ETHUSDT.P",
+      "label": "ETHUSDT.P",
+      "base": "ETH",
+      "type": "perp"
+    },
+    {
+      "symbol": "MEXC:HBARUSDT.P",
+      "label": "MEXC:HBARUSDT.P",
+      "base": "MEXC:HBAR",
+      "type": "perp"
+    },
+    {
+      "symbol": "MEXC:HYPEUSDT.P",
+      "label": "MEXC:HYPEUSDT.P",
+      "base": "MEXC:HYPE",
+      "type": "perp"
+    },
+    {
+      "symbol": "MEXC:TAOUSDT.P",
+      "label": "MEXC:TAOUSDT.P",
+      "base": "MEXC:TAO",
+      "type": "perp"
+    },
+    {
+      "symbol": "BYBIT:SOLUSDT.P",
+      "label": "SOLUSDT.P",
+      "base": "SOL",
+      "type": "perp"
+    },
+    {
+      "symbol": "BINANCE:BNBUSDT",
+      "label": "BNBUSDT",
+      "base": "BNB",
+      "type": "spot"
+    },
+    {
+      "symbol": "BINANCE:BNBBTC",
+      "label": "BNBBTC",
+      "base": "BNBBTC",
+      "type": "spot"
+    },
+    {
+      "symbol": "BINANCE:ETHBTC",
+      "label": "ETHBTC",
+      "base": "ETHBTC",
+      "type": "spot"
+    },
+    {
+      "symbol": "INDEX:BTCUSD",
+      "label": "INDEX:BTCUSD",
+      "base": "INDEX:BTC",
+      "type": "spot"
+    },
+    {
+      "symbol": "MEXC:VIRTUALUSDT",
+      "label": "MEXC:VIRTUALUSDT",
+      "base": "MEXC:VIRTUAL",
+      "type": "spot"
+    },
+    {
+      "symbol": "MEXC:XMRUSDT",
+      "label": "MEXC:XMRUSDT",
+      "base": "MEXC:XMR",
+      "type": "spot"
+    },
+    {
+      "symbol": "BINANCE:SOLUSDT",
+      "label": "SOLUSDT",
+      "base": "SOL",
+      "type": "spot"
+    },
+    {
+      "symbol": "BINANCE:SOLBTC",
+      "label": "SOLBTC",
+      "base": "SOLBTC",
+      "type": "spot"
+    }
+  ]
+}
