@@ -16,6 +16,10 @@
           <h2 style="margin:0;font-size:20px;color:#3B3A3A;">🚀 הפקת ניתוח Wyckoff</h2>
           <button id="wpm-close" style="border:none;background:transparent;font-size:24px;cursor:pointer;color:#6b7280;line-height:1;padding:4px 8px;">×</button>
         </div>
+        <div id="wpm-stage" style="display:flex;gap:8px;margin-bottom:10px;font-size:12px;">
+          <span id="wpm-stage-main" style="flex:1;text-align:center;padding:6px 10px;border-radius:6px;background:#0a7;color:#fff;font-weight:600;">שלב 1/2 — דוח ראשי</span>
+          <span id="wpm-stage-skill" style="flex:1;text-align:center;padding:6px 10px;border-radius:6px;background:#e5e7eb;color:#6b7280;">שלב 2/2 — דוח Skill</span>
+        </div>
         <div id="wpm-step" style="font-size:14px;color:#3B3A3A;margin-bottom:10px;min-height:20px;">מתחבר ל-Worker...</div>
         <div style="background:#e5e7eb;border-radius:8px;height:14px;overflow:hidden;margin-bottom:14px;">
           <div id="wpm-bar" style="height:100%;background:linear-gradient(90deg,#0a7,#d4a017);width:0%;transition:width .5s ease;"></div>
@@ -23,7 +27,7 @@
         <div id="wpm-percent" style="font-size:12px;color:#6b7280;margin-bottom:12px;text-align:left;">0%</div>
         <div style="font-size:13px;color:#3B3A3A;margin-bottom:6px;">📋 לוג חי:</div>
         <div id="wpm-log" style="flex:1;overflow-y:auto;background:#1f2937;color:#a7f3d0;border-radius:8px;padding:12px;font-family:'Courier New',Consolas,monospace;font-size:12px;line-height:1.6;direction:ltr;text-align:left;min-height:240px;max-height:380px;">ממתין לתחילת הריצה...</div>
-        <div id="wpm-footer" style="margin-top:12px;font-size:12px;color:#6b7280;text-align:center;">⏳ הניתוח לוקח ~5-7 דקות. תוכל לסגור את החלון — הוא ימשיך לרוץ ברקע.</div>
+        <div id="wpm-footer" style="margin-top:12px;font-size:12px;color:#6b7280;text-align:center;">⏳ שני הדוחות לוקחים ~10-15 דקות יחד. תוכל לסגור את החלון — הם ימשיכו ברקע.</div>
       </div>
     `;
     document.body.appendChild(overlay);
@@ -34,6 +38,35 @@
     const logEl = overlay.querySelector('#wpm-log');
     const footEl = overlay.querySelector('#wpm-footer');
     const closeBtn = overlay.querySelector('#wpm-close');
+    const stageMainEl = overlay.querySelector('#wpm-stage-main');
+    const stageSkillEl = overlay.querySelector('#wpm-stage-skill');
+
+    function setActiveStage(stage) {
+      // stage: 'main' or 'skill'
+      if (stage === 'skill') {
+        stageMainEl.style.background = '#86efac';   // soft green = completed
+        stageMainEl.style.color = '#047857';
+        stageMainEl.textContent = '✅ שלב 1/2 — דוח ראשי';
+        stageSkillEl.style.background = '#0a7';     // active = bold green
+        stageSkillEl.style.color = '#fff';
+        stageSkillEl.style.fontWeight = '600';
+      } else {
+        // main is active
+        stageMainEl.style.background = '#0a7';
+        stageMainEl.style.color = '#fff';
+        stageSkillEl.style.background = '#e5e7eb';
+        stageSkillEl.style.color = '#6b7280';
+        stageSkillEl.style.fontWeight = '400';
+      }
+    }
+    function markBothComplete() {
+      stageMainEl.style.background = '#86efac';
+      stageMainEl.style.color = '#047857';
+      stageMainEl.textContent = '✅ שלב 1/2 — דוח ראשי';
+      stageSkillEl.style.background = '#86efac';
+      stageSkillEl.style.color = '#047857';
+      stageSkillEl.textContent = '✅ שלב 2/2 — דוח Skill';
+    }
 
     let pollTimer = null;
     let lastLogLength = 0;
@@ -61,6 +94,10 @@
         // Current step
         if (data.currentStep) stepEl.textContent = data.currentStep;
 
+        // Stage indicator — main vs skill
+        if (data.stage === 'skill') setActiveStage('skill');
+        else if (data.state === 'running') setActiveStage('main');
+
         // Append new log lines
         if (Array.isArray(data.log)) {
           for (let i = lastLogLength; i < data.log.length; i++) {
@@ -83,7 +120,8 @@
         // Final states
         if (data.state === 'done' && !done) {
           done = true;
-          footEl.innerHTML = '✅ <strong>הניתוח הושלם!</strong> מייל נשלח ל-gagula22@gmail.com';
+          markBothComplete();
+          footEl.innerHTML = '✅ <strong>שני הדוחות הושלמו!</strong> ראשי + skill נשלחו ל-gagula22@gmail.com';
           footEl.style.color = '#059669';
           cleanup();
         } else if (data.state === 'error' && !done) {
