@@ -328,11 +328,17 @@
 
     function renderTabs() {
       tabsWrap.innerHTML = '';
-      const perpCount = allSymbols.filter(s => s.type === 'perp').length;
-      const spotCount = allSymbols.filter(s => s.type === 'spot').length;
-      tabsWrap.appendChild(tabBtn(`Perpetuals (${perpCount})`, 'perp'));
-      tabsWrap.appendChild(tabBtn(`Spot (${spotCount})`, 'spot'));
+      const counts = {
+        perp:  allSymbols.filter(s => s.type === 'perp').length,
+        spot:  allSymbols.filter(s => s.type === 'spot').length,
+        macro: allSymbols.filter(s => s.type === 'macro').length,
+        index: allSymbols.filter(s => s.type === 'index').length,
+      };
       tabsWrap.appendChild(tabBtn(`הכל (${allSymbols.length})`, 'all'));
+      if (counts.perp)  tabsWrap.appendChild(tabBtn(`🔥 Perp (${counts.perp})`, 'perp'));
+      if (counts.spot)  tabsWrap.appendChild(tabBtn(`💎 Spot (${counts.spot})`, 'spot'));
+      if (counts.macro) tabsWrap.appendChild(tabBtn(`🌐 Macro (${counts.macro})`, 'macro'));
+      if (counts.index) tabsWrap.appendChild(tabBtn(`📈 Index (${counts.index})`, 'index'));
     }
     renderTabs();
     modal.appendChild(tabsWrap);
