@@ -120,9 +120,24 @@
         // Final states
         if (data.state === 'done' && !done) {
           done = true;
-          markBothComplete();
-          footEl.innerHTML = '✅ <strong>שני הדוחות הושלמו!</strong> ראשי + skill נשלחו ל-gagula22@gmail.com';
-          footEl.style.color = '#059669';
+          // Detect if skill failed (stageLabel contains "נכשל" OR currentStep starts with ⚠️)
+          const skillFailed = (data.stageLabel && data.stageLabel.includes('נכשל')) ||
+                              (data.currentStep && data.currentStep.startsWith('⚠️'));
+          if (skillFailed) {
+            // Main OK, skill failed
+            stageMainEl.style.background = '#86efac';
+            stageMainEl.style.color = '#047857';
+            stageMainEl.textContent = '✅ שלב 1/2 — דוח ראשי';
+            stageSkillEl.style.background = '#fde68a';
+            stageSkillEl.style.color = '#92400e';
+            stageSkillEl.textContent = '⚠️ שלב 2/2 — Skill נכשל';
+            footEl.innerHTML = '⚠️ <strong>דוח ראשי הסתיים בהצלחה,</strong> אך skill נכשל. בדקי את הלוג מעל.';
+            footEl.style.color = '#d97706';
+          } else {
+            markBothComplete();
+            footEl.innerHTML = '✅ <strong>שני הדוחות הושלמו!</strong> ראשי + skill נשלחו ל-gagula22@gmail.com';
+            footEl.style.color = '#059669';
+          }
           cleanup();
         } else if (data.state === 'error' && !done) {
           done = true;
