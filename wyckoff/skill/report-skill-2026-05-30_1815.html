@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ניתוח Wyckoff+PA — BYBIT:BTCUSDT.P — 2026-05-30 18:15</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Heebo', 'Arial', sans-serif;
+    direction: rtl;
+    text-align: right;
+    line-height: 1.7;
+    color: #1a1a1a;
+    background: #f7f8fa;
+    margin: 0;
+    padding: 20px;
+    max-width: 1100px;
+    margin-inline: auto;
+  }
+  h1 { font-size: 1.8rem; border-bottom: 3px solid #2563eb; padding-bottom: 8px; }
+  h2 { font-size: 1.4rem; margin-top: 36px; color: #1e40af; }
+  h3 { font-size: 1.15rem; color: #334155; margin-top: 24px; }
+  .ltr { direction: ltr; unicode-bidi: embed; display: inline-block; }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; background: #fff; }
+  th, td { padding: 10px 12px; border: 1px solid #e5e7eb; text-align: right; }
+  th { background: #f1f5f9; font-weight: 600; }
+  .box {
+    background: #fff;
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin: 16px 0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    border-right: 4px solid #2563eb;
+  }
+  .box.tr-box { border-color: #0891b2; background: #ecfeff; }
+  .box.consciousness { border-color: #f59e0b; background: #fffbeb; }
+  .box.volume { border-color: #7c3aed; }
+  .box.effort { border-color: #ec4899; }
+  .box.conflict { border-color: #dc2626; background: #fef2f2; }
+  .box.checklist { border-color: #059669; background: #ecfdf5; }
+  .box.co-thesis { border-color: #0d9488; background: #f0fdfa; }
+  .badge {
+    display: inline-block;
+    padding: 3px 12px;
+    border-radius: 12px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin: 0 4px;
+  }
+  .badge.bullish { background: #dcfce7; color: #166534; }
+  .badge.bearish { background: #fee2e2; color: #991b1b; }
+  .badge.neutral { background: #f3f4f6; color: #374151; }
+  .badge.high-conf { background: #2563eb; color: #fff; }
+  .badge.medium-conf { background: #d97706; color: #fff; }
+  .badge.low-conf { background: #6b7280; color: #fff; }
+  .badge.validation { background: #14b8a6; color: #fff; }
+  .badge.anomaly { background: #dc2626; color: #fff; }
+  .scenario { padding: 14px 18px; border-radius: 8px; margin: 12px 0; }
+  .scenario.primary { background: #ecfdf5; border-right: 4px solid #059669; }
+  .scenario.alt { background: #fff7ed; border-right: 4px solid #ea580c; }
+  .scenario.invalid { background: #fef2f2; border-right: 4px solid #dc2626; }
+  .check-list { list-style: none; padding: 0; }
+  .check-list li { padding: 4px 0; }
+  .check-list li.done::before { content: "✅ "; }
+  .check-list li.missing::before { content: "❌ "; }
+  .check-list li.partial::before { content: "⚠️ "; }
+  code, .level { font-family: 'Consolas', monospace; background: #f1f5f9; padding: 2px 6px; border-radius: 3px; font-size: 0.95rem; }
+  img.chart { max-width: 100%; border-radius: 6px; margin: 12px 0; display: block; }
+  .meta { font-size: 0.9rem; color: #64748b; }
+  .hint { font-size: 0.88rem; color: #6b7280; font-style: italic; }
+  /* Yellow key/summary box (matches existing system style) */
+  .key-box { background: #fffde6; padding: 10px 16px; border-right: 4px solid #d97706; margin: 10px 0; border-radius: 4px; font-size: 0.96rem; }
+  .key-box strong { color: #92400e; }
+  /* Wyckoff generic scenarios box per TF */
+  .wyckoff-scenarios { border-color: #6366f1; background: #eef2ff; }
+
+/* === Tooltip on hover for technical terms === */
+.term {
+  border-bottom: 1px dotted #2563eb;
+  cursor: help;
+  position: relative;
+  display: inline-block;
+}
+.term:hover::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 50%;
+  transform: translateX(50%);
+  background: #1e293b;
+  color: #fff;
+  padding: 8px 12px;
+  border-radius: 6px;
+  white-space: normal;
+  width: max-content;
+  max-width: 340px;
+  font-size: 0.82rem;
+  font-weight: normal;
+  line-height: 1.5;
+  z-index: 100;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.18);
+  direction: rtl;
+  text-align: right;
+}
+.term:hover::before {
+  content: "";
+  position: absolute;
+  bottom: 100%;
+  right: 50%;
+  transform: translateX(50%);
+  border: 6px solid transparent;
+  border-top-color: #1e293b;
+  z-index: 100;
+}
+</style>
+</head>
+<body>
+
+<h1>🎯 ניתוח Wyckoff + Price Action — BYBIT:BTCUSDT.P</h1>
+<p class="meta">תאריך/שעה: <span class="ltr">2026-05-30 18:15</span> | אנליסט: Claude (Wyckoff-PA Skill v3.4)</p>
+
+<!-- ============================================== -->
+<!-- 1. שורה תחתונה — קצרצרה -->
+<!-- ============================================== -->
+<div class="box co-thesis">
+  <h2>📌 שורה תחתונה</h2>
+  <p><strong>ביטקוי מראה סימני צבירה מוקדמים בטווח היומי וה-4H, עם קונים השולטים בטווחים הנמוכים יותר. אנו רואים סבירות גבוהה להמשך עליות לעבר פריצת גג הטווח.</strong></p>
+  <p><strong>אופרטור מאוחד</strong>: <span class="badge bullish">צובר לונג</span> — ה-CO סופג היצע בתחתית הטווח ומתכונן לדחוף את המחיר למעלה.</p>
+  <p><strong>פעולה מומלצת</strong>: <span class="badge bullish">לונג</span></p>
+</div>
+
+<!-- ============================================== -->
+<!-- 2. תיבת סתירה (אם יש בין טווחי זמן) -->
+<!-- ============================================== -->
+
+<!-- ============================================== -->
+<!-- 3. יומי (1D) — תודעה מלאה -->
+<!-- ============================================== -->
+<h2>🗓️ יומי — Primary Bias</h2>
+<img class="chart" src="chart-1d.png" alt="1D Chart">
+
+<div class="box tr-box">
+  <p><strong><span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span> מזוהה</strong>: <span class="level">72552</span> (<span class="term" data-tooltip="Selling Climax — פניקת מכירה סופית. נר ירידה ענקי עם וליום קלימקטי.">SC</span>) → <span class="level">74310</span> (<span class="term" data-tooltip="Automatic Rally/Reaction — תנועה אוטומטית אחרי climax. מגדירה את גג/תחתית ה-<span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span>.">AR</span>)</p>
+  <p><strong>מבנה</strong>: <span class="badge bullish">Accumulation</span> — סימנים ראשוניים של צבירה אחרי מגמת ירידה.</p>
+  <p><strong>פאזה כללית</strong>: A/B <span class="hint">(הסבר טקסטואלי בלבד — לא מסומן על הגרף)</span></p>
+</div>
+
+<div class="box consciousness">
+  <h3>💡 תודעה</h3>
+  <p><strong>קריאה</strong>: <span class="badge bullish">שורית</span> × <span class="badge medium-conf">בינונית</span></p>
+</div>
+
+<div class="box volume">
+  <h3>📊 ניתוח ווליום</h3>
+  <ul>
+    <li>נר ה-<span class="term" data-tooltip="Selling Climax — פניקת מכירה סופית. נר ירידה ענקי עם וליום קלימקטי.">SC</span> (28 במאי) הראה <span class="term" data-tooltip="Volume per 1% move — ווליום נר ÷ אחוז שינוי. מאפשר השוואה הוגנת בין נרות. ערך גבוה מאוד = climactic.">V/1%</span> גבוה (פי 1.78 מה-baseline), המעיד על ספיגת היצע משמעותית.</li>
+    <li>נר ה-<span class="term" data-tooltip="Automatic Rally/Reaction — תנועה אוטומטית אחרי climax. מגדירה את גג/תחתית ה-<span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span>.">AR</span> (29 במאי) הציג <span class="term" data-tooltip="Volume per 1% move — ווליום נר ÷ אחוז שינוי. מאפשר השוואה הוגנת בין נרות. ערך גבוה מאוד = climactic.">V/1%</span> קלימקטי במיוחד (פי 8.11 מה-baseline), מה שמעיד על עניין קונים חזק מאוד, אך גם על פוטנציאל להתנגדות באזור זה.</li>
+    <li>הנר האחרון (30 במאי) מציג <span class="term" data-tooltip="Volume per 1% move — ווליום נר ÷ אחוז שינוי. מאפשר השוואה הוגנת בין נרות. ערך גבוה מאוד = climactic.">V/1%</span> נמוך מאוד (פי 0.43 מה-baseline) בטווח צר, המעיד על חוסר היצע (No Supply) באזור המחיר הנוכחי.</li>
+  </ul>
+  <p><strong><span class="term" data-tooltip="Volume per 1% move — ווליום נר ÷ אחוז שינוי. מאפשר השוואה הוגנת בין נרות. ערך גבוה מאוד = climactic.">V/1%</span> baseline</strong>: <span class="ltr">44363.6</span></p>
+
+  <h4 style="margin-top: 18px;">📋 טבלת V/1% — הנרות הגדולים ביומי</h4>
+  <table>
+    <thead><tr><th>תאריך</th><th>סוג נר</th><th>V/1%</th><th>יחס ל-baseline</th><th>משמעות</th></tr></thead>
+    <tbody>
+      <tr><td>2026-05-26</td><td>דובי</td><td>44363.6</td><td>1.00</td><td>רגיל - continuation</td></tr>
+      <tr><td>2026-05-27</td><td>דובי</td><td>35814.6</td><td>0.81</td><td>נמוך — תקין ל-Phase B</td></tr>
+      <tr><td>2026-05-28</td><td>שורי</td><td>79036.1</td><td>1.78</td><td>מאמץ עולה — סיגנל מתקרב (SC פוטנציאלי)</td></tr>
+      <tr><td>2026-05-29</td><td>דובי</td><td>359790.1</td><td>8.11</td><td>🚨 קלימקטי — אירוע מובהק (AR)</td></tr>
+      <tr><td>2026-05-30</td><td>שורי</td><td>18968.2</td><td>0.43</td><td>חוסר ביקוש/היצע (No Supply)</td></tr>
+    </tbody>
+  </table>
+  <p class="hint">📌 baseline = V/1% של ה-BC daily. נרות &gt; פי 2 מ-baseline = climactic.</p>
+</div>
+
+<div class="box effort">
+  <h3>⚖️ מאמץ מול תוצאה — גל אחרון</h3>
+  <p>הגל האחרון מה-<span class="term" data-tooltip="Selling Climax — פניקת מכירה סופית. נר ירידה ענקי עם וליום קלימקטי.">SC</span> ל-<span class="term" data-tooltip="Automatic Rally/Reaction — תנועה אוטומטית אחרי climax. מגדירה את גג/תחתית ה-<span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span>.">AR</span> הראה ווליום קלימקטי (<span class="term" data-tooltip="Volume per 1% move — ווליום נר ÷ אחוז שינוי. מאפשר השוואה הוגנת בין נרות. ערך גבוה מאוד = climactic.">V/1%</span> גבוה מאוד) ותוצאה של תנועה רחבה. לאחר מכן, הדשדוש מתחת ל-<span class="term" data-tooltip="Automatic Rally/Reaction — תנועה אוטומטית אחרי climax. מגדירה את גג/תחתית ה-<span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span>.">AR</span> מראה ווליום נמוך.</p>
+  <p><strong>אבחנה</strong>: <span class="badge validation">Validation</span></p>
+</div>
+
+<div class="key-box">
+  <h3>💡 סיכום Phase B (Daily):</h3>
+  <p>ה-CO הראה נוכחות חזקה בבלימת הירידות ובדחיפה ראשונית של המחיר (AR). כעת הוא נמצא בשלב ספיגה שקט מתחת לגג הטווח.</p>
+  <h3>💡 תודעה ראשונית (Daily):</h3>
+  <p>תודעה שורית מתפתחת, מאושרת על ידי ספיגת היצע ב-<span class="term" data-tooltip="Selling Climax — פניקת מכירה סופית. נר ירידה ענקי עם וליום קלימקטי.">SC</span> ועניין קונים ב-<span class="term" data-tooltip="Automatic Rally/Reaction — תנועה אוטומטית אחרי climax. מגדירה את גג/תחתית ה-<span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span>.">AR</span>. נחפש אישור נוסף בטווחים נמוכים יותר.</p>
+</div>
+
+<div class="box wyckoff-scenarios">
+  <h3>תרחישי וויקוף אפשריים (Daily)</h3>
+  <ul>
+    <li><strong>תרחיש <span class="term" data-tooltip="Upthrust After Distribution — שבירה זמנית של גג ה-<span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span> + חזרה. סחיפת stops של shorts. סיגנל לירידה.">UTAD</span>/<span class="term" data-tooltip="Upthrust — חציית גג ה-<span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span> בוליום גבוה, אך ללא יכולת להחזיק מעמד.">UT</span></strong>: המחיר עולה מעל ה-<span class="term" data-tooltip="Automatic Rally/Reaction — תנועה אוטומטית אחרי climax. מגדירה את גג/תחתית ה-<span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span>.">AR</span> (74310) עם ווליום גבוה, אך נכשל להחזיק מעמד וחוזר במהירות לתוך ה-<span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span>. <strong>זיהוי</strong>: נר שורי חזק מעל <span class="term" data-tooltip="Automatic Rally/Reaction — תנועה אוטומטית אחרי climax. מגדירה את גג/תחתית ה-<span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span>.">AR</span> ואחריו נר דובי חזק שחוזר לתוך הטווח. <strong>תודעה צפויה</strong>: דובית מתפתחת. <strong>פעולה</strong>: לחפש עסקאות שורט בטווחים נמוכים יותר.</li>
+    <li><strong>תרחיש <span class="term" data-tooltip="שבירה זמנית של תחתית ה-<span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span> + חזרה. סחיפת stops של longs. סיגנל לעלייה. דרגות: #1 (Terminal — חזק), #2 (Ordinary), #3 (Minor — שווה כניסה ישירה).">Spring</span></strong>: המחיר יורד מתחת ל-<span class="term" data-tooltip="Selling Climax — פניקת מכירה סופית. נר ירידה ענקי עם וליום קלימקטי.">SC</span> (72552) עם ווליום גבוה, אך נכשל להחזיק מעמד וחוזר במהירות לתוך ה-<span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span>. <strong>זיהוי</strong>: נר דובי חזק מתחת <span class="term" data-tooltip="Selling Climax — פניקת מכירה סופית. נר ירידה ענקי עם וליום קלימקטי.">SC</span> ואחריו נר שורי חזק שחוזר לתוך הטווח. <strong>תודעה צפויה</strong>: שורית מתפתחת. <strong>פעולה</strong>: לחפש עסקאות לונג בטווחים נמוכים יותר.</li>
+    <li><strong>תרחיש דשדוש</strong>: המחיר ממשיך לנוע בטווח 72552-74310 ללא פריצה ברורה לאף כיוון. <strong>זיהוי</strong>: נרות קטנים ובינוניים, ווליום נמוך באזורי הקצוות, חוסר מומנטום. <strong>תודעה צפויה</strong>: ניטרלית. <strong>פעולה</strong>: לחכות לסיגנל ברור או לפריצה של גבולות הטווח.</li>
+  </ul>
+</div>
+
+<div class="box">
+  <p><strong>📝 מסקנה יומי</strong>: ה-Daily מראה סימנים ראשוניים של <span class="term" data-tooltip="Accumulation — פאזת צבירה. ה-CO צובר עמדות לונג.">Accumulation</span> (פאזה A/B). הקונים הראו נוכחות חזקה ב-<span class="term" data-tooltip="Automatic Rally/Reaction — תנועה אוטומטית אחרי climax. מגדירה את גג/תחתית ה-<span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span>.">AR</span>, אך המחיר כרגע מדשדש מתחת ל-<span class="term" data-tooltip="Automatic Rally/Reaction — תנועה אוטומטית אחרי climax. מגדירה את גג/תחתית ה-<span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span>.">AR</span>. יש צורך באישור נוסף (<span class="term" data-tooltip="Secondary Test — חזרה לאזור SC/BC בוליום נמוך. מאשר את גבולות ה-<span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span>.">ST</span> או <span class="term" data-tooltip="Sign of Strength — פריצת גג ה-<span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span> בוליום גבוה. מגמת עלייה מתחילה.">SOS</span>) כדי לאשר את תזת הצבירה.</p>
+</div>
+
+<!-- ============================================== -->
+<!-- 4. 4H — Stage / אישור -->
+<!-- ============================================== -->
+<h2>🕓 4H — Stage</h2>
+<img class="chart" src="chart-4h.png" alt="4H Chart">
+
+<div class="box tr-box">
+  <p><strong><span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span> (אם שונה מ-יומי)</strong>: <span class="level">71936.2</span> → <span class="level">73999.9</span></p>
+  <p><strong>תאימות ל-יומי</strong>: ה-4H מאשר את טווח המסחר והפאזה הראשונית של <span class="term" data-tooltip="Accumulation — פאזת צבירה. ה-CO צובר עמדות לונג.">Accumulation</span> כפי שזוהתה ב-Daily.</p>
+</div>
+
+<div class="box consciousness">
+  <h3>💡 תודעה</h3>
+  <p><strong>קריאה</strong>: <span class="badge bullish">שורית</span> × <span class="badge medium-conf">בינונית</span></p>
+</div>
+
+<div class="box volume">
+  <h3>📊 ווליום + David Weis Waves</h3>
+  <ul>
+    <li>נר ה-<span class="term" data-tooltip="Selling Climax — פניקת מכירה סופית. נר ירידה ענקי עם וליום קלימקטי.">SC</span> (28 במאי, 16:00) וה-<span class="term" data-tooltip="Automatic Rally/Reaction — תנועה אוטומטית אחרי climax. מגדירה את גג/תחתית ה-<span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span>.">AR</span> (29 במאי, 00:00) הציגו ווליום גבוה מאוד, המאשר את עוצמת האירועים הללו.</li>
+    <li>הירידה לאחר ה-<span class="term" data-tooltip="Automatic Rally/Reaction — תנועה אוטומטית אחרי climax. מגדירה את גג/תחתית ה-<span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span>.">AR</span> התרחשה בווליום יורד, המעיד על חולשה בצד המוכרים. העלייה הנוכחית מציגה ווליום נמוך יחסית, אך מתחיל לעלות בנרות האחרונים.</li>
+  </ul>
+  <p><strong>גל עליה אחרון vs גל ירידה אחרון</strong>: גל הירידה האחרון היה בווליום יורד, וגל העלייה הנוכחי מציג ווליום נמוך אך עולה, מה שמעיד על חולשה של המוכרים ועלייה הדרגתית של הקונים (No Supply). זהו סימן הרמוניה שורי.</p>
+
+  <h4 style="margin-top: 18px;">📋 טבלת V/1% — הנרות הגדולים ב-4H</h4>
+  <table>
+    <thead><tr><th>תאריך/שעה</th><th>סוג נר</th><th>V/1%</th><th>יחס ל-baseline</th><th>משמעות</th></tr></thead>
+    <tbody>
+      <tr><td>2026-05-29T20:00</td><td>דובי</td><td>71354.3</td><td>1.97</td><td>מאמץ עולה — סיגנל מתקרב</td></tr>
+      <tr><td>2026-05-30T00:00</td><td>שורי</td><td>36268.1</td><td>1.00</td><td>רגיל - continuation</td></tr>
+      <tr><td>2026-05-30T04:00</td><td>דובי</td><td>196950.1</td><td>5.43</td><td>🚨 קלימקטי — אירוע מובהק (Sweep low)</td></tr>
+      <tr><td>2026-05-30T08:00</td><td>שורי</td><td>22127.7</td><td>0.61</td><td>נמוך — תקין ל-Phase B (No Supply)</td></tr>
+      <tr><td>2026-05-30T12:00</td><td>שורי</td><td>7604.9</td><td>0.21</td><td>חוסר ביקוש/היצע (No Supply)</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box effort">
+  <h3>⚖️ מאמץ מול תוצאה</h3>
+  <p>העלייה האחרונה מתחתית הטווח (סביב 73160.3) התרחשה עם ווליום נמוך יחסית, אך עם טווח נר רחב. זהו <span class="term" data-tooltip="Anomaly — סטייה. ווליום לא מאשר את תנועת המחיר.">Anomaly</span> של Low Effort, High Result, המעיד על חוסר התנגדות מצד המוכרים (No Supply) ולא על מאמץ קונים אגרסיבי.</p>
+  <p><strong>אבחנה</strong>: <span class="badge anomaly">Anomaly</span></p>
+</div>
+
+<div class="key-box">
+  <h3>💡 סיכום Phase B (4H):</h3>
+  <p>ה-CO מנצל את חוסר ההיצע כדי לדחוף את המחיר כלפי גג הטווח. הטווח בונה <span class="term" data-tooltip="Cause — הבסיס למהלך המחיר הבא. נבנה בתוך <span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span>.">Cause</span> לקראת מהלך שורי.</p>
+  <h3>💡 תודעה ראשונית (4H):</h3>
+  <p>תודעה שורית בינונית, מאושרת על ידי חולשת המוכרים ודחיפה הדרגתית של הקונים. ה-4H נמצאת בפאזה B, בונה <span class="term" data-tooltip="Cause — הבסיס למהלך המחיר הבא. נבנה בתוך <span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span>.">Cause</span>, ומתקרבת לאזור ה-<span class="term" data-tooltip="Automatic Rally/Reaction — תנועה אוטומטית אחרי climax. מגדירה את גג/תחתית ה-<span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span>.">AR</span>.</p>
+</div>
+
+<div class="box wyckoff-scenarios">
+  <h3>תרחישי וויקוף אפשריים (4H)</h3>
+  <ul>
+    <li><strong>תרחיש <span class="term" data-tooltip="Upthrust After Distribution — שבירה זמנית של גג ה-<span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span> + חזרה. סחיפת stops של shorts. סיגנל לירידה.">UTAD</span>/<span class="term" data-tooltip="Upthrust — חציית גג ה-<span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span> בוליום גבוה, אך ללא יכולת להחזיק מעמד.">UT</span></strong>: המחיר עולה מעל ה-<span class="term" data-tooltip="Automatic Rally/Reaction — תנועה אוטומטית אחרי climax. מגדירה את גג/תחתית ה-<span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span>.">AR</span> (73999.9) עם ווליום גבוה, נכשל להחזיק, וחוזר לתוך ה-<span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span>. <strong>זיהוי</strong>: פריצה חזקה של <span class="term" data-tooltip="Automatic Rally/Reaction — תנועה אוטומטית אחרי climax. מגדירה את גג/תחתית ה-<span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span>.">AR</span> ואחריה דחייה מהירה בחזרה לטווח. <strong>תודעה צפויה</strong>: דובית מתפתחת. <strong>פעולה</strong>: לחפש שורט ב-LTF.</li>
+    <li><strong>תרחיש <span class="term" data-tooltip="שבירה זמנית של תחתית ה-<span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span> + חזרה. סחיפת stops של longs. סיגנל לעלייה. דרגות: #1 (Terminal — חזק), #2 (Ordinary), #3 (Minor — שווה כניסה ישירה).">Spring</span></strong>: המחיר יורד מתחת ל-<span class="term" data-tooltip="Selling Climax — פניקת מכירה סופית. נר ירידה ענקי עם וליום קלימקטי.">SC</span> (71936.2) עם ווליום גבוה, נכשל להחזיק, וחוזר לתוך ה-<span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span>. <strong>זיהוי</strong>: שבירה של <span class="term" data-tooltip="Selling Climax — פניקת מכירה סופית. נר ירידה ענקי עם וליום קלימקטי.">SC</span> ואחריה התאוששות מהירה בחזרה לטווח. <strong>תודעה צפויה</strong>: שורית מתפתחת. <strong>פעולה</strong>: לחפש לונג ב-LTF.</li>
+    <li><strong>תרחיש דשדוש</strong>: המחיר ממשיך לנוע בטווח 71936.2-73999.9 ללא פריצה ברורה. <strong>זיהוי</strong>: תנועה אופקית ממושכת, ווליום יורד, אין אירועים מובהקים. <strong>תודעה צפויה</strong>: ניטרלית. <strong>פעולה</strong>: לחכות לסיגנל ברור.</li>
+  </ul>
+</div>
+
+<div class="box">
+  <p><strong>📝 מסקנה 4H</strong>: ה-4H מאשר את תזת ה-<span class="term" data-tooltip="Accumulation — פאזת צבירה. ה-CO צובר עמדות לונג.">Accumulation</span> ב-Daily. המחיר נמצא ב-Phase B, בונה <span class="term" data-tooltip="Cause — הבסיס למהלך המחיר הבא. נבנה בתוך <span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span>.">Cause</span>, ויש סימני חולשה בצד המוכרים (No Supply) לקראת גג הטווח.</p>
+</div>
+
+<!-- ============================================== -->
+<!-- 5. 1H — Structure / Current Event -->
+<!-- ============================================== -->
+<h2>⏱️ 1H — Structure & Event</h2>
+<img class="chart" src="chart-1h.png" alt="1H Chart">
+
+<div class="box">
+  <p><strong>אירוע נוכחי</strong>: המחיר נמצא במהלך עלייה חזק, מתקרב לגג ה-<span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span> של ה-4H/Daily. זהו <span class="term" data-tooltip="Last Point of Supply — תיקון דובי אחרון לפני המשך ירידה.">LPS</span> פוטנציאלי לפני <span class="term" data-tooltip="Sign of Strength — פריצת גג ה-<span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span> בוליום גבוה. מגמת עלייה מתחילה.">SOS</span>.</p>
+  <p><strong>Significant Bar אחרון</strong>: הנר ב-2026-05-30T14:00 (O=73793 H=74076.8 L=73780.5 C=73895) הוא נר שורי רחב עם <span class="term" data-tooltip="Volume per 1% move — ווליום נר ÷ אחוז שינוי. מאפשר השוואה הוגנת בין נרות. ערך גבוה מאוד = climactic.">V/1%</span> גבוה (פי 2.81 מה-baseline), הסוגר קרוב לשיא שלו. זהו נר המעיד על כוונת מוסדיים.</p>
+  <p><strong>SMC structure</strong>: <span class="term" data-tooltip="Break of Structure — שבירת שיא/שפל קודם בכיוון המגמה.">BOS</span>/<span class="term" data-tooltip="Change of Character — השבירה הראשונה נגד המגמה.">CHOCH</span> אחרון — ה-<span class="term" data-tooltip="Break of Structure — שבירת שיא/שפל קודם בכיוון המגמה.">BOS</span> האחרון היה שורי, בפריצה מעל 73625.9 (30 במאי, 12:00).</p>
+</div>
+
+<div class="box consciousness">
+  <h3>💡 תודעה</h3>
+  <p><strong>קריאה</strong>: <span class="badge bullish">שורית</span> × <span class="badge high-conf">גבוהה</span></p>
+</div>
+
+<div class="box volume">
+  <h3>📊 ווליום</h3>
+  <ul>
+    <li>הראלי מ-30 במאי, 11:00 ל-14:00 מציג ווליום עולה בהתמדה, המעיד על ביקוש חזק ומתגבר.</li>
+    <li>הנר האחרון (30 במאי, 15:00) הראה <span class="term" data-tooltip="Volume per 1% move — ווליום נר ÷ אחוז שינוי. מאפשר השוואה הוגנת בין נרות. ערך גבוה מאוד = climactic.">V/1%</span> נמוך יחסית (פי 0.76 מה-baseline), אך עדיין נר עולה, המעיד על תיקון בריא (LPS) לפני המשך אפשרי של העליות.</li>
+  </ul>
+
+  <h4 style="margin-top: 18px;">📋 טבלת V/1% — הנרות הגדולים ב-1H</h4>
+  <table>
+    <thead><tr><th>תאריך/שעה</th><th>סוג נר</th><th>V/1%</th><th>יחס ל-baseline</th><th>משמעות</th></tr></thead>
+    <tbody>
+      <tr><td>2026-05-30T11:00</td><td>דובי</td><td>5584.3</td><td>1.00</td><td>רגיל - continuation</td></tr>
+      <tr><td>2026-05-30T12:00</td><td>שורי</td><td>3197.6</td><td>0.57</td><td>נמוך — תקין ל-Phase B (No Supply)</td></tr>
+      <tr><td>2026-05-30T13:00</td><td>שורי</td><td>6640.8</td><td>1.19</td><td>רגיל - continuation</td></tr>
+      <tr><td>2026-05-30T14:00</td><td>שורי</td><td>15714.8</td><td>2.81</td><td>🚨 קלימקטי — אירוע מובהק (SOS bar)</td></tr>
+      <tr><td>2026-05-30T15:00</td><td>שורי</td><td>4260.9</td><td>0.76</td><td>נמוך — תקין ל-Phase B (LPS)</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box effort">
+  <h3>⚖️ אישור או אנומליה?</h3>
+  <p>הגל העולה האחרון מ-30 במאי, 11:00 ל-14:00 הראה ווליום עולה וטווחים רחבים, המעידים על <span class="term" data-tooltip="Validation — אימות. ווליום מאשר את תנועת המחיר.">Validation</span> חזקה של מאמץ קונים.</p>
+  <p><strong>אבחנה</strong>: <span class="badge validation">Validation</span></p>
+</div>
+
+<div class="key-box">
+  <h3>💡 סיכום Phase B (1H):</h3>
+  <p>ה-CO דוחף את המחיר באופן אגרסיבי כלפי גג הטווח, תוך ספיגה של כל היצע שמופיע. המומנטום שורי חזק.</p>
+  <h3>💡 תודעה ראשונית (1H):</h3>
+  <p>תודעה שורית גבוהה, מאושרת על ידי מומנטום חזק, ווליום עולה ופריצות <span class="term" data-tooltip="Break of Structure — שבירת שיא/שפל קודם בכיוון המגמה.">BOS</span> שוריות. ה-1H מתואם באופן מלא עם ה-HTF ומוכן למהלך הבא.</p>
+</div>
+
+<div class="box wyckoff-scenarios">
+  <h3>תרחישי וויקוף אפשריים (1H)</h3>
+  <ul>
+    <li><strong>תרחיש <span class="term" data-tooltip="Upthrust After Distribution — שבירה זמנית של גג ה-<span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span> + חזרה. סחיפת stops של shorts. סיגנל לירידה.">UTAD</span>/<span class="term" data-tooltip="Upthrust — חציית גג ה-<span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span> בוליום גבוה, אך ללא יכולת להחזיק מעמד.">UT</span></strong>: המחיר פורץ את ה-<span class="term" data-tooltip="Automatic Rally/Reaction — תנועה אוטומטית אחרי climax. מגדירה את גג/תחתית ה-<span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span>.">AR</span> (73999.9) עם ווליום גבוה, נכשל להחזיק, וחוזר לתוך ה-<span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span>. <strong>זיהוי</strong>: נר שורי חזק מעל <span class="term" data-tooltip="Automatic Rally/Reaction — תנועה אוטומטית אחרי climax. מגדירה את גג/תחתית ה-<span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span>.">AR</span> ואחריו נר דובי חזק שחוזר לתוך הטווח. <strong>תודעה צפויה</strong>: דובית מתפתחת. <strong>פעולה</strong>: לחפש עסקאות שורט בטווחים נמוכים יותר.</li>
+    <li><strong>תרחיש <span class="term" data-tooltip="שבירה זמנית של תחתית ה-<span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span> + חזרה. סחיפת stops של longs. סיגנל לעלייה. דרגות: #1 (Terminal — חזק), #2 (Ordinary), #3 (Minor — שווה כניסה ישירה).">Spring</span></strong>: המחיר יורד מתחת ל-<span class="term" data-tooltip="Selling Climax — פניקת מכירה סופית. נר ירידה ענקי עם וליום קלימקטי.">SC</span> (71936.2) עם ווליום גבוה, נכשל להחזיק, וחוזר לתוך ה-<span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span>. <strong>זיהוי</strong>: נר דובי חזק מתחת <span class="term" data-tooltip="Selling Climax — פניקת מכירה סופית. נר ירידה ענקי עם וליום קלימקטי.">SC</span> ואחריו נר שורי חזק שחוזר לתוך הטווח. <strong>תודעה צפויה</strong>: שורית מתפתחת. <strong>פעולה</strong>: לחפש עסקאות לונג בטווחים נמוכים יותר.</li>
+    <li><strong>תרחיש דשדוש</strong>: המחיר ממשיך לנוע בטווח 71936.2-73999.9 ללא פריצה ברורה לאף כיוון. <strong>זיהוי</strong>: נרות קטנים ובינוניים, ווליום נמוך באזורי הקצוות, חוסר מומנטום. <strong>תודעה צפויה</strong>: ניטרלית. <strong>פעולה</strong>: לחכות לסיגנל ברור או לפריצה של גבולות הטווח.</li>
+  </ul>
+</div>
+
+<div class="box">
+  <p><strong>📝 מסקנה 1H</strong>: ה-1H מראה תנועה שורית חזקה ומתואמת עם ה-bias של ה-HTF. המחיר מתקרב לגג ה-<span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span> של ה-4H/Daily, ומוכן לפריצה.</p>
+</div>
+
+<!-- ============================================== -->
+<!-- 6. 15m — טריגר TF (פורמט שונה!) -->
+<!-- ============================================== -->
+<h2>⚡ 15m — נקודת כניסה</h2>
+<img class="chart" src="chart-15m.png" alt="15m Chart">
+
+<div class="box co-thesis">
+  <p><strong>סטאפ type</strong>: <span class="badge bullish">Primary</span></p>
+  <p><strong><span class="term" data-tooltip="Quasimodo Pattern — תבנית היפוך דמוית ראש וכתפיים, עם שבירה מתחת ל-Left Shoulder low (לונג) או מעל ל-Left Shoulder high (שורט).">QM Pattern</span></strong>: נצפה <span class="term" data-tooltip="Quasimodo Pattern — תבנית היפוך דמוית ראש וכתפיים, עם שבירה מתחת ל-Left Shoulder low (לונג) או מעל ל-Left Shoulder high (שורט).">QM</span> שורי ב-15m, עם Left Shoulder High סביב 73800, Head High סביב 74250, ו-Lower Low (sweep) סביב 72550. המחיר פרץ מעל ה-<span class="term" data-tooltip="Quasimodo Line — קו אופקי מה-Left Shoulder. רמת supply/demand מרכזית בתבנית QM.">QML</span>.</p>
+  <p><strong><span class="term" data-tooltip="Mid-Point Level — רמת supply/demand על קו ה-<span class="term" data-tooltip="Quasimodo Line — קו אופקי מה-Left Shoulder. רמת supply/demand מרכזית בתבנית QM.">QML</span>.">MPL</span> level</strong>: <span class="level">73800</span></p>
+</div>
+
+<div class="box checklist">
+  <h3>✓ Checklist 8 צעדים ל-Entry Primary</h3>
+  <ul class="check-list">
+    <li class="done">טווח גבוה Wyckoff signal מאומת: Daily/4H ב-<span class="term" data-tooltip="Accumulation — פאזת צבירה. ה-CO צובר עמדות לונג.">Accumulation</span>, 1H במומנטום שורי חזק.</li>
+    <li class="done"><span class="term" data-tooltip="Quasimodo Pattern — תבנית היפוך דמוית ראש וכתפיים, עם שבירה מתחת ל-Left Shoulder low (לונג) או מעל ל-Left Shoulder high (שורט).">QM</span> נוצר ב-15m (HH+LL ברורים): <span class="term" data-tooltip="Quasimodo Pattern — תבנית היפוך דמוית ראש וכתפיים, עם שבירה מתחת ל-Left Shoulder low (לונג) או מעל ל-Left Shoulder high (שורט).">QM</span> שורי ברור עם sweep ב-72550.</li>
+    <li class="done"><span class="term" data-tooltip="Mid-Point Level — רמת supply/demand על קו ה-<span class="term" data-tooltip="Quasimodo Line — קו אופקי מה-Left Shoulder. רמת supply/demand מרכזית בתבנית QM.">QML</span>.">MPL</span> מזוהה על <span class="term" data-tooltip="Quasimodo Line — קו אופקי מה-Left Shoulder. רמת supply/demand מרכזית בתבנית QM.">QML</span>: <span class="term" data-tooltip="Mid-Point Level — רמת supply/demand על קו ה-<span class="term" data-tooltip="Quasimodo Line — קו אופקי מה-Left Shoulder. רמת supply/demand מרכזית בתבנית QM.">QML</span>.">MPL</span>/<span class="term" data-tooltip="Quasimodo Line — קו אופקי מה-Left Shoulder. רמת supply/demand מרכזית בתבנית QM.">QML</span> ב-73800.</li>
+    <li class="done">First Break של S/R ב-<span class="term" data-tooltip="Mid-Point Level — רמת supply/demand על קו ה-<span class="term" data-tooltip="Quasimodo Line — קו אופקי מה-Left Shoulder. רמת supply/demand מרכזית בתבנית QM.">QML</span>.">MPL</span>: המחיר פרץ מעל 73800 ב-15m.</li>
+    <li class="done">Engulfing Marubozu + נר המשך: נר Engulfing שורי נצפה ב-15m סביב 30 במאי, 14:45.</li>
+    <li class="done">VSA: ספרד-נפח מאמת: ווליום עולה בראלי, ווליום נמוך בתיקונים (No Supply).</li>
+    <li class="partial">Retest קודם של ה-<span class="term" data-tooltip="Sign of Strength — פריצת גג ה-<span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span> בוליום גבוה. מגמת עלייה מתחילה.">SOS</span> היה וליום נמוך: התיקון האחרון ל-73833.8 היה בווליום נמוך.</li>
+    <li class="done"><span class="term" data-tooltip="Risk:Reward ratio — יחס סיכון לרווח. מינימום 1:2 לכניסה.">R:R</span> ≥ 2.0: מחושב ל-5.0 עבור TP1.</li>
+  </ul>
+  <p><strong>סה"כ</strong>: 7/8 → <span class="badge bullish">סטאפ חזק</span></p>
+</div>
+
+<h3>📋 3 תרחישים</h3>
+
+<div class="scenario primary">
+  <h4>🥇 Primary</h4>
+  <p><strong>טריגר</strong>: המחיר פורץ מעל ה-<span class="term" data-tooltip="Automatic Rally/Reaction — תנועה אוטומטית אחרי climax. מגדירה את גג/תחתית ה-<span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span>.">AR</span> של ה-4H (73999.9), מבצע <span class="term" data-tooltip="Back Up to the Edge of the Creek — תיקון לאחור אחרי <span class="term" data-tooltip="Sign of Strength — פריצת גג ה-<span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span> בוליום גבוה. מגמת עלייה מתחילה.">SOS</span>, נשאר מעל ה-<span class="term" data-tooltip="Creek — גג ה-<span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span> ב-<span class="term" data-tooltip="Accumulation — פאזת צבירה. ה-CO צובר עמדות לונג.">Accumulation</span>.">Creek</span> עם ווליום נמוך, ומציג נר שורי חזק (Engulfing/Hammer) ב-15m.</p>
+  <p><strong>Entry</strong>: <span class="level">74000</span></p>
+  <p><strong>SL</strong>: <span class="level">73700</span> (מתחת ל-15m swing low האחרון ומתחת ל-<span class="term" data-tooltip="Quasimodo Line — קו אופקי מה-Left Shoulder. רמת supply/demand מרכזית בתבנית QM.">QML</span>)</p>
+  <p><strong>TP1</strong>: <span class="level">75500</span> (<span class="term" data-tooltip="Risk:Reward ratio — יחס סיכון לרווח. מינימום 1:2 לכניסה.">R:R</span> 5.0)</p>
+  <p><strong>TP2</strong>: <span class="level">77000</span> (<span class="term" data-tooltip="Risk:Reward ratio — יחס סיכון לרווח. מינימום 1:2 לכניסה.">R:R</span> 10.0)</p>
+  <img class="chart" src="chart-15m-primary.png" alt="15m Chart — Primary scenario annotated">
+</div>
+
+<div class="scenario alt">
+  <h4>🥈 Alternative — אם Primary לא יפעל</h4>
+  <p><strong>תנאי הפעלה</strong>: אם המחיר לא מצליח לפרוץ את ה-<span class="term" data-tooltip="Automatic Rally/Reaction — תנועה אוטומטית אחרי climax. מגדירה את גג/תחתית ה-<span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span>.">AR</span> ב-73999.9, ונסוג בחזרה לאזור ה-<span class="term" data-tooltip="Mid-Point Level — רמת supply/demand על קו ה-<span class="term" data-tooltip="Quasimodo Line — קו אופקי מה-Left Shoulder. רמת supply/demand מרכזית בתבנית QM.">QML</span>">MPL</span> ב-73800, או לאזור תמיכה משמעותי יותר ב-73250.</p>
+  <p><strong>Entry / SL / TP</strong>: לחפש נר שורי חזק (Engulfing/Hammer) ב-15m/5m באזור 73250. Entry: 73250, SL: 73000, TP1: 73800, TP2: 74310.</p>
+  <img class="chart" src="chart-15m-alternative.png" alt="15m Chart — Alternative scenario annotated">
+</div>
+
+<div class="scenario invalid">
+  <h4>🚫 Invalidation — תנאי ביטול</h4>
+  <p>הניתוח מבוטל אם:</p>
+  <ul>
+    <li>המחיר שובר וסוגר מתחת ל-72550 (ה-low של ה-15m sweep) בגרף 1H עם ווליום גבוה.</li>
+    <li><span class="term" data-tooltip="Retest — חזרה לאזור שבירה/תמיכה.">Retest</span> של אזור הכניסה (74000) מתרחש בווליום גבוה ונכשל להחזיק, מה שמעיד על לחץ מכירה חזק.</li>
+    <li>נוצר <span class="term" data-tooltip="Change of Character — השבירה הראשונה נגד המגמה.">CHOCH</span> דובי ברור בגרף 1H, השובר את המבנה השורי הנוכחי.</li>
+  </ul>
+  <img class="chart" src="chart-15m-invalidation.png" alt="15m Chart — Invalidation scenario annotated">
+</div>
+
+<!-- ============================================== -->
+<!-- 7. אופרטור מאוחד Thesis — סיכום -->
+<!-- ============================================== -->
+<div class="box co-thesis">
+  <h2>🧠 אופרטור מאוחד Thesis</h2>
+  <p><strong>מה ה-<span class="term" data-tooltip="Composite Operator — המקצוענים המאוחדים. כל הכסף החכם פועל יחד כיחידה אחת.">CO</span> עושה כרגע</strong>: <span class="badge bullish">צובר לונג</span></p>
+  <p><strong>ראיות</strong>:</p>
+  <ol>
+    <li>ה-<span class="term" data-tooltip="Selling Climax — פניקת מכירה סופית. נר ירידה ענקי עם וליום קלימקטי.">SC</span> החזק ב-Daily/4H עם ווליום קלימקטי מצביע על ספיגה משמעותית של לחץ מכירה.</li>
+    <li>הראלי הנוכחי כלפי ה-<span class="term" data-tooltip="Automatic Rally/Reaction — תנועה אוטומטית אחרי climax. מגדירה את גג/תחתית ה-<span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span>.">AR</span> ב-4H/1H מראה ביקוש גובר וחוסר היצע (No Supply) בתיקונים.</li>
+    <li>תבנית ה-<span class="term" data-tooltip="Quasimodo Pattern — תבנית היפוך דמוית ראש וכתפיים, עם שבירה מתחת ל-Left Shoulder low (לונג) או מעל ל-Left Shoulder high (שורט).">QM</span> ב-15m עם ה-sweep ב-72550 מעידה על סחיפת נזילות לפני מהלך עולה.</li>
+  </ol>
+  <p><strong>מה ה-<span class="term" data-tooltip="Composite Operator — המקצוענים המאוחדים. כל הכסף החכם פועל יחד כיחידה אחת.">CO</span> ינסה לעשות הלאה</strong>: ה-<span class="term" data-tooltip="Composite Operator — המקצוענים המאוחדים. כל הכסף החכם פועל יחד כיחידה אחת.">CO</span> צפוי לדחוף את המחיר לפריצה של ה-<span class="term" data-tooltip="Automatic Rally/Reaction — תנועה אוטומטית אחרי climax. מגדירה את גג/תחתית ה-<span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span>.">AR</span> (73999.9) ולהיכנס לפאזה D (אירוע <span class="term" data-tooltip="Sign of Strength — פריצת גג ה-<span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span> בוליום גבוה. מגמת עלייה מתחילה.">SOS</span>), ובכך להתחיל את פאזת ה-Markup.</p>
+</div>
+
+<hr style="margin-top: 40px;">
+<p class="meta">דוח נוצר ע"י skill <code>wyckoff-pa-analyst</code> v3.0 | תיוג מינימלי (<span class="term" data-tooltip="Selling Climax — פניקת מכירה סופית. נר ירידה ענקי עם וליום קלימקטי.">SC</span>+<span class="term" data-tooltip="Automatic Rally/Reaction — תנועה אוטומטית אחרי climax. מגדירה את גג/תחתית ה-<span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span>.">AR</span>) + תודעה לפי TF + 15m סטאפ decision</p>
+
+</body>
+</html>
