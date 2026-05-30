@@ -204,22 +204,48 @@
   // ============================================================
   // Symbol Picker Modal — בחירת מטבע לפני שליחת הטריגר
   // ============================================================
-  const PRESET_SYMBOLS = [
-    { symbol: 'BYBIT:BTCUSDT.P',  label: '₿  BTCUSDT.P  — Bitcoin Perpetual', icon: '₿' },
-    { symbol: 'BYBIT:ETHUSDT.P',  label: 'Ξ  ETHUSDT.P  — Ethereum Perpetual', icon: 'Ξ' },
-    { symbol: 'BYBIT:SOLUSDT.P',  label: '◎  SOLUSDT.P  — Solana Perpetual',   icon: '◎' },
-    { symbol: 'BYBIT:BNBUSDT.P',  label: 'B  BNBUSDT.P  — BNB Perpetual',     icon: 'B' },
-    { symbol: 'BYBIT:XRPUSDT.P',  label: '✕  XRPUSDT.P  — XRP Perpetual',     icon: '✕' },
-    { symbol: 'BYBIT:DOGEUSDT.P', label: 'Ð  DOGEUSDT.P — Dogecoin Perpetual', icon: 'Ð' },
+  // Fallback list if watchlist.json fetch fails
+  const FALLBACK_SYMBOLS = [
+    { symbol: 'BYBIT:BTCUSDT.P',  label: 'BTCUSDT.P  — Bitcoin Perpetual',   type: 'perp' },
+    { symbol: 'BYBIT:ETHUSDT.P',  label: 'ETHUSDT.P  — Ethereum Perpetual',  type: 'perp' },
+    { symbol: 'BYBIT:SOLUSDT.P',  label: 'SOLUSDT.P  — Solana Perpetual',    type: 'perp' },
   ];
 
-  function openSymbolPickerModal(triggerBtn) {
+  // Cache watchlist (refetched each modal open if expired)
+  let watchlistCache = null;
+  let watchlistCacheTime = 0;
+
+  async function loadWatchlist() {
+    // Cache for 5 minutes
+    if (watchlistCache && (Date.now() - watchlistCacheTime) < 5 * 60 * 1000) {
+      return watchlistCache;
+    }
+    try {
+      const res = await fetch('wyckoff/watchlist.json?t=' + Date.now(), { cache: 'no-store' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      watchlistCache = data.symbols || [];
+      watchlistCacheTime = Date.now();
+      return watchlistCache;
+    } catch (e) {
+      console.warn('[symbol-picker] failed to load watchlist.json:', e.message);
+      return FALLBACK_SYMBOLS;
+    }
+  }
+
+  async function openSymbolPickerModal(triggerBtn) {
     // Remove existing modal if any
     const existing = document.getElementById('symbol-picker-overlay');
     if (existing) existing.remove();
 
     const WORKER_URL = 'https://morning-violet-ce94-wyckoff-trigger.gagula22.workers.dev';
-    let selectedSymbol = PRESET_SYMBOLS[0].symbol;
+    const allSymbols = await loadWatchlist();
+    if (!allSymbols.length) {
+      alert('לא נמצאו מטבעות. נסה/י שוב בעוד דקה (TradingView צריך לרוץ עם CDP).');
+      return;
+    }
+    let selectedSymbol = allSymbols[0].symbol;
+    let currentFilter = 'perp'; // 'perp' | 'spot' | 'all'
 
     // Overlay
     const overlay = document.createElement('div');
@@ -239,25 +265,78 @@
     modal.appendChild(title);
 
     const subtitle = document.createElement('p');
-    subtitle.textContent = 'הניתוח יתבצע על המטבע שתבחר/י, ייקח 5–7 דקות, וישלח 2 מיילים (דוח רגיל + דוח skill).';
-    subtitle.style.cssText = 'margin:0 0 18px; color:#666; font-size:0.92rem;';
+    subtitle.textContent = `${allSymbols.length} מטבעות זמינים מהווצ'ליסט שלך ב-TradingView. בחר/י את המטבע לניתוח Wyckoff.`;
+    subtitle.style.cssText = 'margin:0 0 14px; color:#666; font-size:0.92rem;';
     modal.appendChild(subtitle);
 
-    // Symbol list
+    // Filter tabs (perp / spot / all)
+    const tabsWrap = document.createElement('div');
+    tabsWrap.style.cssText = 'display:flex; gap:6px; margin-bottom:12px; border-bottom:1px solid #e5e7eb; padding-bottom:8px;';
+
+    function tabBtn(label, value) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = label;
+      btn.dataset.filter = value;
+      const isActive = currentFilter === value;
+      btn.style.cssText = `padding:6px 14px; border-radius:6px; font-size:0.9rem; cursor:pointer;
+        border:1px solid ${isActive ? '#0a7' : '#d1d5db'};
+        background:${isActive ? '#0a7' : '#fff'};
+        color:${isActive ? '#fff' : '#374151'};
+        font-weight:${isActive ? 600 : 400};`;
+      btn.onclick = () => { currentFilter = value; renderTabs(); renderList(); };
+      return btn;
+    }
+
+    function renderTabs() {
+      tabsWrap.innerHTML = '';
+      const perpCount = allSymbols.filter(s => s.type === 'perp').length;
+      const spotCount = allSymbols.filter(s => s.type === 'spot').length;
+      tabsWrap.appendChild(tabBtn(`Perpetuals (${perpCount})`, 'perp'));
+      tabsWrap.appendChild(tabBtn(`Spot (${spotCount})`, 'spot'));
+      tabsWrap.appendChild(tabBtn(`הכל (${allSymbols.length})`, 'all'));
+    }
+    renderTabs();
+    modal.appendChild(tabsWrap);
+
+    // Search box
+    const searchBox = document.createElement('input');
+    searchBox.type = 'text';
+    searchBox.placeholder = '🔍 חיפוש (לדוגמה: BTC, SOL, ETH)';
+    searchBox.style.cssText = `width:100%; padding:8px 12px; border:1px solid #d1d5db; border-radius:6px;
+      font-size:0.92rem; margin-bottom:10px; box-sizing:border-box;`;
+    searchBox.oninput = () => renderList();
+    modal.appendChild(searchBox);
+
+    // Symbol list (scrollable)
     const listWrap = document.createElement('div');
-    listWrap.style.cssText = 'display:flex; flex-direction:column; gap:8px; margin-bottom:16px;';
+    listWrap.style.cssText = 'display:flex; flex-direction:column; gap:6px; margin-bottom:16px; max-height:280px; overflow-y:auto; padding:2px;';
 
     function renderList() {
+      const filtered = allSymbols.filter(s => {
+        if (currentFilter !== 'all' && s.type !== currentFilter) return false;
+        const q = searchBox.value.trim().toUpperCase();
+        if (q && !s.symbol.toUpperCase().includes(q) && !s.label.toUpperCase().includes(q)) return false;
+        return true;
+      });
       listWrap.innerHTML = '';
-      PRESET_SYMBOLS.forEach(s => {
+      if (!filtered.length) {
+        const empty = document.createElement('div');
+        empty.textContent = '— אין תוצאות —';
+        empty.style.cssText = 'text-align:center; color:#999; padding:24px;';
+        listWrap.appendChild(empty);
+        return;
+      }
+      filtered.forEach(s => {
         const isSelected = (s.symbol === selectedSymbol);
         const row = document.createElement('button');
         row.type = 'button';
-        row.textContent = s.label;
-        row.style.cssText = `text-align:right; padding:11px 14px; border-radius:8px;
+        const typeBadge = s.type === 'perp' ? '🔥' : '📊';
+        row.innerHTML = `<span style="font-size:0.85em; color:#666; margin-left:8px;">${typeBadge}</span> ${s.label || s.symbol}`;
+        row.style.cssText = `text-align:right; padding:9px 12px; border-radius:7px;
           border:2px solid ${isSelected ? '#0a7' : '#e5e7eb'};
           background:${isSelected ? '#ecfdf5' : '#fff'};
-          font-size:0.96rem; cursor:pointer; transition:all 0.15s;
+          font-size:0.93rem; cursor:pointer; transition:all 0.12s;
           font-weight:${isSelected ? 600 : 400}; color:${isSelected ? '#065f46' : '#1f2937'};`;
         row.onclick = () => { selectedSymbol = s.symbol; renderList(); customInput.value = ''; };
         row.onmouseover = () => { if (!isSelected) row.style.background = '#f9fafb'; };
@@ -311,8 +390,9 @@
       // Use custom input value if set, else selectedSymbol
       const customVal = customInput.value.trim().toUpperCase();
       const finalSymbol = customVal || selectedSymbol;
-      if (!finalSymbol.match(/^BYBIT:[A-Z]+\.P$/)) {
-        alert('פורמט שגוי. דוגמה תקינה: BYBIT:BTCUSDT.P');
+      // Validate: SOURCE:TICKER format or plain TICKER
+      if (!finalSymbol.match(/^([A-Z]+:)?[A-Z0-9]+(\.P)?$/)) {
+        alert('פורמט שגוי. דוגמאות תקינות:\n• BYBIT:BTCUSDT.P\n• BINANCE:ETHUSDT\n• SOLUSDT.P');
         return;
       }
       send.disabled = true;
