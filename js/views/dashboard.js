@@ -171,29 +171,7 @@
         App.el('button', {
           class: 'btn btn-primary',
           style: { background: '#0a7', borderColor: '#0a7' },
-          onClick: async (ev) => {
-            const btn = ev.currentTarget;
-            const originalText = btn.textContent;
-            btn.disabled = true;
-            btn.textContent = '⏳ שולח טריגר...';
-            const WORKER_URL = 'https://morning-violet-ce94-wyckoff-trigger.gagula22.workers.dev';
-            try {
-              const res = await fetch(`${WORKER_URL}/trigger`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ symbol: 'BYBIT:BTCUSDT.P' }),
-              });
-              const data = await res.json();
-              if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-              btn.textContent = '✅ נשלח';
-              window.openWyckoffProgressModal && window.openWyckoffProgressModal(WORKER_URL);
-            } catch (e) {
-              btn.textContent = '❌ נכשל';
-              alert('שליחת הטריגר נכשלה:\n' + e.message + '\n\nוודא ש-Cloudflare Worker פעיל.');
-            } finally {
-              setTimeout(() => { btn.disabled = false; btn.textContent = originalText; }, 5000);
-            }
-          }
+          onClick: (ev) => openSymbolPickerModal(ev.currentTarget)
         }, '🚀 הפק ניתוח חדש'),
         App.el('button', {
           class: 'btn btn-ghost btn-sm',
@@ -221,6 +199,150 @@
       App.el('div', { class: 'stat-value' }, String(value)),
       App.el('div', { class: 'stat-sub' }, sub || '')
     ]);
+  }
+
+  // ============================================================
+  // Symbol Picker Modal — בחירת מטבע לפני שליחת הטריגר
+  // ============================================================
+  const PRESET_SYMBOLS = [
+    { symbol: 'BYBIT:BTCUSDT.P',  label: '₿  BTCUSDT.P  — Bitcoin Perpetual', icon: '₿' },
+    { symbol: 'BYBIT:ETHUSDT.P',  label: 'Ξ  ETHUSDT.P  — Ethereum Perpetual', icon: 'Ξ' },
+    { symbol: 'BYBIT:SOLUSDT.P',  label: '◎  SOLUSDT.P  — Solana Perpetual',   icon: '◎' },
+    { symbol: 'BYBIT:BNBUSDT.P',  label: 'B  BNBUSDT.P  — BNB Perpetual',     icon: 'B' },
+    { symbol: 'BYBIT:XRPUSDT.P',  label: '✕  XRPUSDT.P  — XRP Perpetual',     icon: '✕' },
+    { symbol: 'BYBIT:DOGEUSDT.P', label: 'Ð  DOGEUSDT.P — Dogecoin Perpetual', icon: 'Ð' },
+  ];
+
+  function openSymbolPickerModal(triggerBtn) {
+    // Remove existing modal if any
+    const existing = document.getElementById('symbol-picker-overlay');
+    if (existing) existing.remove();
+
+    const WORKER_URL = 'https://morning-violet-ce94-wyckoff-trigger.gagula22.workers.dev';
+    let selectedSymbol = PRESET_SYMBOLS[0].symbol;
+
+    // Overlay
+    const overlay = document.createElement('div');
+    overlay.id = 'symbol-picker-overlay';
+    overlay.style.cssText = `position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:9999;
+      display:flex; align-items:center; justify-content:center; padding:20px;`;
+    overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+
+    // Modal box
+    const modal = document.createElement('div');
+    modal.style.cssText = `background:#fff; border-radius:12px; padding:24px; max-width:520px; width:100%;
+      box-shadow:0 10px 40px rgba(0,0,0,0.3); direction:rtl; max-height:90vh; overflow-y:auto;`;
+
+    const title = document.createElement('h2');
+    title.textContent = '🚀 בחר מטבע לניתוח Wyckoff';
+    title.style.cssText = 'margin:0 0 8px; color:#0a4; font-size:1.3rem;';
+    modal.appendChild(title);
+
+    const subtitle = document.createElement('p');
+    subtitle.textContent = 'הניתוח יתבצע על המטבע שתבחר/י, ייקח 5–7 דקות, וישלח 2 מיילים (דוח רגיל + דוח skill).';
+    subtitle.style.cssText = 'margin:0 0 18px; color:#666; font-size:0.92rem;';
+    modal.appendChild(subtitle);
+
+    // Symbol list
+    const listWrap = document.createElement('div');
+    listWrap.style.cssText = 'display:flex; flex-direction:column; gap:8px; margin-bottom:16px;';
+
+    function renderList() {
+      listWrap.innerHTML = '';
+      PRESET_SYMBOLS.forEach(s => {
+        const isSelected = (s.symbol === selectedSymbol);
+        const row = document.createElement('button');
+        row.type = 'button';
+        row.textContent = s.label;
+        row.style.cssText = `text-align:right; padding:11px 14px; border-radius:8px;
+          border:2px solid ${isSelected ? '#0a7' : '#e5e7eb'};
+          background:${isSelected ? '#ecfdf5' : '#fff'};
+          font-size:0.96rem; cursor:pointer; transition:all 0.15s;
+          font-weight:${isSelected ? 600 : 400}; color:${isSelected ? '#065f46' : '#1f2937'};`;
+        row.onclick = () => { selectedSymbol = s.symbol; renderList(); customInput.value = ''; };
+        row.onmouseover = () => { if (!isSelected) row.style.background = '#f9fafb'; };
+        row.onmouseout = () => { if (!isSelected) row.style.background = '#fff'; };
+        listWrap.appendChild(row);
+      });
+    }
+    renderList();
+    modal.appendChild(listWrap);
+
+    // Custom symbol input
+    const customLabel = document.createElement('div');
+    customLabel.textContent = 'או הזן מטבע מותאם (פורמט BYBIT:XXXUSDT.P):';
+    customLabel.style.cssText = 'font-size:0.88rem; color:#666; margin:8px 0 6px;';
+    modal.appendChild(customLabel);
+
+    const customInput = document.createElement('input');
+    customInput.type = 'text';
+    customInput.placeholder = 'BYBIT:AVAXUSDT.P';
+    customInput.style.cssText = `width:100%; padding:10px 12px; border:1px solid #d1d5db; border-radius:8px;
+      font-size:0.95rem; direction:ltr; text-align:left; box-sizing:border-box;`;
+    customInput.oninput = () => {
+      const val = customInput.value.trim().toUpperCase();
+      if (val) {
+        selectedSymbol = val;
+        // Visually unselect the preset rows
+        Array.from(listWrap.querySelectorAll('button')).forEach(b => {
+          b.style.border = '2px solid #e5e7eb';
+          b.style.background = '#fff';
+          b.style.fontWeight = 400;
+          b.style.color = '#1f2937';
+        });
+      }
+    };
+    modal.appendChild(customInput);
+
+    // Action buttons
+    const actions = document.createElement('div');
+    actions.style.cssText = 'display:flex; gap:10px; justify-content:flex-start; margin-top:22px;';
+
+    const cancel = document.createElement('button');
+    cancel.textContent = 'ביטול';
+    cancel.style.cssText = 'padding:10px 22px; border-radius:8px; border:1px solid #d1d5db; background:#fff; cursor:pointer; font-size:0.95rem;';
+    cancel.onclick = () => overlay.remove();
+    actions.appendChild(cancel);
+
+    const send = document.createElement('button');
+    send.textContent = '🚀 שלח טריגר';
+    send.style.cssText = 'padding:10px 24px; border-radius:8px; border:none; background:#0a7; color:#fff; cursor:pointer; font-size:0.96rem; font-weight:600;';
+    send.onclick = async () => {
+      // Use custom input value if set, else selectedSymbol
+      const customVal = customInput.value.trim().toUpperCase();
+      const finalSymbol = customVal || selectedSymbol;
+      if (!finalSymbol.match(/^BYBIT:[A-Z]+\.P$/)) {
+        alert('פורמט שגוי. דוגמה תקינה: BYBIT:BTCUSDT.P');
+        return;
+      }
+      send.disabled = true;
+      send.textContent = '⏳ שולח...';
+      try {
+        const res = await fetch(`${WORKER_URL}/trigger`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ symbol: finalSymbol }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        send.textContent = '✅ נשלח';
+        overlay.remove();
+        if (triggerBtn) {
+          triggerBtn.textContent = `✅ נשלח: ${finalSymbol.replace('BYBIT:', '').replace('.P', '')}`;
+          setTimeout(() => { triggerBtn.textContent = '🚀 הפק ניתוח חדש'; }, 5000);
+        }
+        window.openWyckoffProgressModal && window.openWyckoffProgressModal(WORKER_URL);
+      } catch (e) {
+        send.disabled = false;
+        send.textContent = '🚀 שלח טריגר';
+        alert('שליחת הטריגר נכשלה:\n' + e.message + '\n\nוודא ש-Cloudflare Worker פעיל.');
+      }
+    };
+    actions.appendChild(send);
+
+    modal.appendChild(actions);
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
   }
 
   function moodEmoji(level) {
