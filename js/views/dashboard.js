@@ -72,6 +72,7 @@
     let lastLogLength = 0;
     let firstRender = true;
     let done = false;
+    let currentStage = 'main';  // ⭐ Track stage locally — sticky once switched to skill
 
     function cleanup() {
       if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
@@ -94,9 +95,12 @@
         // Current step
         if (data.currentStep) stepEl.textContent = data.currentStep;
 
-        // Stage indicator — main vs skill
-        if (data.stage === 'skill') setActiveStage('skill');
-        else if (data.state === 'running') setActiveStage('main');
+        // Stage indicator — STICKY: once we transition to skill, don't go back to main.
+        // Server only sends `stage` on transition, subsequent milestone updates omit it.
+        if (data.stage === 'skill') currentStage = 'skill';
+        // (Also detect skill stage by milestone text — robust if `stage` field is lost)
+        else if (data.currentStep && /שלב 2\/2/.test(data.currentStep)) currentStage = 'skill';
+        setActiveStage(currentStage);
 
         // Append new log lines
         if (Array.isArray(data.log)) {
