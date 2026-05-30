@@ -95,8 +95,9 @@
         // Current step
         if (data.currentStep) stepEl.textContent = data.currentStep;
 
-        // Stage indicator — STICKY: once we transition to skill, don't go back to main.
-        // Server only sends `stage` on transition, subsequent milestone updates omit it.
+        // 🔒 LOCKED — Stage indicator STICKY. See agent-website/ENGINEERING_NOTES.md §8.
+        // Server only sends `stage:skill` on transition. Subsequent milestone updates omit it.
+        // We MUST track currentStage locally — without this, badge flips back to main mid-skill.
         if (data.stage === 'skill') currentStage = 'skill';
         // (Also detect skill stage by milestone text — robust if `stage` field is lost)
         else if (data.currentStep && /שלב 2\/2/.test(data.currentStep)) currentStage = 'skill';
