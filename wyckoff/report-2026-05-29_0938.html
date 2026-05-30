@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>סקירת Wyckoff מאוחדת — BYBIT:BTCUSDT.P — 2026-05-29</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: 'Segoe UI', 'Arial Hebrew', Arial, sans-serif; direction: rtl; text-align: right; background: #f7f8fa; color: #222; margin: 0 auto; padding: 18px; max-width: 1280px; }
+  h1 { font-size: 22px; border-bottom: 2px solid #0a7; padding-bottom: 6px; }
+  h2 { font-size: 17px; margin-top: 22px; color: #0a4; }
+  .chart-wrap { text-align: center; margin: 12px 0; }
+  img.chart { width: 75%; max-width: 950px; border: 1px solid #ddd; border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.08); display: inline-block; }
+  table { width: 100%; border-collapse: collapse; margin: 10px 0; background: white; box-shadow: 0 1px 2px rgba(0,0,0,0.06); border-radius: 6px; overflow: hidden; font-size: 14px; }
+  th, td { padding: 7px 13px; text-align: right; border-bottom: 1px solid #eee; }
+  th { background: #fafafa; font-weight: 600; color: #333; font-size: 13px; }
+  td:first-child { color: #444; width: 35%; font-weight: 500; }
+  td:last-child { color: #888; }
+  .ltr { direction: ltr; unicode-bidi: bidi-override; display: inline-block; }
+  .badge { display: inline-block; padding: 2px 7px; border-radius: 3px; font-size: 11px; margin-inline-start: 6px; }
+  .badge.dist { background: #ffe5e5; color: #c00; }
+  .badge.acc { background: #e5ffe5; color: #070; }
+  .badge.warn { background: #fff5d6; color: #a60; }
+  .stamp { color: #888; font-size: 12px; }
+  .key { background: #fffde6; padding: 8px 12px; border-right: 3px solid #d90; margin: 8px 0; font-size: 13px; }
+  .conflict { background: #fff0e6; padding: 10px 14px; border-right: 3px solid #d70; margin: 10px 0; font-size: 13px; border-radius: 4px; }
+  .section-divider { height: 4px; background: linear-gradient(90deg,#0a7,#0c6,#0a7); margin: 32px 0; border-radius: 2px; }
+  .toc { background: white; padding: 12px 16px; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,.06); margin: 16px 0; }
+  .toc a { color: #0a4; text-decoration: none; margin-inline-end: 16px; font-size: 14px; }
+  .gen-banner { background: #0a7; color: white; padding: 10px 16px; border-radius: 6px; margin: 0 0 12px; font-size: 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+  .gen-banner .label { opacity: 0.85; font-size: 12px; }
+  .export-btn { background: #d4a017; color: white; border: none; padding: 8px 16px; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.1); transition: all 0.2s; }
+  .export-btn:hover { background: #c19412; transform: translateY(-1px); box-shadow: 0 4px 8px rgba(0,0,0,0.15); }
+  .export-btn:active { transform: translateY(0); }
+  @media print { .export-btn, .toc { display: none !important; } }
+</style>
+<script>
+async function exportToWord() {
+  const btn = event.target;
+  btn.disabled = true;
+  btn.textContent = '⏳ מייצא...';
+  
+  try {
+    const images = document.querySelectorAll('img.chart');
+    const base64Images = {};
+    
+    for (const img of images) {
+      const src = img.src;
+      let base64 = null;
+      
+      try {
+        const response = await fetch(src);
+        const blob = await response.blob();
+        base64 = await new Promise(resolve => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result);
+          reader.readAsDataURL(blob);
+        });
+      } catch (e1) {
+        try {
+          const xhr = new XMLHttpRequest();
+          xhr.open('GET', src, false);
+          xhr.overrideMimeType('text/plain; charset=x-user-defined');
+          xhr.send();
+          let binary = '';
+          for (let i = 0; i < xhr.responseText.length; i++) {
+            binary += String.fromCharCode(xhr.responseText.charCodeAt(i) & 0xff);
+          }
+          base64 = 'data:image/png;base64,' + btoa(binary);
+        } catch (e2) {
+          try {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = img.naturalWidth || img.width;
+            canvas.height = img.naturalHeight || img.height;
+            ctx.drawImage(img, 0, 0);
+            base64 = canvas.toDataURL('image/png');
+          } catch (e3) {
+            console.warn('Failed to convert image:', src, e3);
+          }
+        }
+      }
+      
+      if (base64) {
+        base64Images[src] = base64;
+      }
+    }
+    
+    let bodyHTML = document.body.innerHTML;
+    for (const [src, base64] of Object.entries(base64Images)) {
+      bodyHTML = bodyHTML.replace(new RegExp(src.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), base64);
+    }
+    
+    const wordStyle = `
+      <style>
+        * { box-sizing: border-box; }
+        body { font-family: 'Arial Hebrew', 'Segoe UI', Arial, sans-serif !important; direction: rtl !important; text-align: right !important; background: white; color: #222; margin: 20pt; line-height: 1.05; mso-line-height-rule: exactly; }
+        h1 { font-size: 18pt; border-bottom: 2pt solid #0a7; padding-bottom: 4pt; margin-top: 12pt; margin-bottom: 6pt; }
+        h2 { font-size: 14pt; margin-top: 10pt; margin-bottom: 4pt; color: #0a4; }
+        .chart-wrap { text-align: center; margin: 6pt 0; }
+        img.chart { width: 600px !important; max-width: 600px !important; border: 1pt solid #ddd; display: block; margin: 0 auto; }
+        table { width: 100%; border-collapse: collapse; margin: 6pt 0; background: white; font-size: 11pt; mso-table-dir: bidi; }
+        th, td { padding: 2pt 8pt; text-align: right; border: 1pt solid #ddd; line-height: 1.05; mso-line-height-rule: exactly; }
+        th { background: #f5f5f5; font-weight: 600; color: #333; font-size: 10pt; padding: 3pt 8pt; }
+        td:first-child { color: #444; font-weight: 500; }
+        td:last-child { color: #666; }
+        .ltr { direction: ltr !important; unicode-bidi: bidi-override; display: inline-block; }
+        .badge { display: inline-block; padding: 1pt 5pt; border-radius: 2pt; font-size: 9pt; margin-left: 4pt; }
+        .badge.dist { background: #ffe5e5; color: #c00; }
+        .badge.acc { background: #e5ffe5; color: #070; }
+        .badge.warn { background: #fff5d6; color: #a60; }
+        .stamp { color: #888; font-size: 10pt; }
+        .key { background: #fffde6; padding: 6pt 10pt; border-right: 2pt solid #d90; margin: 6pt 0; font-size: 11pt; }
+        .conflict { background: #fff0e6; padding: 8pt 12pt; border-right: 2pt solid #d70; margin: 8pt 0; font-size: 11pt; }
+        .section-divider { height: 3pt; background: #0a7; margin: 16pt 0; }
+        .toc, .gen-banner, .export-btn { display: none !important; }
+      </style>
+      <xml>
+        <w:WordDocument>
+          <w:View>Print</w:View>
+          <w:Zoom>100</w:Zoom>
+          <w:DoNotOptimizeForBrowser/>
+          <w:RtL>true</w:RtL>
+        </w:WordDocument>
+      </xml>
+    `;
+    
+    const wordHTML = `
+      <!DOCTYPE html>
+      <html xmlns:w="urn:schemas-microsoft-com:office:word" lang="he" dir="rtl">
+      <head>
+        <meta charset="UTF-8">
+        <title>Wyckoff Report - BTCUSDT.P - 2026-05-29</title>
+        ${wordStyle}
+      </head>
+      <body>
+        ${bodyHTML}
+      </body>
+      </html>
+    `;
+    
+    const blob = new Blob(['\ufeff', wordHTML], {
+      type: 'application/msword;charset=utf-8'
+    });
+    
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'Wyckoff_BTCUSDT_2026-05-29_0938.doc';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    
+    btn.textContent = '✅ הורד בהצלחה!';
+    setTimeout(() => {
+      btn.disabled = false;
+      btn.textContent = '📄 ייצא ל-Word';
+    }, 3000);
+    
+  } catch (error) {
+    console.error('Export error:', error);
+    btn.textContent = '❌ שגיאה';
+    setTimeout(() => {
+      btn.disabled = false;
+      btn.textContent = '📄 ייצא ל-Word';
+    }, 3000);
+  }
+}
+</script>
+</head>
+<body>
+
+<div class="gen-banner">
+  <span><strong>📊 דוח נוצר:</strong> 2026-05-29 09:38 שעון ישראל</span>
+  <span style="display:flex;gap:8px;align-items:center;">
+    <button class="export-btn" onclick="exportToWord()">📄 ייצא ל-Word</button>
+    <span class="label">BYBIT:BTCUSDT.P</span>
+  </span>
+</div>
+
+<div class="toc"><strong>תוכן עניינים:</strong>
+  <a href="#sec-1d">1D</a>
+  <a href="#sec-4h">4H ⭐</a>
+  <a href="#sec-1h">1H</a>
+  <a href="#sec-30m">30m — 3 שלבים ⭐</a>
+  <a href="#sec-15m">15m — 3 שלבים ⭐</a>
+  <a href="#sec-pane3">📊 SMC_X (Pane 3)</a>
+</div>
+
+<h1 id="sec-1d">📊 ניתוח גרף יומי — BYBIT:BTCUSDT.P <span class="badge dist">פיזור</span></h1>
+<div class="stamp">נוצר אוטומטית · 2026-05-29 09:38 שעון ישראל · BYBIT:BTCUSDT.P</div>
+
+<h2>🎯 ה-TR שזוהה</h2>
+<div class="chart-wrap">
+  <img class="chart" src="chart-1d.png" alt="גרף יומי BTCUSDT.P">
+</div>
+<table>
+  <thead><tr><th>שדה</th><th>ערך</th></tr></thead>
+  <tbody>
+    <tr><td>סוג</td><td>פיזור (<span class="ltr">Distribution</span>)</td></tr>
+    <tr><td>גג ה-<span class="ltr">TR</span></td><td><span class="ltr">BC daily</span> ב-$81,639.1 (נוצר 15 במאי 2026)</td></tr>
+    <tr><td>רצפת ה-<span class="ltr">TR</span></td><td><span class="ltr">AR daily</span> ב-$72,552.0 (נוצר 28 במאי 2026)</td></tr>
+    <tr><td>התחלת ה-<span class="ltr">TR</span></td><td>15 במאי 2026</td></tr>
+    <tr><td>משך</td><td>14 ימים</td></tr>
+    <tr><td>גובה</td><td>$9,087.1 (12.53%)</td></tr>
+    <tr><td>מחיר נוכחי</td><td>$73,650.0 — בתוך ה-<span class="ltr">TR</span>, 12.1% מהרצפה ($1,098 מעל <span class="ltr">AR</span>)</td></tr>
+  </tbody>
+</table>
+
+<h2>📌 מה רואים בתמונה</h2>
+<table>
+  <thead><tr><th>מה</th><th>תיאור</th></tr></thead>
+  <tbody>
+    <tr><td>✅ <span class="ltr">BC daily</span></td><td>נר קלימקס חזק ב-15/05 עם ווליום של 71,934.59 — פסגת התהליך הפיזורי</td></tr>
+    <tr><td>✅ <span class="ltr">AR daily</span></td><td>נר תגובה אוטומטית ב-28/05 עם ווליום של 86,542.85 — נקודת תמיכה זמנית</td></tr>
+    <tr><td>🚨 תנועה הדרגתית למטה</td><td>מחיר נע בתוך ה-<span class="ltr">TR</span> עם ירידות מתונות וווליום פוחת — מאפיין קלאסי של <span class="ltr">Phase B</span> פיזורית</td></tr>
+    <tr><td>🚨 נר אחרון</td><td>נר 29/05 נסגר ב-$73,650 עם ווליום נמוך מאוד (13,462) — חוסר עניין, ספקנות עולה</td></tr>
+  </tbody>
+</table>
+
+<h2>📊 ווליום פר 1% — נתונים</h2>
+<table>
+  <thead><tr><th>נר</th><th>ערך + השוואה</th></tr></thead>
+  <tbody>
+    <tr><td>פאזה A — <span class="ltr">BC daily</span> (15/05)</td><td><strong>29.4</strong> — מקור הייחוס לפאזה A</td></tr>
+    <tr><td>נר ה-<span class="ltr">AR daily</span> (28/05)</td><td><strong>79.04</strong> — 🚨 גדול פי 2.7 מפאזה A → מאמץ עצום לעצור את הירידה</td></tr>
+    <tr><td>נר אחרון שנסגר (29/05)</td><td><strong>189.08</strong> — 🚨 גדול פי 6.4 מפאזה A → ווליום מזערי על תנועה זעירה (+0.071%) = אבסורבציה חלשה</td></tr>
+    <tr><td>ניסיון פריצה גג #1 (17/05)</td><td>45.53 — גדול מפאזה A ב-55% → מאמץ בינוני ללא הצלחה</td></tr>
+    <tr><td>ניסיון פריצה גג #2 (18/05)</td><td>141.15 — 🚨 גדול פי 4.8 מפאזה A → ווליום עצום אך המחיר נסגר בתוך ה-<span class="ltr">TR</span> = <span class="ltr">UTAD</span> חזק</td></tr>
+    <tr><td>פריצה גג מוצלחת</td><td>אין עדיין — כל הניסיונות נכשלו</td></tr>
+    <tr><td>פריצה רצפה / <span class="ltr">Spring</span></td><td>אין עדיין — לא היתה נגיעה מתחת ל-<span class="ltr">AR</span></td></tr>
+  </tbody>
+</table>
+
+<div class="key">
+💡 <strong>מסקנה 1D (4-חלקי):</strong><br>
+<strong>תיאור עובדה:</strong> לאחר קלימקס פיזורי ב-15/05 ($81,639), המחיר צנח ל-$72,552 ב-28/05 (ירידה של 11.1%) ויצר <span class="ltr">AR daily</span> חזק. מאז — דשדוש בתוך ה-<span class="ltr">TR</span> עם ווליום פוחת.<br>
+<strong>השוואה כמותית:</strong> נר ה-<span class="ltr">AR</span>: V/1% = 79.04 (פי 2.7 מפאזה A). נר אחרון: V/1% = 189.08 (פי 6.4 מפאזה A) — ווליום מזערי על תנועה של +0.071%.<br>
+<strong>פרשנות Wyckoff:</strong> מבנה פיזורי קלאסי — <span class="ltr">BC</span> בגובה, <span class="ltr">AR</span> בתחתית, ניסיונות <span class="ltr">UTAD</span> כושלים (18/05). הווליום הנמוך בנר האחרון = אבסורבציה חלשה, לא ביקוש אמיתי.<br>
+<strong>כיוון פוטנציאלי:</strong> תודעת שורט. המבנה מצביע על המשך ירידה לאחר השלמת <span class="ltr">Phase D</span> פיזורית (<span class="ltr">SOW + LPSY</span>). יעד פוטנציאלי: $63,464 (גובה <span class="ltr">TR</span> × 1 מתחת ל-<span class="ltr">AR</span>).
+</div>
+
+<h2>📊 התובנה — Wyckoff</h2>
+<table>
+  <thead><tr><th>שלב</th><th>מצב</th></tr></thead>
+  <tbody>
+    <tr><td><span class="ltr">Phase A</span></td><td>✅ הסתיים — <span class="ltr">BC daily</span> (15/05, $81,639) + <span class="ltr">AR daily</span> (28/05, $72,552). מבנה <strong>פיזורי</strong> ברור.</td></tr>
+    <tr><td><span class="ltr">Phase B</span> — שליטה</td><td>👁️ <strong>שליטת מוכרים מתחזקת</strong>. כל עלייה בתוך ה-<span class="ltr">TR</span> נפגשת עם התנגדות וווליום פוחת. הניסיונות לשבור את הגג (17/05, 18/05) נכשלו למרות ווליום גבוה.</td></tr>
+    <tr><td><span class="ltr">Phase B</span> — אינדיקציה</td><td>🔴 <strong>פיזור מתחזק</strong>. הווליום יורד בעליות (אבסורבציה חלשה) ועולה בירידות (מכירה אקטיבית). הנר האחרון (29/05) עם V/1%=189.08 מצביע על חוסר עניין קונים.</td></tr>
+    <tr><td><span class="ltr">Phase C</span></td><td>⏭️ מדלגים — לא נדרש <span class="ltr">Spring</span> בתהליך פיזורי. ייתכן <span class="ltr">UTAD</span> נוסף אך הנר של 18/05 כבר מילא תפקיד זה.</td></tr>
+    <tr><td><span class="ltr">Phase D</span></td><td>👁️ ממתין — טרם התפתח <span class="ltr">SOW</span> (שבירת <span class="ltr">AR</span> בווליום גבוה) ו-<span class="ltr">LPSY</span> (חזרה לרצפה בווליום נמוך).</td></tr>
+    <tr><td>ווליום נוכחי</td><td>נמוך מאוד (13,462 בנר אחרון) — חוסר עניין, ספקנות. זה תקין ל-<span class="ltr">Phase B</span> פיזורית בהמשך.</td></tr>
+  </tbody>
+</table>
+
+<h2>🔄 תת-מגמות בתוך פאזה B</h2>
+<table>
+  <thead><tr><th>תקופה</th><th>תנועה / ווליום / שליטה</th></tr></thead>
+  <tbody>
+    <tr><td>15-17/05</td><td><strong>ירידה ראשונית</strong> מ-$81,639 ל-$76,671 (-6.1%) בווליום בינוני (V/1%=27.91-45.53). ⇒ <strong>מכירה אקטיבית</strong>.</td></tr>
+    <tr><td>18-19/05</td><td><strong>ניסיון עלייה</strong> ל-$77,766 בווליום עצום (V/1%=141.15) אך נסגר חזרה בתוך ה-<span class="ltr">TR</span> ($76,963). ⇒ <strong><span class="ltr">UTAD</span> חזק</strong> — אישור פיזור.</td></tr>
+    <tr><td>20-22/05</td><td><strong>דשדוש</strong> בטווח $75,311-$77,865 עם ווליום פוחת (V/1%=48.12-611.53). ⇒ <strong>אבסורבציה חלשה</strong> — אין ביקוש אמיתי.</td></tr>
+    <tr><td>23-25/05</td><td><strong>עלייה קצרה</strong> ל-$77,885 בווליום בינוני (V/1%=42.33-114.24) אך ללא המשך. ⇒ <strong>מלכודת לקונים</strong>.</td></tr>
+    <tr><td>26-28/05</td><td><strong>צניחה</strong> ל-$72,552 בווליום גבוה (V/1%=35.81-79.04) — יצירת <span class="ltr">AR daily</span>. ⇒ <strong>שליטת מוכרים ברורה</strong>.</td></tr>
+    <tr><td>29/05</td><td><strong>התאוששות זעירה</strong> ל-$73,650 (+0.071%) בווליום מזערי (V/1%=189.08). ⇒ <strong>חוסר עניין</strong> — טרום <span class="ltr">Phase D</span>.</td></tr>
+  </tbody>
+</table>
+
+<div class="key">
+💡 <strong>סיכום פאזה B:</strong> התהליך הפיזורי ברור — כל עלייה נפגשת עם מכירה, הווליום יורד בהתאוששויות ועולה בירידות. ה-<span class="ltr">UTAD</span> של 18/05 אישר את הפיזור. המבנה מוכן ל-<span class="ltr">Phase D</span>.
+</div>
+
+<div class="key">
+💡 <strong>תודעה ראשונית:</strong> בהתבסס על <span class="ltr">Phase A</span> (פיזור) + <span class="ltr">Phase B</span> (שליטת מוכרים + <span class="ltr">UTAD</span>) — <strong>תודעת שורט</strong>. ממתינים לשבירת ה-<span class="ltr">AR</span> ($72,552) בווליום גבוה (<span class="ltr">SOW</span>) ו-<span class="ltr">LPSY</span> (חזרה כושלת לרצפה) כסיגנל כניסה.
+</div>
+
+<h2>🎯 פעולה — סקירה</h2>
+<table>
+  <thead><tr><th>תרחיש</th><th>פעולה</th></tr></thead>
+  <tbody>
+    <tr><td>שבירת <span class="ltr">AR</span> מטה ($72,552) בנר יומי עם V/1% > 79</td><td>👁️ <strong>סיגנל ראשי</strong> — <span class="ltr">SOW</span> מאושר. תודעת שורט מתחזקת. ממתינים ל-<span class="ltr">LPSY</span> (חזרה ל-$72,552-$74,000 בווליום נמוך) לכניסה.</td></tr>
+    <tr><td>שבירת <span class="ltr">BC</span> למעלה ($81,639) בנר יומי עם V/1% < 29.4</td><td>🔄 <strong>ביטול התרחיש הפיזורי</strong> — מעבר לתודעת לונג. אך זה דורש ווליום חזק + סגירה מעל $81,639 + <span class="ltr">LPS</span>.</td></tr>
+    <tr><td>המשך דשדוש בתוך ה-<span class="ltr">TR</span> ($72,552-$81,639)</td><td>❌ אין סיגנל — ממתינים. לא נכנסים בתוך ה-<span class="ltr">TR</span>.</td></tr>
+  </tbody>
+</table>
+
+<h2>📋 תרחיש 1: שבירת AR למטה (SOW) — תודעת שורט 🔴</h2>
+<table>
+  <thead><tr><th>פירוט</th><th>ערך</th></tr></thead>
+  <tbody>
+    <tr><td>מה זה <span class="ltr">SOW</span></td><td><span class="ltr">Sign of Weakness</span> — שבירה של רצפת ה-<span class="ltr">TR</span> (ה-<span class="ltr">AR</span>) בווליום גבוה, מאשרת שליטת מוכרים והמשך ירידה.</td></tr>
+    <tr><td>איך מזהים בזמן אמת</td><td>נר יומי שנסגר מתחת ל-$72,552 עם V/1% גבוה (>79, רצוי >100). חובה: <strong>סגירה</strong> — לא רק נגיעה.</td></tr>
+    <tr><td>מה זה מאשר</td><td>תחילת <span class="ltr">Phase D</span> פיזורית — המוכרים משתלטים סופית, הקונים נסוגים.</td></tr>
+    <tr><td>למה לא נכנסים מיד</td><td>ממתינים ל-<span class="ltr">LPSY</span> (<span class="ltr">Last Point of Supply</span>) — חזרה כושלת לרצפת ה-<span class="ltr">TR</span> בווליום נמוך. זה נקודת הכניסה האופטימלית עם <span class="ltr">RR</span> טוב.</td></tr>
+    <tr><td>מה מחפשים אחר כך</td><td><span class="ltr">LPSY</span>: נר שחוזר ל-$72,552-$74,000, נוגע ברצפה אך נסגר מתחתיה בווליום נמוך (V/1% < 40). זה אישור סופי.</td></tr>
+    <tr><td>נקודת כניסה</td><td>סגירת נר ה-<span class="ltr">LPSY</span> מתחת לרצפת ה-<span class="ltr">TR</span>. כניסה בשורט ב-$72,500-$73,000.</td></tr>
+    <tr><td><span class="ltr">Stop Loss</span></td><td>מעל <span class="ltr">AR</span> + מרווח: $73,552 (1,000$ מעל ה-<span class="ltr">AR</span>).</td></tr>
+    <tr><td>יעד <span class="ltr">Take Profit</span></td><td>יעד ראשון: $63,464 (גובה <span class="ltr">TR</span> × 1 מתחת ל-<span class="ltr">AR</span>). יעד שני: $54,377 (גובה × 2).</td></tr>
+  </tbody>
+</table>
+
+<h2>📋 תרחיש 2: שבירת BC למעלה (ביטול פיזור) — תודעת לונג 🟢</h2>
+<table>
+  <thead><tr><th>פירוט</th><th>ערך</th></tr></thead>
+  <tbody>
+    <tr><td>מה זה ביטול פיזור</td><td>שבירה של גג ה-<span class="ltr">TR</span> (ה-<span class="ltr">BC</span>) בווליום נמוך-בינוני, מצביעה שהפיזור לא הושלם והקונים חזרו.</td></tr>
+    <tr><td>איך מזהים בזמן אמת</td><td>נר יומי שנסגר מעל $81,639 עם V/1% נמוך (<29.4, רצוי <20). חובה: <strong>סגירה</strong> מעל ה-<span class="ltr">BC</span>.</td></tr>
+    <tr><td>מה זה מאשר</td><td><span class="ltr">SOS</span> (<span class="ltr">Sign of Strength</span>) — הקונים מנצחים, מעבר לתהליך איסופי.</td></tr>
+    <tr><td>למה לא נכנסים מיד</td><td>ממתינים ל-<span class="ltr">LPS</span> (<span class="ltr">Last Point of Support</span>) — חזרה לגג ה-<span class="ltr">TR</span> בווליום נמוך, מאשרת תמיכה חדשה.</td></tr>
+    <tr><td>מה מחפשים אחר כך</td><td><span class="ltr">LPS</span>: נר שחוזר ל-$81,639-$79,500, נוגע בגג אך נסגר מעליו בווליום נמוך (V/1% < 30).</td></tr>
+    <tr><td>נקודת כניסה</td><td>סגירת נר ה-<span class="ltr">LPS</span> מעל גג ה-<span class="ltr">TR</span>. כניסה בלונג ב-$81,800-$82,500.</td></tr>
+    <tr><td><span class="ltr">Stop Loss</span></td><td>מתחת ל-<span class="ltr">BC</span> - מרווח: $80,639 (1,000$ מתחת ל-<span class="ltr">BC</span>).</td></tr>
+    <tr><td>יעד <span class="ltr">Take Profit</span></td><td>יעד ראשון: $90,726 (גובה <span class="ltr">TR</span> × 1 מעל <span class="ltr">BC</span>). יעד שני: $99,813 (גובה × 2).</td></tr>
+  </tbody>
+</table>
+
+<h2>📋 תרחיש 3: דשדוש ממושך — אין סיגנל ❌</h2>
+<table>
+  <thead><tr><th>פירוט</th><th>ערך</th></tr></thead>
+  <tbody>
+    <tr><td>מה זה דשדוש</td><td>המחיר ממשיך לנוע בתוך ה-<span class="ltr">TR</span> ($72,552-$81,639) ללא שבירה ברורה, עם ווליום פוחת.</td></tr>
+    <tr><td>איך מזהים</td><td>מספר נרות יומיים רצופים (5+) שנסגרים בתוך ה-<span class="ltr">TR</span> ללא נגיעה ב-<span class="ltr">BC</span> או <span class="ltr">AR</span>.</td></tr>
+    <tr><td>מה זה אומר</td><td>התהליך הפיזורי עדיין בעיצומו — <span class="ltr">Phase B</span> ממושכת. המוכרים מחכים לנקודת זמן טובה יותר.</td></tr>
+    <tr><td>פעולה</td><td>❌ <strong>אין כניסה</strong>. ממתינים בצד לאחד משני התרחישים הראשונים. לא סוחרים בתוך ה-<span class="ltr">TR</span>.</td></tr>
+    <tr><td>מתי לבדוק מחדש</td><td>כל 24 שעות — לאחר סגירת נר יומי חדש.</td></tr>
+  </tbody>
+</table>
+
+<div class="section-divider"></div>
+
+<h1 id="sec-4h">📊 ניתוח גרף 4 שעות — BYBIT:BTCUSDT.P <span class="badge acc">איסוף</span> ⭐</h1>
+<div class="stamp">נוצר אוטומטית · 2026-05-29 09:38 שעון ישראל · BYBIT:BTCUSDT.P</div>
+
+<h2>🎯 ה-TR שזוהה</h2>
+<div class="chart-wrap">
+  <img class="chart" src="chart-4h.png" alt="גרף 4 שעות BTCUSDT.P">
+</div>
+<table>
+  <thead><tr><th>שדה</th><th>ערך</th></tr></thead>
+  <tbody>
+    <tr><td>סוג</td><td>איסוף (<span class="ltr">Accumulation</span>)</td></tr>
+    <tr><td>גג ה-<span class="ltr">TR</span></td><td><span class="ltr">AR 4H</span> ב-$76,143.1 (נוצר 26 במאי 23:00)</td></tr>
+    <tr><td>רצפת ה-<span class="ltr">TR</span></td><td><span class="ltr">SC 4H</span> ב-$72,552.0 (נוצר 28 במאי 15:00)</td></tr>
+    <tr><td>התחלת ה-<span class="ltr">TR</span></td><td>26 במאי 2026, 23:00</td></tr>
+    <tr><td>משך</td><td>~64 שעות (2.7 ימים)</td></tr>
+    <tr><td>גובה</td><td>$3,591.1 (4.95%)</td></tr>
+    <tr><td>מחיר נוכחי</td><td>$73,644.6 — בתוך ה-<span class="ltr">TR</span>, 30.4% מהרצפה ($1,092.6 מעל <span class="ltr">SC</span>)</td></tr>
+  </tbody>
+</table>
+
+<h2>📌 מה רואים בתמונה</h2>
+<table>
+  <thead><tr><th>מה</th><th>תיאור</th></tr></thead>
+  <tbody>
+    <tr><td>✅ <span class="ltr">SC 4H</span></td><td>נר קלימקס מכירתי ב-28/05 15:00 עם ווליום של 26,425.48 — תחתית התהליך האיסופי</td></tr>
+    <tr><td>✅ <span class="ltr">AR 4H</span></td><td>נר תגובה אוטומטית ב-26/05 23:00 עם ווליום של 5,846.86 — תקרת ה-<span class="ltr">TR</span></td></tr>
+    <tr><td>🚨 עלייה הדרגתית</td><td>מחיר עולה בהדרגה מה-<span class="ltr">SC</span> ($72,552) ל-$73,644 בווליום פוחת — מאפיין קלאסי של <span class="ltr">Phase B</span> איסופית</td></tr>
+    <tr><td>🚨 נר אחרון</td><td>נר 29/05 07:00 נסגר ב-$73,644.6 עם ווליום נמוך (4,723.29, V/1%=9.09) — אבסורבציה חזקה, קונים בולעים מכירה</td></tr>
+  </tbody>
+</table>
+
+<h2>📊 ווליום פר 1% — נתונים</h2>
+<table>
+  <thead><tr><th>נר</th><th>ערך + השוואה</th></tr></thead>
+  <tbody>
+    <tr><td>פאזה A — <span class="ltr">SC 4H</span> (28/05 15:00)</td><td><strong>33.62</strong> — מקור הייחוס לפאזה A</td></tr>
+    <tr><td>נר ה-<span class="ltr">AR 4H</span> (26/05 23:00)</td><td><strong>36.31</strong> — גדול מפאזה A ב-8% → מאמץ בינוני, תגובה תקינה</td></tr>
+    <tr><td>נר אחרון שנסגר (29/05 07:00)</td><td><strong>9.09</strong> — 🟢 קטן מפאזה A פי 3.7 → ווליום נמוך על עלייה (+0.519%) = <strong>אבסורבציה חזקה</strong></td></tr>
+    <tr><td>ניסיון פריצה רצפה #1 (28/05 03:00)</td><td>11.77 — קטן מפאזה A פי 2.9 → ניסיון חלש, תקין ל-<span class="ltr">SC</span></td></tr>
+    <tr><td>ניסיון פריצה רצפה #2 (28/05 15:00)</td><td>33.62 — שווה לפאזה A → זה עצמו ה-<span class="ltr">SC</span>, נקודת הקלימקס</td></tr>
+    <tr><td>פריצה גג / <span class="ltr">AR</span></td><td>אין עדיין — לא היתה שבירה מעל $76,143.1</td></tr>
+    <tr><td><span class="ltr">Spring</span> (פריצה מתחת ל-<span class="ltr">SC</span>)</td><td>אין עדיין — לא היתה נגיעה מתחת ל-$72,552</td></tr>
+  </tbody>
+</table>
+
+<div class="key">
+💡 <strong>מסקנה 4H (4-חלקי):</strong><br>
+<strong>תיאור עובדה:</strong> לאחר קלימקס מכירתי ב-28/05 15:00 ($72,552, V/1%=33.62), המחיר התאושש ל-$73,644.6 ב-29/05 07:00 — עלייה של 1.5% בווליום נמוך (V/1%=9.09).<br>
+<strong>השוואה כמותית:</strong> נר ה-<span class="ltr">SC</span>: V/1% = 33.62 (מקור ייחוס). נר אחרון: V/1% = 9.09 — קטן פי 3.7 מפאזה A → ווליום נמוך על עלייה = אבסורב

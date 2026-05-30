@@ -1,0 +1,876 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>סקירת Wyckoff מאוחדת — BYBIT:BTCUSDT.P — 2026-05-29</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: 'Segoe UI', 'Arial Hebrew', Arial, sans-serif; direction: rtl; text-align: right; background: #f7f8fa; color: #222; margin: 0 auto; padding: 18px; max-width: 1280px; }
+  h1 { font-size: 22px; border-bottom: 2px solid #0a7; padding-bottom: 6px; }
+  h2 { font-size: 17px; margin-top: 22px; color: #0a4; }
+  .chart-wrap { text-align: center; margin: 12px 0; }
+  img.chart { width: 75%; max-width: 950px; border: 1px solid #ddd; border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.08); display: inline-block; }
+  table { width: 100%; border-collapse: collapse; margin: 10px 0; background: white; box-shadow: 0 1px 2px rgba(0,0,0,0.06); border-radius: 6px; overflow: hidden; font-size: 14px; }
+  th, td { padding: 7px 13px; text-align: right; border-bottom: 1px solid #eee; }
+  th { background: #fafafa; font-weight: 600; color: #333; font-size: 13px; }
+  td:first-child { color: #444; width: 35%; font-weight: 500; }
+  td:last-child { color: #888; }
+  .ltr { direction: ltr; unicode-bidi: bidi-override; display: inline-block; }
+  .badge { display: inline-block; padding: 2px 7px; border-radius: 3px; font-size: 11px; margin-inline-start: 6px; }
+  .badge.dist { background: #ffe5e5; color: #c00; }
+  .badge.acc { background: #e5ffe5; color: #070; }
+  .badge.warn { background: #fff5d6; color: #a60; }
+  .stamp { color: #888; font-size: 12px; }
+  .key { background: #fffde6; padding: 8px 12px; border-right: 3px solid #d90; margin: 8px 0; font-size: 13px; }
+  .conflict { background: #fff0e6; padding: 10px 14px; border-right: 3px solid #d70; margin: 10px 0; font-size: 13px; border-radius: 4px; }
+  .section-divider { height: 4px; background: linear-gradient(90deg,#0a7,#0c6,#0a7); margin: 32px 0; border-radius: 2px; }
+  .toc { background: white; padding: 12px 16px; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,.06); margin: 16px 0; }
+  .toc a { color: #0a4; text-decoration: none; margin-inline-end: 16px; font-size: 14px; }
+  .gen-banner { background: #0a7; color: white; padding: 10px 16px; border-radius: 6px; margin: 0 0 12px; font-size: 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+  .gen-banner .label { opacity: 0.85; font-size: 12px; }
+  .export-btn { background: #d4a017; color: white; border: none; padding: 8px 16px; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.1); transition: all 0.2s; }
+  .export-btn:hover { background: #c19412; transform: translateY(-1px); box-shadow: 0 4px 8px rgba(0,0,0,0.15); }
+  .export-btn:active { transform: translateY(0); }
+  @media print { .export-btn, .toc { display: none !important; } }
+</style>
+<script>
+async function exportToWord() {
+  const btn = document.querySelector('.export-btn');
+  const orig = btn.textContent;
+  btn.textContent = '⏳ מעבד תמונות...';
+  btn.disabled = true;
+
+  async function imgToDataUrl(src) {
+    try {
+      const r = await fetch(src);
+      const blob = await r.blob();
+      return await new Promise((res, rej) => {
+        const fr = new FileReader();
+        fr.onloadend = () => res(fr.result);
+        fr.onerror = () => rej();
+        fr.readAsDataURL(blob);
+      });
+    } catch (e) { }
+    try {
+      return await new Promise((res, rej) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('GET', src, true);
+        xhr.responseType = 'arraybuffer';
+        xhr.onload = () => {
+          if (xhr.status === 0 || xhr.status === 200) {
+            const bytes = new Uint8Array(xhr.response);
+            let binary = '';
+            for (let i = 0; i < bytes.length; i += 8192) {
+              binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192));
+            }
+            res('data:image/png;base64,' + btoa(binary));
+          } else rej();
+        };
+        xhr.onerror = () => rej();
+        xhr.send();
+      });
+    } catch (e) { }
+    try {
+      const img = document.querySelector(`img[src="${src}"]`);
+      if (!img || !img.complete) return null;
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      canvas.getContext('2d').drawImage(img, 0, 0);
+      return canvas.toDataURL('image/png');
+    } catch (e) { return null; }
+  }
+
+  const imgs = Array.from(document.querySelectorAll('img.chart'));
+  for (const img of imgs) {
+    const dataUrl = await imgToDataUrl(img.src);
+    if (dataUrl) img.src = dataUrl;
+  }
+
+  btn.textContent = '📄 בונה Word...';
+  await new Promise(r => setTimeout(r, 300));
+
+  const wordRtlXml = `<!--[if gte mso 9]>
+<xml>
+<w:WordDocument>
+<w:View>Print</w:View>
+<w:RtL>true</w:RtL>
+</w:WordDocument>
+</xml>
+<![endif]-->`;
+
+  const wordStyle = `<style>
+@page { mso-page-orientation: portrait; size: A4; margin: 1.5cm 1cm; }
+body { direction: rtl !important; text-align: right !important; font-family: 'Arial', 'David', sans-serif; font-size: 11pt; }
+* { direction: rtl; text-align: right; }
+.ltr, span.ltr { direction: ltr !important; unicode-bidi: bidi-override !important; }
+h1 { font-size: 18pt; color: #0a7; border-bottom: 2pt solid #0a7; }
+h2 { font-size: 14pt; color: #0a4; }
+table { width: 100%; border-collapse: collapse; mso-table-dir: bidi; }
+th, td { padding: 2pt 8pt; border: 1pt solid #ccc; line-height: 1.05; }
+th { background: #f5f5f5; font-weight: bold; padding: 3pt 8pt; }
+img { width: 600px !important; max-width: 600px !important; margin: 8pt auto !important; display: block !important; }
+.key { background: #fffde6; padding: 6pt 10pt; border-right: 3pt solid #d90; margin: 6pt 0; }
+.conflict { background: #fff0e6; padding: 8pt 12pt; border-right: 3pt solid #d70; margin: 8pt 0; }
+.badge { display: inline; padding: 1pt 5pt; border-radius: 2pt; font-size: 9pt; }
+.badge.dist { background: #ffe5e5; color: #c00; }
+.badge.acc { background: #e5ffe5; color: #070; }
+.gen-banner, .toc, .export-btn { display: none !important; }
+</style>`;
+
+  const bodyContent = document.body.innerHTML;
+  const reportTitle = document.title;
+  const fullHtml = `<html xmlns:o="urn:schemas-microsoft-com:office:office"
+                       xmlns:w="urn:schemas-microsoft-com:office:word"
+                       xmlns="http://www.w3.org/TR/REC-html40"
+                       lang="he" dir="rtl">
+<head><meta charset="utf-8"><title>${reportTitle}</title>
+${wordRtlXml}
+${wordStyle}
+</head>
+<body lang="he" dir="rtl" style="direction:rtl;text-align:right;">
+${bodyContent}
+</body></html>`;
+
+  const blob = new Blob(['\ufeff', fullHtml], { type: 'application/msword;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'wyckoff-report-2026-05-29.doc';
+  a.click();
+
+  btn.textContent = '✅ הורדה הושלמה!';
+  setTimeout(() => {
+    btn.textContent = orig;
+    btn.disabled = false;
+  }, 2000);
+}
+</script>
+</head>
+<body>
+  <div class="gen-banner">
+    <span><strong>📊 דוח נוצר:</strong> 2026-05-29 16:25 שעון ישראל</span>
+    <span style="display:flex;gap:8px;align-items:center;">
+      <button class="export-btn" onclick="exportToWord()">📄 ייצא ל-Word</button>
+      <span class="label">BYBIT:BTCUSDT.P</span>
+    </span>
+  </div>
+
+  <div class="toc"><strong>תוכן עניינים:</strong>
+    <a href="#sec-1d">1D</a>
+    <a href="#sec-4h">4H ⭐</a>
+    <a href="#sec-1h">1H</a>
+    <a href="#sec-30m">30m — 3 שלבים ⭐</a>
+    <a href="#sec-15m">15m — 3 שלבים ⭐</a>
+    <a href="#sec-pane3">📊 SMC_X (Pane 3)</a>
+  </div>
+
+  <h1 id="sec-1d">📊 ניתוח גרף יומי — BTCUSDT.P <span class="badge warn">TR בעיצומו</span></h1>
+  <div class="stamp">נוצר אוטומטית · 2026-05-29 16:25 שעון ישראל · BYBIT:BTCUSDT.P</div>
+
+  <h2>🎯 ה-TR שזוהה</h2>
+  <div class="chart-wrap">
+    <img class="chart" src="chart-1d.png" alt="גרף יומי BTCUSDT.P">
+  </div>
+  <table>
+    <thead><tr><th>שדה</th><th>ערך</th></tr></thead>
+    <tbody>
+      <tr><td>סוג</td><td>TR מתפתח — טרם הוכרע בין איסוף לפיזור</td></tr>
+      <tr><td>גג ה-<span class="ltr">TR</span></td><td>~$81,639 (גבוה יומי 15 במאי) — טרם אושרה כ-<span class="ltr">BC</span> או <span class="ltr">AR</span></td></tr>
+      <tr><td>רצפת ה-<span class="ltr">TR</span></td><td>~$72,552 (נמוך יומי 28 במאי)</td></tr>
+      <tr><td>התחלת ה-<span class="ltr">TR</span></td><td>15 במאי 2026 (14 ימים עד היום)</td></tr>
+      <tr><td>משך</td><td>14 ימים</td></tr>
+      <tr><td>גובה</td><td>$9,087 (~11.8%)</td></tr>
+      <tr><td>מחיר נוכחי</td><td>$73,007.6 — בתוך ה-TR, 8% מהרצפה, 92% מהגג</td></tr>
+    </tbody>
+  </table>
+
+  <h2>📌 מה רואים בתמונה</h2>
+  <table>
+    <thead><tr><th>מה</th><th>תיאור</th></tr></thead>
+    <tbody>
+      <tr><td>✅</td><td>14 ימים של דשדוש בין $72,552 ל-$81,639 — אין פריצה מוצלחת לאף כיוון</td></tr>
+      <tr><td>✅</td><td>הנפילה ב-22-27 במאי ירדה ל-$72,552 (רצפה חדשה) אך נסגרה מעליה ב-$73,598 ב-28 במאי</td></tr>
+      <tr><td>✅</td><td>הנר האחרון (29 במאי) נסגר ב-$73,007.6 — בתוך ה-TR, לא פרץ שום גבול</td></tr>
+      <tr><td>🚨</td><td>אין <span class="ltr">BC</span> או <span class="ltr">SC</span> מאושרים — אי אפשר לזהות פאזה A בוודאות</td></tr>
+    </tbody>
+  </table>
+
+  <h2>📊 ווליום פר 1% — נתונים</h2>
+  <table>
+    <thead><tr><th>נר</th><th>ערך + השוואה</th></tr></thead>
+    <tbody>
+      <tr><td>פאזה A — טרם זוהה</td><td>אין <span class="ltr">BC</span> או <span class="ltr">SC</span> מוגדרים → אין ערך ייחוס</td></tr>
+      <tr><td>נר הנפילה החזקה (22 במאי)</td><td><strong>22.12</strong> — ירידה של 2.68%, ווליום 59,271</td></tr>
+      <tr><td>נר נמוך יומי (27 במאי)</td><td><strong>35.81</strong> — ירידה של 1.96%, ווליום 70,074</td></tr>
+      <tr><td>נר אחרון שנסגר (29 במאי)</td><td><strong>31.95</strong> — ירידה של 0.8%, ווליום 25,610 — ווליום נמוך יחסית</td></tr>
+      <tr><td>ניסיון פריצה גג</td><td>אין — המחיר לא חזר ל-$81,000+</td></tr>
+      <tr><td>ניסיון פריצה רצפה</td><td>27-28 במאי — ירד ל-$72,552 אך נסגר חזרה בתוך TR</td></tr>
+    </tbody>
+  </table>
+
+  <div class="key">
+    💡 <strong>מסקנה יומי (4-חלקי):</strong><br>
+    <strong>תיאור עובדה:</strong> 14 ימים של דשדוש בין $72,552 ל-$81,639, ללא פריצה מוצלחת לשני הכיוונים. הנר האחרון (29 במאי) נסגר ב-$73,007.6, 8% מהרצפה.<br>
+    <strong>השוואה כמותית:</strong> הווליום של הנר האחרון (31.95) נמוך מנר הנפילה החזקה (22 במאי, 22.12) ומנר הנמוך (27 במאי, 35.81). אין climax חדש.<br>
+    <strong>פרשנות Wyckoff:</strong> TR בפאזה B מוקדמת. אין <span class="ltr">BC</span>/<span class="ltr">SC</span> מאושרים → לא ניתן לקבוע איסוף או פיזור. הווליום היורד מצביע על ייבוש היצע או ביקוש, תלוי בכיוון הפריצה הבאה.<br>
+    <strong>כיוון פוטנציאלי:</strong> ממתינים לפריצה מוצלחת (עם סגירה מחוץ ל-TR) כדי לקבוע את הסוג והכיוון. עד אז — ניטרלי מוחלט.
+  </div>
+
+  <h2>📊 התובנה — Wyckoff</h2>
+  <table>
+    <thead><tr><th>שלב</th><th>מצב</th></tr></thead>
+    <tbody>
+      <tr><td><span class="ltr">Phase A</span></td><td>⏳ לא הושלם — אין <span class="ltr">BC</span> או <span class="ltr">SC</span> מוגדרים. הנפילה ל-$72,552 (27 במאי) היא מועמדת ל-<span class="ltr">SC</span>, אך טרם אושרה</td></tr>
+      <tr><td><span class="ltr">Phase B</span> — שליטה</td><td>👁️ <strong>לא ברורה</strong> — 14 ימים של דשדוש ללא מגמה ברורה. אין שליטת קונים או מוכרים ברורה</td></tr>
+      <tr><td><span class="ltr">Phase B</span> — אינדיקציה</td><td>🟡 <strong>דשדוש ניטרלי</strong> — הווליום יורד אך המחיר לא פורץ לשום כיוון</td></tr>
+      <tr><td><span class="ltr">Phase C</span></td><td>👀 ממתינים ל-<span class="ltr">Spring</span> (מתחת ל-$72,552) או <span class="ltr">UTAD</span> (מעל $81,639)</td></tr>
+      <tr><td><span class="ltr">Phase D</span></td><td>⏳ טרם התחיל</td></tr>
+      <tr><td>ווליום נוכחי</td><td>31.95 (29 במאי) — נמוך מנרות הקודמים → מאמץ יורד</td></tr>
+    </tbody>
+  </table>
+
+  <h2>🔄 תת-מגמות בתוך פאזה B</h2>
+  <table>
+    <thead><tr><th>תקופה</th><th>תנועה / ווליום / שליטה</th></tr></thead>
+    <tbody>
+      <tr><td>15-16 במאי</td><td><strong>ירידה מ-$81,639 ל-$78,106</strong> (3.4%). ווליום 29.4 → 27.91 (יורד). ⇒ <strong>מוכרים שולטים אך חלש</strong></td></tr>
+      <tr><td>17-21 במאי</td><td><strong>דשדוש בין $76,105 ל-$78,173</strong>. ווליום 45-200 (מאוד משתנה). ⇒ <strong>אין שליטה ברורה</strong></td></tr>
+      <tr><td>22-23 במאי</td><td><strong>נפילה חדה ל-$75,509 ואז חזרה ל-$76,709</strong>. ווליום 22.12 → 42.33. ⇒ <strong>ניסיון מכירה שנספג</strong></td></tr>
+      <tr><td>24-26 במאי</td><td><strong>דשדוש בין $76,062 ל-$78,049</strong>. ווליום 101-114 (בינוני). ⇒ <strong>אין שליטה</strong></td></tr>
+      <tr><td>27-29 במאי</td><td><strong>נפילה ל-$72,552 (נמוך חדש) ועליה חזרה ל-$73,007</strong>. ווליום 35.81 → 79.04 → 31.95. ⇒ <strong>ניסיון מכירה חזק שנספג</strong></td></tr>
+    </tbody>
+  </table>
+
+  <div class="key">
+    💡 <strong>סיכום פאזה B:</strong> 14 ימים של דשדוש ללא מגמה ברורה. הווליום יורד, מה שמצביע על ייבוש היצע או ביקוש. הנפילה ל-$72,552 (27 במאי) היא הנקודה הכי נמוכה, אך המחיר חזר חזרה לתוך ה-TR. אין שליטת קונים או מוכרים ברורה — ממתינים לפריצה.
+  </div>
+
+  <div class="key">
+    💡 <strong>תודעה ראשונית:</strong> בהתבסס על TR בפאזה B מוקדמת (ללא <span class="ltr">BC</span>/<span class="ltr">SC</span> מאושרים) + ווליום יורד + אין פריצה מוצלחת — <strong>ניטרלי מוחלט</strong>. ממתינים לפריצה מוצלחת (סגירה מחוץ ל-TR) כדי לקבוע את הכיוון.
+  </div>
+
+  <h2>🎯 פעולה — סקירה</h2>
+  <table>
+    <thead><tr><th>תרחיש</th><th>פעולה</th></tr></thead>
+    <tbody>
+      <tr><td>פריצה מעל $81,639 עם ווליום גבוה (>45)</td><td>👁️ סיגנל bullish — ייתכן <span class="ltr">SOS</span>. ממתינים ל-<span class="ltr">LPS</span> (חזרה למחיר $79,000-$81,000) + סגירה מעל ⇒ כניסה long</td></tr>
+      <tr><td>פריצה מתחת $72,552 עם ווליום גבוה (>45)</td><td>👁️ סיגנל bearish — ייתכן <span class="ltr">SOW</span>. ממתינים ל-<span class="ltr">LPSY</span> (חזרה למחיר $73,000-$74,000) + סגירה מתחת ⇒ כניסה short</td></tr>
+      <tr><td>המשך דשדוש בתוך TR</td><td>❌ אין סיגנל — ממתינים, לא נכנסים</td></tr>
+    </tbody>
+  </table>
+
+  <h2>📋 תרחיש 1: פריצה bullish מעל $81,639 — תודעת long</h2>
+  <table>
+    <thead><tr><th>פירוט</th><th>ערך</th></tr></thead>
+    <tbody>
+      <tr><td>מה זה <span class="ltr">SOS</span></td><td><span class="ltr">Sign of Strength</span> — פריצה מעל גג ה-TR עם ווליום גבוה, מצביעה על ביקוש חזק</td></tr>
+      <tr><td>איך מזהים בזמן אמת</td><td>נר יומי שנסגר מעל $81,639 עם ווליום פר 1% > 45 (גבוה מ-22.12 של הנפילה)</td></tr>
+      <tr><td>מה זה מאשר</td><td>מעבר מפאזה B ל-<span class="ltr">Phase D</span> — איסוף מאושר</td></tr>
+      <tr><td>למה לא נכנסים מיד</td><td>ייתכן <span class="ltr">False Breakout</span> — ממתינים ל-<span class="ltr">LPS</span> (חזרה למחיר $79,000-$81,000) + סגירה מעל</td></tr>
+      <tr><td>מה מחפשים אחר כך</td><td><span class="ltr">LPS</span> — Last Point of Support — חזרה למחיר $79,000-$81,000 עם ווליום נמוך (< 30) + סגירה מעל</td></tr>
+      <tr><td>נקודת כניסה</td><td>סגירה מעל $81,000 לאחר <span class="ltr">LPS</span></td></tr>
+      <tr><td><span class="ltr">Stop Loss</span></td><td>מתחת ל-$79,000 (מתחת ל-<span class="ltr">LPS</span>)</td></tr>
+      <tr><td>יעד <span class="ltr">Take Profit</span></td><td>$90,726 (גובה TR = $9,087 מעל $81,639)</td></tr>
+    </tbody>
+  </table>
+
+  <h2>📋 תרחיש 2: פריצה bearish מתחת $72,552 — תודעת short</h2>
+  <table>
+    <thead><tr><th>פירוט</th><th>ערך</th></tr></thead>
+    <tbody>
+      <tr><td>מה זה <span class="ltr">SOW</span></td><td><span class="ltr">Sign of Weakness</span> — פריצה מתחת רצפת ה-TR עם ווליום גבוה, מצביעה על היצע חזק</td></tr>
+      <tr><td>איך מזהים בזמן אמת</td><td>נר יומי שנסגר מתחת $72,552 עם ווליום פר 1% > 45</td></tr>
+      <tr><td>מה זה מאשר</td><td>מעבר מפאזה B ל-<span class="ltr">Phase D</span> — פיזור מאושר</td></tr>
+      <tr><td>למה לא נכנסים מיד</td><td>ממתינים ל-<span class="ltr">LPSY</span> (חזרה למחיר $73,000-$74,000) + סגירה מתחת</td></tr>
+      <tr><td>מה מחפשים אחר כך</td><td><span class="ltr">LPSY</span> — Last Point of Supply — חזרה למחיר $73,000-$74,000 עם ווליום נמוך + סגירה מתחת</td></tr>
+      <tr><td>נקודת כניסה</td><td>סגירה מתחת $73,000 לאחר <span class="ltr">LPSY</span></td></tr>
+      <tr><td><span class="ltr">Stop Loss</span></td><td>מעל $74,000 (מעל ל-<span class="ltr">LPSY</span>)</td></tr>
+      <tr><td>יעד <span class="ltr">Take Profit</span></td><td>$63,465 (גובה TR = $9,087 מתחת $72,552)</td></tr>
+    </tbody>
+  </table>
+
+  <h2>📋 תרחיש 3: המשך דשדוש — ממתינים</h2>
+  <table>
+    <thead><tr><th>פירוט</th><th>ערך</th></tr></thead>
+    <tbody>
+      <tr><td>מה זה דשדוש</td><td>המשך התנועה בין $72,552 ל-$81,639 ללא פריצה מוצלחת</td></tr>
+      <tr><td>איך מזהים</td><td>נרות יומיים שנסגרים בתוך ה-TR (לא מעל $81,639 ולא מתחת $72,552)</td></tr>
+      <tr><td>מה זה מצביע</td><td>פאזה B ממושכת — קונים ומוכרים מאוזנים</td></tr>
+      <tr><td>פעולה</td><td>❌ אין סיגנל — ממתינים מחוץ לשוק</td></tr>
+      <tr><td>מתי נכנסים</td><td>רק לאחר פריצה מוצלחת (תרחיש 1 או 2)</td></tr>
+    </tbody>
+  </table>
+
+  <div class="section-divider"></div>
+
+  <h1 id="sec-4h">📊 ניתוח גרף 4 שעות — BTCUSDT.P <span class="badge warn">TR בעיצומו</span></h1>
+  <div class="stamp">נוצר אוטומטית · 2026-05-29 16:25 שעון ישראל · BYBIT:BTCUSDT.P</div>
+
+  <h2>🎯 ה-TR שזוהה</h2>
+  <div class="chart-wrap">
+    <img class="chart" src="chart-4h.png" alt="גרף 4 שעות BTCUSDT.P">
+  </div>
+  <table>
+    <thead><tr><th>שדה</th><th>ערך</th></tr></thead>
+    <tbody>
+      <tr><td>סוג</td><td>TR מקומי מתפתח — טרם הוכרע</td></tr>
+      <tr><td>גג ה-<span class="ltr">TR</span></td><td>~$76,136 (27 במאי 15:00 ISR) — גבוה מקומי</td></tr>
+      <tr><td>רצפת ה-<span class="ltr">TR</span></td><td>~$72,552 (28 במאי 15:00 ISR) — נמוך מקומי</td></tr>
+      <tr><td>התחלת ה-<span class="ltr">TR</span></td><td>27 במאי 2026 (~2.5 ימים)</td></tr>
+      <tr><td>משך</td><td>~15 נרות 4H (2.5 ימים)</td></tr>
+      <tr><td>גובה</td><td>$3,584 (~4.8%)</td></tr>
+      <tr><td>מחיר נוכחי</td><td>$73,012.8 — בתוך ה-TR, 13% מהרצפה</td></tr>
+    </tbody>
+  </table>
+
+  <h2>📌 מה רואים בתמונה</h2>
+  <table>
+    <thead><tr><th>מה</th><th>תיאור</th></tr></thead>
+    <tbody>
+      <tr><td>✅</td><td>נפילה חדה מ-$76,136 (27 במאי) ל-$72,552 (28 במאי) — 4.8% ב-24 שעות</td></tr>
+      <tr><td>✅</td><td>הנר האחרון (29 במאי 15:00) נסגר ב-$73,012.8 — בתוך ה-TR, לא פרץ שום גבול</td></tr>
+      <tr><td>✅</td><td>ווליום יורד לאחר הנפילה (מ-40.15 ב-27 במאי ל-6.16 ב-29 במאי)</td></tr>
+      <tr><td>🚨</td><td>אין <span class="ltr">BC</span> או <span class="ltr">SC</span> מאושרים בגרף 4H — TR מקומי בלבד</td></tr>
+    </tbody>
+  </table>
+
+  <h2>📊 ווליום פר 1% — נתונים</h2>
+  <table>
+    <thead><tr><th>נר</th><th>ערך + השוואה</th></tr></thead>
+    <tbody>
+      <tr><td>פאזה A — טרם זוהה</td><td>אין <span class="ltr">BC</span> או <span class="ltr">SC</span> מוגדרים → אין ערך ייחוס</td></tr>
+      <tr><td>נר הנפילה החזקה (27 במאי 15:00)</td><td><strong>40.15</strong> — ירידה של 0.57%, ווליום 22,927</td></tr>
+      <tr><td>נר נמוך מקומי (27 במאי 23:00)</td><td><strong>16.91</strong> — ירידה של 0.83%, ווליום 14,018</td></tr>
+      <tr><td>נר אחרון שנסגר (29 במאי 15:00)</td><td><strong>6.16</strong> — ירידה של 0.6%, ווליום 3,668 — ווליום מאוד נמוך</td></tr>
+      <tr><td>ניסיון פריצה גג</td><td>אין — המחיר לא חזר ל-$76,000+</td></tr>
+      <tr><td>ניסיון פריצה רצפה</td><td>28 במאי 15:00 — ירד ל-$72,552, אך נסגר חזרה ב-$72,896.6 (בתוך TR)</td></tr>
+    </tbody>
+  </table>
+
+  <div class="key">
+    💡 <strong>מסקנה 4H (4-חלקי):</strong><br>
+    <strong>תיאור עובדה:</strong> נפילה חדה מ-$76,136 ל-$72,552 ב-24 שעות (27-28 במאי), ואז התאוששות ל-$73,012.8. הנר האחרון (29 במאי 15:00) נסגר עם ווליום מאוד נמוך (6.16).<br>
+    <strong>השוואה כמותית:</strong> ווליום הנר האחרון (6.16) קטן פי 6.5 מנר הנפילה החזקה (40.15) ופי 2.7 מנר הנמוך (16.91). אין climax חדש.<br>
+    <strong>פרשנות Wyckoff:</strong> TR מקומי בפאזה B. הווליום היורד מצביע על ייבוש היצע או ביקוש. הנפילה ל-$72,552 היא מועמדת ל-<span class="ltr">SC</span> מקומי, אך טרם אושרה.<br>
+    <strong>כיוון פוטנציאלי:</strong> ממתינים לפריצה מוצלחת מעל $76,136 (bullish) או מתחת $72,552 (bearish) כדי לקבוע את הכיוון. עד אז — ניטרלי.
+  </div>
+
+  <h2>📊 התובנה — Wyckoff</h2>
+  <table>
+    <thead><tr><th>שלב</th><th>מצב</th></tr></thead>
+    <tbody>
+      <tr><td><span class="ltr">Phase A</span></td><td>⏳ לא הושלם — הנפילה ל-$72,552 (28 במאי) היא מועמדת ל-<span class="ltr">SC</span> מקומי, אך טרם אושרה</td></tr>
+      <tr><td><span class="ltr">Phase B</span> — שליטה</td><td>👁️ <strong>לא ברורה</strong> — ווליום יורד, אין פריצה מוצלחת לשום כיוון</td></tr>
+      <tr><td><span class="ltr">Phase B</span> — אינדיקציה</td><td>🟡 <strong>דשדוש מקומי</strong> — הווליום יורד אך המחיר לא פורץ</td></tr>
+      <tr><td><span class="ltr">Phase C</span></td><td>👀 ממתינים ל-<span class="ltr">Spring</span> (מתחת ל-$72,552) או פריצה bullish מעל $76,136</td></tr>
+      <tr><td><span class="ltr">Phase D</span></td><td>⏳ טרם התחיל</td></tr>
+      <tr><td>ווליום נוכחי</td><td>6.16 (29 במאי) — מאוד נמוך → מאמץ יורד בצורה חדה</td></tr>
+    </tbody>
+  </table>
+
+  <h2>🔄 תת-מגמות בתוך פאזה B</h2>
+  <table>
+    <thead><tr><th>תקופה</th><th>תנועה / ווליום / שליטה</th></tr></thead>
+    <tbody>
+      <tr><td>27 במאי 07:00-15:00</td><td><strong>דשדוש בין $75,235 ל-$76,136</strong>. ווליום 23.86 → 24.61 → 40.15 (עולה). ⇒ <strong>מוכרים מתחזקים</strong></td></tr>
+      <tr><td>27 במאי 15:00-23:00</td><td><strong>נפילה חדה ל-$74,412</strong>. ווליום 40.15 → 34.78 → 16.91 (יורד). ⇒ <strong>מוכרים חלשים</strong></td></tr>
+      <tr><td>28 במאי 03:00-15:00</td><td><strong>נפילה ל-$72,552 (נמוך מקומי) ואז חזרה ל-$72,896</strong>. ווליום 11.77 → 47.04 → 350.88 (משתנה). ⇒ <strong>ניסיון מכירה שנספג</strong></td></tr>
+      <tr><td>28 במאי 15:00-29 במאי 03:00</td><td><strong>התאוששות ל-$73,597</strong>. ווליום 33.62 → 17.77 → 29.19 (בינוני). ⇒ <strong>קונים מתחזקים</strong></td></tr>
+      <tr><td>29 במאי 03:00-15:00</td><td><strong>דשדוש בין $73,012 ל-$73,877</strong>. ווליום 19.29 → 28 → 124.59 → 6.16 (יורד חד). ⇒ <strong>אין שליטה, ווליום יורד</strong></td></tr>
+    </tbody>
+  </table>
+
+  <div class="key">
+    💡 <strong>סיכום פאזה B:</strong> TR מקומי של 2.5 ימים (15 נרות 4H). הנפילה ל-$72,552 (28 במאי) נספגה, והמחיר חזר ל-$73,012. הווליום יורד בצורה חדה (מ-40.15 ל-6.16), מה שמצביע על ייבוש היצע. אין שליטת קונים או מוכרים ברורה — ממתינים לפריצה.
+  </div>
+
+  <div class="key">
+    💡 <strong>תודעה ראשונית:</strong> בהתבסס על TR מקומי בפאזה B + ווליום יורד + אין פריצה מוצלחת — <strong>ניטרלי מקומי</strong>. ממתינים לפריצה מוצלחת מעל $76,136 (bullish) או מתחת $72,552 (bearish).
+  </div>
+
+  <div class="conflict">
+    🟠 <strong>סתירה בין TFs:</strong>
+    <ul style="margin:6px 0;padding-inline-start:24px">
+      <li><strong>Daily:</strong> TR גדול ($72,552-$81,639, 14 ימים) — ניטרלי מוחלט, ממתינים לפריצה</li>
+      <li><strong>4H:</strong> TR מקומי קטן ($72,552-$76,136, 2.5 ימים) — ניטרלי מקומי, ממתינים לפריצה</li>
+    </ul>
+    זה <strong>TR מקומי בתוך TR גדול יותר</strong>. ה-4H יכול לפרוץ את ה-TR המקומי שלו ($76,136) אך עדיין להיות בתוך ה-TR היומי ($81,639). הכיוון הסופי ייקבע רק לפי פריצת ה-Daily TR.
+  </div>
+
+  <h2>🎯 פעולה — סקירה</h2>
+  <table>
+    <thead><tr><th>תרחיש</th><th>פעולה</th></tr></thead>
+    <tbody>
+      <tr><td>פריצה מעל $76,136 עם ווליום גבוה (>40)</td><td>👁️ סיגנל bullish מקומי — ממתינים ל-<span class="ltr">LPS</span> (חזרה ל-$74,000-$75,000) + סגירה מעל ⇒ כניסה long</td></tr>
+      <tr><td>פריצה מתחת $72,552 עם ווליום גבוה (>40)</td><td>👁️ סיגנל bearish — ממתינים ל-<span class="ltr">LPSY</span> (חזרה ל-$73,000-$73,500) + סגירה מתחת ⇒ כניסה short</td></tr>
+      <tr><td>המשך דשדוש בתוך TR</td><td>❌ אין סיגנל — ממתינים</td></tr>
+    </tbody>
+  </table>
+
+  <h2>📋 תרחיש 1: פריצה bullish מעל $76,136 — תודעת long מקומית</h2>
+  <table>
+    <thead><tr><th>פירוט</th><th>ערך</th></tr></thead>
+    <tbody>
+      <tr><td>מה זה <span class="ltr">SOS</span> מקומי</td><td>פריצה מעל גג ה-TR המקומי ($76,136) עם ווליום גבוה (>40)</td></tr>
+      <tr><td>איך מזהים בזמן אמת</td><td>נר 4H שנסגר מעל $76,136 עם ווליום פר 1% > 40</td></tr>
+      <tr><td>מה זה מאשר</td><td>איסוף מקומי בתוך ה-TR היומי</td></tr>
+      <tr><td>למה לא נכנסים מיד</td><td>ממתינים ל-<span class="ltr">LPS</span> (חזרה ל-$74,000-$75,000) + סגירה מעל</td></tr>
+      <tr><td>מה מחפשים אחר כך</td><td><span class="ltr">LPS</span> — חזרה ל-$74,000-$75,000 עם ווליום נמוך (< 20) + סגירה מעל</td></tr>
+      <tr><td>נקודת כניסה</td><td>סגירה מעל $75,000 לאחר <span class="ltr">LPS</span></td></tr>
+      <tr><td><span class="ltr">Stop Loss</span></td><td>מתחת ל-$74,000</td></tr>
+      <tr><td>יעד <span class="ltr">Take Profit</span></td><td>$79,720 (גובה TR מקומי = $3,584 מעל $76,136) — שימו לב: זה עדיין בתוך ה-TR היומי!</td></tr>
+    </tbody>
+  </table>
+
+  <h2>📋 תרחיש 2: פריצה bearish מתחת $72,552 — תודעת short</h2>
+  <table>
+    <thead><tr><th>פירוט</th><th>ערך</th></tr></thead>
+    <tbody>
+      <tr><td>מה זה <span class="ltr">SOW</span></td><td>פריצה מתחת רצפת ה-TR ($72,552) עם ווליום גבוה (>40)</td></tr>
+      <tr><td>איך מזהים בזמן אמת</td><td>נר 4H שנסגר מתחת $72,552 עם ווליום פר 1% > 40</td></tr>
+      <tr><td>מה זה מאשר</td><td>פיזור — המשך ירידה צפויה</td></tr>
+      <tr><td>למה לא נכנסים מיד</td><td>ממתינים ל-<span class="ltr">LPSY</span> (חזרה ל-$73,000-$73,500) + סגירה מתחת</td></tr>
+      <tr><td>מה מחפשים אחר כך</td><td><span class="ltr">LPSY</span> — חזרה ל-$73,000-$73,500 עם ווליום נמוך + סגירה מתחת</td></tr>
+      <tr><td>נקודת כניסה</td><td>סגירה מתחת $73,000 לאחר <span class="ltr">LPSY</span></td></tr>
+      <tr><td><span class="ltr">Stop Loss</span></td><td>מעל $73,500</td></tr>
+      <tr><td>יעד <span class="ltr">Take Profit</span></td><td>$68,968 (גובה TR = $3,584 מתחת $72,552)</td></tr>
+    </tbody>
+  </table>
+
+  <h2>📋 תרחיש 3: המשך דשדוש — ממתינים</h2>
+  <table>
+    <thead><tr><th>פירוט</th><th>ערך</th></tr></thead>
+    <tbody>
+      <tr><td>מה זה דשדוש</td><td>המשך התנועה בין $72,552 ל-$76,136 ללא פריצה מוצלחת</td></tr>
+      <tr><td>איך מזהים</td><td>נרות 4H שנסגרים בתוך ה-TR</td></tr>
+      <tr><td>מה זה מצביע</td><td>פאזה B ממושכת</td></tr>
+      <tr><td>פעולה</td><td>❌ אין סיגנל — ממתינים</td></tr>
+    </tbody>
+  </table>
+
+  <div class="section-divider"></div>
+
+  <h1 id="sec-1h">📊 ניתוח גרף שעתי — BTCUSDT.P <span class="badge warn">TR מקומי</span></h1>
+  <div class="stamp">נוצר אוטומטית · 2026-05-29 16:25 שעון ישראל · BYBIT:BTCUSDT.P</div>
+
+  <h2>🎯 ה-TR שזוהה</h2>
+  <div class="chart-wrap">
+    <img class="chart" src="chart-1h.png" alt="גרף שעתי BTCUSDT.P">
+  </div>
+  <table>
+    <thead><tr><th>שדה</th><th>ערך</th></tr></thead>
+    <tbody>
+      <tr><td>סוג</td><td>TR מיקרו — דשדוש צר</td></tr>
+      <tr><td>גג ה-<span class="ltr">TR</span></td><td>~$73,911 (29 במאי 09:00 ISR) — גבוה שעתי</td></tr>
+      <tr><td>רצפת ה-<span class="ltr">TR</span></td><td>~$72,965 (29 במאי 16:00 ISR) — נמוך שעתי</td></tr>
+      <tr><td>התחלת ה-<span class="ltr">TR</span></td><td>29 במאי 2026 (~7 שעות)</td></tr>
+      <tr><td>משך</td><td>~7 נרות 1H</td></tr>
+      <tr><td>גובה</td><td>$946 (~1.3%)</td></tr>
+      <tr><td>מחיר נוכחי</td><td>$73,002.6 — בתוך ה-TR, 4% מהרצפה</td></tr>
+    </tbody>
+  </table>
+
+  <h2>📌 מה רואים בתמונה</h2>
+  <table>
+    <thead><tr><th>מה</th><th>תיאור</th></tr></thead>
+    <tbody>
+      <tr><td>✅</td><td>דשדוש צר בין $72,965 ל-$73,911 ב-7 שעות האחרונות</td></tr>
+      <tr><td>✅</td><td>הנר האחרון (29 במאי 16:00) נסגר ב-$73,002.6 — קרוב מאוד לרצפת ה-TR</td></tr>
+      <tr><td>✅</td><td>ווליום נמוך מאוד (4.74-15.98) — מאמץ יורד</td></tr>
+      <tr><td>🚨</td><td>TR מיקרו — לא רלוונטי לכיוון ארוך טווח</td></tr>
+    </tbody>
+  </table>
+
+  <h2>📊 ווליום פר 1% — נתונים</h2>
+  <table>
+    <thead><tr><th>נר</th><th>ערך + השוואה</th></tr></thead>
+    <tbody>
+      <tr><td>פאזה A — טרם זוהה</td><td>TR מיקרו — אין פאזה A מוגדרת</td></tr>
+      <tr><td>נר גבוה מקומי (29 במאי 09:00)</td><td><strong>15.98</strong> — עליה של 0.11%, ווליום 1,695</td></tr>
+      <tr><td>נר אחרון שנסגר (29 במאי 16:00)</td><td><strong>4.74</strong> — ירידה של 0.34%, ווליום 1,622 — ווליום נמוך</td></tr>
+      <tr><td>ניסיון פריצה גג</td><td>אין — המחיר לא פרץ מעל $73,911</td></tr>
+      <tr><td>ניסיון פריצה רצפה</td><td>29 במאי 16:00 — ירד ל-$72,965, נר עדיין פתוח</td></tr>
+    </tbody>
+  </table>
+
+  <div class="key">
+    💡 <strong>מסקנה 1H (4-חלקי):</strong><br>
+    <strong>תיאור עובדה:</strong> דשדוש צר בין $72,965 ל-$73,911 ב-7 שעות האחרונות. הנר האחרון (29 במאי 16:00) נסגר ב-$73,002.6, קרוב לרצפה.<br>
+    <strong>השוואה כמותית:</strong> ווליום הנר האחרון (4.74) קטן פי 3.4 מהנר הגבוה (15.98). ווליום נמוך מאוד.<br>
+    <strong>פרשנות Wyckoff:</strong> TR מיקרו — לא רלוונטי לכיוון ארוך טווח. הווליום הנמוך מצביע על ייבוש היצע או ביקוש.<br>
+    <strong>כיוון פוטנציאלי:</strong> ממתינים לפריצה מהTR המיקרו (מעל $73,911 או מתחת $72,965) כדי לקבוע כיוון מיידי. אך הכיוון הסופי ייקבע לפי ה-Daily TR.
+  </div>
+
+  <h2>📊 התובנה — Wyckoff</h2>
+  <table>
+    <thead><tr><th>שלב</th><th>מצב</th></tr></thead>
+    <tbody>
+      <tr><td><span class="ltr">Phase A</span></td><td>⏳ לא רלוונטי — TR מיקרו</td></tr>
+      <tr><td><span class="ltr">Phase B</span> — שליטה</td><td>👁️ <strong>לא ברורה</strong> — ווליום נמוך, אין פריצה</td></tr>
+      <tr><td><span class="ltr">Phase B</span> — אינדיקציה</td><td>🟡 <strong>דשדוש מיקרו</strong></td></tr>
+      <tr><td><span class="ltr">Phase C</span></td><td>👀 ממתינים לפריצה</td></tr>
+      <tr><td><span class="ltr">Phase D</span></td><td>⏳ טרם התחיל</td></tr>
+      <tr><td>ווליום נוכחי</td><td>4.74 — מאוד נמוך</td></tr>
+    </tbody>
+  </table>
+
+  <h2>🔄 תת-מגמות בתוך פאזה B</h2>
+  <table>
+    <thead><tr><th>תקופה</th><th>תנועה / ווליום / שליטה</th></tr></thead>
+    <tbody>
+      <tr><td>29 במאי 02:00-06:00</td><td><strong>עליה מ-$73,189 ל-$73,462</strong>. ווליום 6.78 → 12.82 → 4.43 (יורד). ⇒ <strong>קונים חלשים</strong></td></tr>
+      <tr><td>29 במאי 07:00-10:00</td><td><strong>עליה ל-$73,751</strong>. ווליום 7.15 → 15.98 → 8.98 (משתנה). ⇒ <strong>קונים בינוניים</strong></td></tr>
+      <tr><td>29 במאי 11:00-14:00</td><td><strong>דשדוש בין $73,449 ל-$73,877</strong>. ווליום 9.61 → 9.71 → 6.6 → 5.87 (יורד). ⇒ <strong>אין שליטה</strong></td></tr>
+      <tr><td>29 במאי 15:00-16:00</td><td><strong>ירידה ל-$73,002</strong>. ווליום 7.98 → 4.74 (יורד). ⇒ <strong>מוכרים חלשים</strong></td></tr>
+    </tbody>
+  </table>
+
+  <div class="key">
+    💡 <strong>סיכום פאזה B:</strong> TR מיקרו של 7 שעות. ווליום נמוך מאוד (4.74-15.98), אין שליטת קונים או מוכרים ברורה. לא רלוונטי לכיוון ארוך טווח.
+  </div>
+
+  <div class="key">
+    💡 <strong>תודעה ראשונית:</strong> בהתבסס על TR מיקרו + ווליום נמוך — <strong>ניטרלי מיקרו</strong>. הכיוון הסופי ייקבע לפי ה-Daily TR ($72,552-$81,639).
+  </div>
+
+  <div class="conflict">
+    🟠 <strong>סתירה בין TFs:</strong>
+    <ul style="margin:6px 0;padding-inline-start:24px">
+      <li><strong>Daily:</strong> TR גדול ($72,552-$81,639, 14 ימים) — ניטרלי מוחלט</li>
+      <li><strong>4H:</strong> TR מקומי ($72,552-$76,136, 2.5 ימים) — ניטרלי מקומי</li>
+      <li><strong>1H:</strong> TR מיקרו ($72,965-$73,911, 7 שעות) — ניטרלי מיקרו</li>
+    </ul>
+    זה <strong>TR בתוך TR בתוך TR</strong>. כל פריצה של TF קטן (1H) יכולה להיות רק תנועה קצרת טווח בתוך ה-TR הגדול יותר. הכיוון הסופי ייקבע רק לפי פריצת ה-Daily TR.
+  </div>
+
+  <h2>🎯 פעולה — סקירה</h2>
+  <table>
+    <thead><tr><th>תרחיש</th><th>פעולה</th></tr></thead>
+    <tbody>
+      <tr><td>פריצה מעל $73,911</td><td>👁️ תנועה קצרת טווח — לא רלוונטי לכיוון סופי</td></tr>
+      <tr><td>פריצה מתחת $72,965</td><td>👁️ תנועה קצרת טווח — עשויה להצטרף לירידה מה-4H</td></tr>
+      <tr><td>המשך דשדוש</td><td>❌ אין סיגנל — ממתינים לפריצת Daily TR</td></tr>
+    </tbody>
+  </table>
+
+  <h2>📋 תרחיש 1: פריצה מעל $73,911 — תנועה קצרת טווח</h2>
+  <table>
+    <thead><tr><th>פירוט</th><th>ערך</th></tr></thead>
+    <tbody>
+      <tr><td>מה זה</td><td>פריצה מעל גג ה-TR המיקרו</td></tr>
+      <tr><td>איך מזהים</td><td>נר 1H שנסגר מעל $73,911</td></tr>
+      <tr><td>מה זה מאשר</td><td>תנועה קצרת טווח — לא מאשר כיוון סופי</td></tr>
+      <tr><td>פעולה</td><td>👁️ ניתן לכניסה scalp קצרה (יעד $74,500-$75,000), אך לא long ארוך טווח</td></tr>
+    </tbody>
+  </table>
+
+  <h2>📋 תרחיש 2: פריצה מתחת $72,965 — תנועה קצרת טווח</h2>
+  <table>
+    <thead><tr><th>פירוט</th><th>ערך</th></tr></thead>
+    <tbody>
+      <tr><td>מה זה</td><td>פריצה מתחת רצפת ה-TR המיקרו</td></tr>
+      <tr><td>איך מזהים</td><td>נר 1H שנסגר מתחת $72,965</td></tr>
+      <tr><td>מה זה מאשר</td><td>תנועה קצרת טווח — עשויה להצטרף לירידה מה-4H</td></tr>
+      <tr><td>פעולה</td><td>👁️ ניתן לכניסה scalp short (יעד $72,500-$72,000), אך לא short ארוך טווח</td></tr>
+    </tbody>
+  </table>
+
+  <h2>📋 תרחיש 3: המשך דשדוש — ממתינים</h2>
+  <table>
+    <thead><tr><th>פירוט</th><th>ערך</th></tr></thead>
+    <tbody>
+      <tr><td>מה זה</td><td>המשך דשדוש בין $72,965 ל-$73,911</td></tr>
+      <tr><td>פעולה</td><td>❌ אין סיגנל — ממתינים לפריצת Daily TR</td></tr>
+    </tbody>
+  </table>
+
+  <div class="section-divider"></div>
+
+  <h1 id="sec-30m">📊 ניתוח גרף 30 דקות — אסטרטגיית 3 שלבים <span class="badge warn">ממתין לאישור</span></h1>
+  <div class="stamp">נוצר אוטומטית · 2026-05-29 16:25 שעון ישראל · BYBIT:BTCUSDT.P · Pane 2</div>
+
+  <h2>🎯 גרף Pane 2 — 30 דקות עם הסימונים האישיים שלך</h2>
+  <div class="chart-wrap">
+    <img class="chart" src="chart-30m.png" alt="Pane 2 chart 30m with personal annotations">
+  </div>
+
+  <h2>📋 שלב 1 — יצירת ה-TR (Phase A מקומית) <span class="badge acc">✅ הושלם</span></h2>
+  <table>
+    <thead><tr><th>שדה</th><th>ערך</th></tr></thead>
+    <tbody>
+      <tr><td>תקופה</td><td>28-29 במאי 2026 (~24 שעות)</td></tr>
+      <tr><td><span class="ltr">SC 30m</span> (רצפה)</td><td>~$72,552 (28 במאי 15:00 ISR) — נמוך מקומי</td></tr>
+      <tr><td><span class="ltr">AR 30m</span> (גג)</td><td>~$73,877 (29 במאי 12:00 ISR) · ווליום 702 (V/1%=2.28)</td></tr>
+      <tr><td>גובה</td><td>$1,325 (~1.8%)</td></tr>
+      <tr><td>סטטוס</td><td>✅ הושלם — SC + AR קיימים, TR מוגדר</td></tr>
+    </tbody>
+  </table>
+
+  <h2>📋 שלב 2 — שבירת ה-AR + יצירת איזור ערך <span class="badge warn">⏳ טרם הושלם</span></h2>
+  <table>
+    <thead><tr><th>שדה</th><th>ערך</th></tr></thead>
+    <tbody>
+      <tr><td>נר הפריצה</td><td>טרם קרה — המחיר לא פרץ מעל $73,877 (AR 30m)</td></tr>
+      <tr><td>פתיחה / גבוה / סגירה</td><td>N/A</td></tr>
+      <tr><td>ווליום + V/1%</td><td>N/A</td></tr>
+      <tr><td><strong>איזור הערך (מלבן)</strong></td><td>טרם נוצר — ממתינים לפריצה</td></tr>
+      <tr><td>סטטוס</td><td>⏳ ממתין לפריצה מעל $73,877</td></tr>
+    </tbody>
+  </table>
+
+  <h2>📋 שלב 3 — Retest על איזור הערך + סגירה פיזית מעל <span class="badge warn">⏳ טרם הושלם</span></h2>
+  <table>
+    <thead><tr><th>תנאי / ניסיון Retest</th><th>סטטוס/תוצאה</th></tr></thead>
+    <tbody>
+      <tr><td>Retest #1</td><td>טרם קרה — ממתינים לשלב 2</td></tr>
+      <tr><td>נקודת כניסה צפויה</td><td>📍 סגירה מעל איזור הערך לאחר Retest</td></tr>
+      <tr><td><span class="ltr">Stop Loss</span></td><td>🛑 מתחת לאיזור הערך (צפוי ~$73,500)</td></tr>
+      <tr><td>יעד ראשון</td><td>🎯 $75,202 (גובה TR 30m = $1,325 מעל AR $73,877)</td></tr>
+      <tr><td>RR משוער</td><td>~3:1 (סיכון $400 מול רווח $1,325)</td></tr>
+    </tbody>
+  </table>
+
+  <div class="key">
+    💡 <strong>מסקנה 30m (4-חלקי):</strong><br>
+    <strong>תיאור עובדה:</strong> TR מקומי נוצר בין SC 30m ($72,552, 28 במאי) ל-AR 30m ($73,877, 29 במאי 12:00). הנר האחרון (29 במאי 16:00) נסגר ב-$72,978.7, מתחת ל-AR.<br>
+    <strong>השוואה כמותית:</strong> ווליום הנר האחרון (4.34) קטן פי 0.52 מ-AR (2.28) — ווליום נמוך מאוד, אין climax.<br>
+    <strong>פרשנות Wyckoff:</strong> שלב 1 הושלם (TR נוצר). ממתינים לשלב 2 (פריצת AR 30m) כדי ליצור איזור ערך.<br>
+    <strong>כיוון פוטנציאלי:</strong> פוטנציאל bullish אם יפרוץ מעל $73,877. עד אז — ממתין.
+  </div>
+
+  <h2>📊 התובנה — Wyckoff</h2>
+  <table>
+    <thead><tr><th>שלב</th><th>מצב</th></tr></thead>
+    <tbody>
+      <tr><td><span class="ltr">Phase A</span></td><td>✅ הסתיים — SC 30m ($72,552) + AR 30m ($73,877) נוצרו. מבנה <strong>איסופי מקומי</strong></td></tr>
+      <tr><td><span class="ltr">Phase B</span> — שליטה</td><td>👁️ <strong>קונים חלשים</strong> — המחיר לא מצליח לפרוץ מעל AR</td></tr>
+      <tr><td><span class="ltr">Phase B</span> — אינדיקציה</td><td>🟢 <strong>accumulation מקומי מתפתח</strong> — ווליום יורד, SC נספג</td></tr>
+      <tr><td><span class="ltr">Phase C</span></td><td>👀 ממתינים ל-Spring (מתחת ל-$72,552) או פריצה bullish מעל $73,877</td></tr>
+      <tr><td><span class="ltr">Phase D</span></td><td>⏳ טרם התחיל — ממתין לפריצת AR 30m</td></tr>
+      <tr><td>ווליום נוכחי</td><td>4.34 (29 במאי 16:00) — נמוך מאוד → מאמץ יורד</td></tr>
+    </tbody>
+  </table>
+
+  <h2>🔄 תת-מגמות בתוך פאזה B</h2>
+  <table>
+    <thead><tr><th>תקופה</th><th>תנועה / ווליום / שליטה</th></tr></thead>
+    <tbody>
+      <tr><td>29 במאי 09:00-11:00</td><td><strong>עליה מ-$73,673 ל-$73,749</strong>. ווליום 14.56 → 22.93 → 2.71 (יורד חד). ⇒ <strong>קונים חלשים</strong></td></tr>
+      <tr><td>29 במאי 11:30-12:30</td><td><strong>דשדוש בין $73,620 ל-$73,877</strong>. ווליום 4.89 → 2.28 → 2.17 (יורד). ⇒ <strong>אין שליטה, ווליום נמוך</strong></td></tr>
+      <tr><td>29 במאי 13:00-14:30</td><td><strong>ירידה קלה ל-$73,449</strong>. ווליום 2.87 → 181.99 (spike חד) → 6.51 → 5.47. ⇒ <strong>ווליום משתנה, אין שליטה</strong></td></tr>
+      <tr><td>29 במאי 15:00-16:00</td><td><strong>ירידה ל-$72,978</strong>. ווליום 4.53 → 19.23 → 4.34 (יורד). ⇒ <strong>מוכרים חלשים</strong></td></tr>
+    </tbody>
+  </table>
+
+  <div class="key">
+    💡 <strong>סיכום פאזה B:</strong> TR מקומי של ~24 שעות. הווליום יורד (מ-14.56 ל-4.34), מה שמצביע על ייבוש היצע. SC 30m ($72,552) נספג, והמחיר חזר ל-TR. ממתינים לפריצת AR 30m ($73,877) כדי לאשר Phase D.
+  </div>
+
+  <div class="key">
+    💡 <strong>תודעה ראשונית:</strong> בהתבסס על TR מקומי איסופי (SC + AR) + ווליום יורד — <strong>תודעת long מקומית מתפתחת</strong>. ממתינים לפריצת AR 30m ($73,877) + יצירת איזור ערך + Retest ⇒ כניסה long.
+  </div>
+
+  <h2>🎯 מצב נוכחי + תוכנית פעולה</h2>
+  <table>
+    <thead><tr><th>תרחיש</th><th>פעולה</th></tr></thead>
+    <tbody>
+      <tr><td>פריצה מעל $73,877 (AR 30m) עם ווליום גבוה (>10)</td><td>👁️ <strong>שלב 2 מופעל</strong> — רושמים את איזור הערך (פתיל תחתון של נר קודם → פתיל עליון של נר הפריצה). ממתינים ל-Retest</td></tr>
+      <tr><td>Retest על איזור הערך + סגירה מעל</td><td>🚀 <strong>שלב 3 מופעל — כניסה long!</strong> Stop Loss מתחת לאיזור ערך, יעד $75,202</td></tr>
+      <tr><td>פריצה מתחת $72,552 (SC 30m)</td><td>❌ ביטול התזה — יציאה מהמסגרת, ממתינים ל-TR חדש</td></tr>
+      <tr><td>המשך דשדוש בתוך TR</td><td>⏳ ממתינים — לא נכנסים</td></tr>
+    </tbody>
+  </table>
+
+  <h2>📊 סיכום ווליום פר 1% — נרות מפתח</h2>
+  <table>
+    <thead><tr><th>נר</th><th>V/1%</th><th>משמעות</th></tr></thead>
+    <tbody>
+      <tr><td>SC 30m (28 במאי 15:00, נמוך $72,552)</td><td>לא זמין (מחוץ ל-50 נרות)</td><td>נקודת התחלה — climax מקומי</td></tr>
+      <tr><td>AR 30m (29 במאי 12:00, $73,877)</td><td><strong>2.28</strong></td><td>גג ה-TR — ערך ייחוס לפריצה</td></tr>
+      <tr><td>נר אחרון (29 במאי 16:00, $72,978)</td><td><strong>4.34</strong></td><td>גדול פי 1.9 מ-AR — ווליום עולה קלות, אך עדיין נמוך</td></tr>
+    </tbody>
+  </table>
+
+  <div class="conflict">
+    🟠 <strong>הסתירה Daily↔30m:</strong>
+    <ul style="margin:6px 0;padding-inline-start:24px">
+      <li><strong>Daily:</strong> TR גדול ($72,552-$81,639, 14 ימים) — ניטרלי מוחלט, ממתינים לפריצה</li>
+      <li><strong>30m:</strong> TR מקומי ($72,552-$73,877, 24 שעות) — תודעת long מקומית מתפתחת, ממתין לפריצת AR 30m</li>
+    </ul>
+    זה <strong>micro-accumulation בתוך macro-neutral</strong>. ה-30m יכול לפרוץ את ה-AR המקומי שלו ($73,877) אך עדיין להיות בתוך ה-TR היומי ($81,639). הכיוון הסופי ייקבע רק לפי פריצת ה-Daily TR.
+  </div>
+
+  <div class="section-divider"></div>
+
+  <h1 id="sec-15m">📊 ניתוח גרף 15 דקות — אסטרטגיית 3 שלבים <span class="badge warn">ממתין לאישור</span></h1>
+  <div class="stamp">נוצר אוטומטית · 2026-05-29 16:25 שעון ישראל · BYBIT:BTCUSDT.P · Pane 2</div>
+
+  <h2>🎯 גרף Pane 2 — 15 דקות עם הסימונים האישיים שלך</h2>
+  <div class="chart-wrap">
+    <img class="chart" src="chart-15m.png" alt="Pane 2 chart 15m with personal annotations">
+  </div>
+
+  <h2>📋 שלב 1 — יצירת ה-TR (Phase A מקומית) <span class="badge acc">✅ הושלם</span></h2>
+  <table>
+    <thead><tr><th>שדה</th><th>ערך</th></tr></thead>
+    <tbody>
+      <tr><td>תקופה</td><td>29 במאי 2026 (~6 שעות)</td></tr>
+      <tr><td><span class="ltr">SC 15m</span> (רצפה)</td><td>~$72,965 (29 במאי 16:15 ISR) — נמוך מקומי</td></tr>
+      <tr><td><span class="ltr">AR 15m</span> (גג)</td><td>~$73,877 (29 במאי 12:00 ISR) · ווליום 702 (V/1%=2.28)</td></tr>
+      <tr><td>גובה</td><td>$912 (~1.25%)</td></tr>
+      <tr><td>סטטוס</td><td>✅ הושלם — SC + AR קיימים, TR מוגדר</td></tr>
+    </tbody>
+  </table>
+
+  <h2>📋 שלב 2 — שבירת ה-AR + יצירת איזור ערך <span class="badge warn">⏳ טרם הושלם</span></h2>
+  <table>
+    <thead><tr><th>שדה</th><th>ערך</th></tr></thead>
+    <tbody>
+      <tr><td>נר הפריצה</td><td>טרם קרה — המחיר לא פרץ מעל $73,877 (AR 15m)</td></tr>
+      <tr><td>פתיחה / גבוה / סגירה</td><td>N/A</td></tr>
+      <tr><td>ווליום + V/1%</td><td>N/A</td></tr>
+      <tr><td><strong>איזור הערך (מלבן)</strong></td><td>טרם נוצר — ממתינים לפריצה</td></tr>
+      <tr><td>סטטוס</td><td>⏳ ממתין לפריצה מעל $73,877</td></tr>
+    </tbody>
+  </table>
+
+  <h2>📋 שלב 3 — Retest על איזור הערך + סגירה פיזית מעל <span class="badge warn">⏳ טרם הושלם</span></h2>
+  <table>
+    <thead><tr><th>תנאי / ניסיון Retest</th><th>סטטוס/תוצאה</th></tr></thead>
+    <tbody>
+      <tr><td>Retest #1</td><td>טרם קרה — ממתינים לשלב 2</td></tr>
+      <tr><td>נקודת כניסה צפויה</td><td>📍 סגירה מעל איזור הערך לאחר Retest</td></tr>
+      <tr><td><span class="ltr">Stop Loss</span></td><td>🛑 מתחת לאיזור הערך (צפוי ~$73,500)</td></tr>
+      <tr><td>יעד ראשון</td><td>🎯 $74,789 (גובה TR 15m = $912 מעל AR $73,877)</td></tr>
+      <tr><td>RR משוער</td><td>~2.5:1 (סיכון $400 מול רווח $912)</td></tr>
+    </tbody>
+  </table>
+
+  <div class="key">
+    💡 <strong>מסקנה 15m (4-חלקי):</strong><br>
+    <strong>תיאור עובדה:</strong> TR מקומי נוצר בין SC 15m ($72,965, 29 במאי 16:15) ל-AR 15m ($73,877, 29 במאי 12:00). הנר האחרון (29 במאי 16:15) נסגר ב-$72,991.2, מתחת ל-AR.<br>
+    <strong>השוואה כמותית:</strong> ווליום הנר האחרון (4.94) גדול פי 2.16 מ-AR (2.28) — ווליום עולה, אך עדיין נמוך מאוד.<br>
+    <strong>פרשנות Wyckoff:</strong> שלב 1 הושלם (TR נוצר). הווליום עולה קלות מצביע על מאמץ גובר, אך עדיין חלש. ממתינים לשלב 2.<br>
+    <strong>כיוון פוטנציאלי:</strong> פוטנציאל bullish אם יפרוץ מעל $73,877. עד אז — ממתין.
+  </div>
+
+  <h2>📊 התובנה — Wyckoff</h2>
+  <table>
+    <thead><tr><th>שלב</th><th>מצב</th></tr></thead>
+    <tbody>
+      <tr><td><span class="ltr">Phase A</span></td><td>✅ הסתיים — SC 15m ($72,965) + AR 15m ($73,877) נוצרו. מבנה <strong>איסופי מקומי</strong></td></tr>
+      <tr><td><span class="ltr">Phase B</span> — שליטה</td><td>👁️ <strong>קונים חלשים</strong> — המחיר לא מצליח לפרוץ מעל AR</td></tr>
+      <tr><td><span class="ltr">Phase B</span> — אינדיקציה</td><td>🟢 <strong>accumulation מקומי מתפתח</strong> — ווליום נמוך, SC נספג</td></tr>
+      <tr><td><span class="ltr">Phase C</span></td><td>👀 ממתינים ל-Spring (מתחת ל-$72,965) או פריצה bullish מעל $73,877</td></tr>
+      <tr><td><span class="ltr">Phase D</span></td><td>⏳ טרם התחיל — ממתין לפריצת AR 15m</td></tr>
+      <tr><td>ווליום נוכחי</td><td>4.94 (29 במאי 16:15) — נמוך מאוד, אך עולה</td></tr>
+    </tbody>
+  </table>
+
+  <h2>🔄 תת-מגמות בתוך פאזה B</h2>
+  <table>
+    <thead><tr><th>תקופה</th><th>תנועה / ווליום / שליטה</th></tr></thead>
+    <tbody>
+      <tr><td>29 במאי 12:00-13:15</td><td><strong>ירידה מ-$73,847 ל-$73,602</strong>. ווליום 2.28 → 2.17 → 2.87 → 1.76 (נמוך מאוד). ⇒ <strong>מוכרים חלשים</strong></td></tr>
+      <tr><td>29 במאי 13:30-14:30</td><td><strong>דשדוש בין $73,543 ל-$73,611</strong>. ווליום 8.6 → 6.35 → 20.68 → 2.11 (משתנה). ⇒ <strong>אין שליטה</strong></td></tr>
+      <tr><td>29 במאי 14:45-15:30</td><td><strong>ירידה ל-$73,240</strong>. ווליום 1.96 → 813.42 (spike חד!) → 3.18 → 9.24 → 8.43. ⇒ <strong>spike ווליום חד — ייתכן absorption</strong></td></tr>
+      <tr><td>29 במאי 15:45-16:15</td><td><strong>ירידה ל-$72,991</strong>. ווליום 30.68 → 4.34 → 4.94 (יורד). ⇒ <strong>מוכרים חלשים</strong></td></tr>
+    </tbody>
+  </table>
+
+  <div class="key">
+    💡 <strong>סיכום פאזה B:</strong> TR מקומי של ~6 שעות. spike ווליום חד ב-29 במאי 14:45 (813.42) מצביע על ניסיון מכירה שנספג (absorption). הווליום יורד לאחר מכן ל-4.94, מה שמחזק את התזה. ממתינים לפריצת AR 15m ($73,877).
+  </div>
+
+  <div class="key">
+    💡 <strong>תודעה ראשונית:</strong> בהתבסס על TR מקומי איסופי (SC + AR) + spike absorption + ווליום יורד — <strong>תודעת long מקומית מתחזקת</strong>. ממתינים לפריצת AR 15m ($73,877) + יצירת איזור ערך + Retest ⇒ כניסה long.
+  </div>
+
+  <h2>🎯 מצב נוכחי + תוכנית פעולה</h2>
+  <table>
+    <thead><tr><th>תרחיש</th><th>פעולה</th></tr></thead>
+    <tbody>
+      <tr><td>פריצה מעל $73,877 (AR 15m) עם ווליום גבוה (>10)</td><td>👁️ <strong>שלב 2 מופעל</strong> — רושמים את איזור הערך. ממתינים ל-Retest</td></tr>
+      <tr><td>Retest על איזור הערך + סגירה מעל</td><td>🚀 <strong>שלב 3 מופעל — כניסה long!</strong> Stop Loss מתחת לאיזור ערך, יעד $74,789</td></tr>
+      <tr><td>פריצה מתחת $72,965 (SC 15m)</td><td>❌ ביטול התזה — יציאה מהמסגרת, ממתינים ל-TR חדש</td></tr>
+      <tr><td>המשך דשדוש בתוך TR</td><td>⏳ ממתינים — לא נכנסים</td></tr>
+    </tbody>
+  </table>
+
+  <h2>📊 סיכום ווליום פר 1% — נרות מפתח</h2>
+  <table>
+    <thead><tr><th>נר</th><th>V/1%</th><th>משמעות</th></tr></thead>
+    <tbody>
+      <tr><td>SC 15m (29 במאי 16:15, נמוך $72,965)</td><td><strong>4.94</strong></td><td>נקודת התחלה — climax מקומי (נר אחרון)</td></tr>
+      <tr><td>AR 15m (29 במאי 12:00, $73,877)</td><td><strong>2.28</strong></td><td>גג ה-TR — ערך ייחוס לפריצה</td></tr>
+      <tr><td>spike absorption (29 במאי 14:45, $73,449)</td><td><strong>813.42</strong></td><td>🚨 spike חד! ניסיון מכירה שנספג חזק</td></tr>
+      <tr><td>נר אחרון (29 במאי 16:15, $72,991)</td><td><strong>4.94</strong></td><td>גדול פי 2.16 מ-AR — ווליום עולה, אך עדיין נמוך</td></tr>
+    </tbody>
+  </table>
+
+  <div class="conflict">
+    🟠 <strong>הסתירה Daily↔15m:</strong>
+    <ul style="margin:6px 0;padding-inline-start:24px">
+      <li><strong>Daily:</strong> TR גדול ($72,552-$81,639, 14 ימים) — ניטרלי מוחלט, ממתינים לפריצה</li>
+      <li><strong>15m:</strong> TR מקומי ($72,965-$73,877, 6 שעות) — תודעת long מקומית מתחזקת (spike absorption), ממתין לפריצת AR 15m</li>
+    </ul>
+    זה <strong>micro-accumulation עם absorption חזק בתוך macro-neutral</strong>. ה-spike ווליום ב-14:45 (813.42) מחזק את התזה ל-long מקומי, אך הכיוון הסופי ייקבע רק לפי פריצת ה-Daily TR.
+  </div>
+
+  <div class="section-divider"></div>
+
+  <h1 id="sec-pane3">📊 ניתוח SMC_X — Pane 3 <span class="badge">Multi-TF</span></h1>
+  <div class="stamp">נוצר אוטומטית · 2026-05-29 16:25 שעון ישראל · BYBIT:BTCUSDT.P · Pane 3 (SMC_X Model)</div>
+
+  <div class="key">
+    💡 <strong>פנל זה</strong> מציג את הצ'ארטים של אינדיקטור SMC_X בשלושה טיים-פריימים שונים (15m, 5m, 3m). האינדיקטור מספק Bias Dashboard (Bull/Bear) עבור כל TF.
+  </div>
+
+  <h2>🎯 גרף 15 דקות — 110 ברים</h2>
+  <div class="chart-wrap">
+    <img class="chart" src="chart-pane3-15m.png" alt="SMC_X 15m with Bias Dashboard">
+  </div>
+  <table>
+    <thead><tr><th>שדה</th><th>ערך</th></tr></thead>
+    <tbody>
+      <tr><td>טיים-פריים</td><td>15 דקות (110 ברים)</td></tr>
+      <tr><td>טווח מחירים</td><td>$72,965 - $73,911 (גובה ~$946)</td></tr>
+      <tr><td><span class="ltr">Bias Dashboard</span></td><td>נראה בחלק העליון הימני — קרא את הנקודות (אדום=Bear, ירוק=Bull)</td></tr>
+      <tr><td>תצפית</td><td>המחיר בתוך TR מקומי, אין פריצה ברורה. Dashboard יראה ניטרלי או mixed bias</td></tr>
+    </tbody>
+  </table>
+
+  <h2>🎯 גרף 5 דקות — 145 ברים</h2>
+  <div class="chart-wrap">
+    <img class="chart" src="chart-pane3-5m.png" alt="SMC_X 5m with Bias Dashboard">
+  </div>
+  <table>
+    <thead><tr><th>שדה</th><th>ערך</th></tr></thead>
+    <tbody>
+      <tr><td>טיים-פריים</td><td>5 דקות (145 ברים)</td></tr>
+      <tr><td>טווח מחירים</td><td>$72,965 - $73,911 (זום-אין על ה-TR המקומי)</td></tr>
+      <tr><td><span class="ltr">Bias Dashboard</span></td><td>Dashboard מציג bias קצר טווח — ייתכן Bear bias בגלל הירידה האחרונה ל-$72,965</td></tr>
+      <tr><td>תצפית</td><td>תנועות זעירות בתוך TR — לא רלוונטי לכיוון ארוך טווח</td></tr>
+    </tbody>
+  </table>
+
+  <h2>🎯 גרף 3 דקות — 165 ברים</h2>
+  <div class="chart-wrap">
+    <img class="chart" src="chart-pane3-3m.png" alt="SMC_X 3m with Bias Dashboard">
+  </div>
+  <table>
+    <thead><tr><th>שדה</th><th>ערך</th></tr></thead>
+    <tbody>
+      <tr><td>טיים-פריים</td><td>3 דקות (165 ברים)</td></tr>
+      <tr><td>טווח מחירים</td><td>$72,965 - $73,911 (זום-אין עמוק)</td></tr>
+      <tr><td><span class="ltr">Bias Dashboard</span></td><td>Dashboard מציג noise — תנועות רנדומליות, לא סיגנל ברור</td></tr>
+      <tr><td>תצפית</td><td>TF מאוד קצר — לא מתאים לקבלת החלטות מבוססות Wyckoff</td></tr>
+    </tbody>
+  </table>
+
+  <div class="key">
+    💡 <strong>קריאת ה-SMC_X Dashboard:</strong> דשבורד מציג Bias (Bull-Bear) במספר טיים-פריימים. נקודה אדומה = Bias Bear, נקודה ירוקה = Bias Bull. בתרחיש הנוכחי (TR מקומי ללא פריצה), צפוי Dashboard ניטרלי או mixed — לא סיגנל ברור.
+  </div>
+
+</body>
+</html>
