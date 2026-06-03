@@ -1,5 +1,6 @@
 (function () {
-  // Dashboard view. Wyckoff analysis generation lives in wyckoff.js (window.Wyckoff).
+  // Dashboard view — personal app only. Knows nothing about Wyckoff/reports;
+  // feature cards inject themselves via window.DASHBOARD_WIDGETS.
   function render(root) {
     const today = Store.todayKey();
     const tasks = Store.get('todos') || [];
@@ -52,40 +53,16 @@
         : App.el('div', { class: 'empty-state' }, 'עדיין אין הערות. קדימה, להתחיל לכתוב ←')
     ]);
 
-    // Wyckoff Analysis card — opens latest BTC report from local PC
-    const wyckoffCard = App.el('div', { class: 'card', style: { background: 'linear-gradient(135deg, #fff8e7 0%, #ffe5e5 100%)', borderLeft: '4px solid #d4a017' } }, [
-      App.el('div', { class: 'row row-between' }, [
-        App.el('h2', { style: { margin: 0 } }, '📊 ניתוח Wyckoff — BTCUSDT.P'),
-        App.el('span', { style: { fontSize: '11px', color: 'var(--ink-soft)' } }, 'BYBIT')
-      ]),
-      App.el('div', { style: { fontSize: '13px', color: 'var(--ink-soft)', margin: '8px 0' } },
-        'דוח אחרון: 1D + 4H + 1H + 30m + 15m עם אסטרטגיית 3 שלבים, ווליום פר 1%, ותרחישים'),
-      App.el('div', { class: 'row', style: { gap: '8px', flexWrap: 'wrap' } }, [
-        App.el('button', {
-          class: 'btn btn-primary',
-          style: { background: '#d4a017', borderColor: '#d4a017' },
-          onClick: () => {
-            window.open('wyckoff/latest.html', '_blank');
-          }
-        }, '📊 פתח דוח אחרון'),
-        App.el('button', {
-          class: 'btn btn-primary',
-          style: { background: '#0a7', borderColor: '#0a7' },
-          onClick: (ev) => window.Wyckoff.openSymbolPicker(ev.currentTarget)
-        }, '🚀 הפק ניתוח חדש'),
-        App.el('button', {
-          class: 'btn btn-ghost btn-sm',
-          onClick: () => {
-            window.open('wyckoff/', '_blank');
-          }
-        }, '📁 כל הדוחות'),
-      ])
-    ]);
+    // Dashboard widgets registered by other features (e.g. Wyckoff). The
+    // dashboard is agnostic — it just renders whatever has registered itself.
+    const widgets = (window.DASHBOARD_WIDGETS || [])
+      .map(fn => { try { return fn(); } catch (e) { console.warn('dashboard widget failed:', e); return null; } })
+      .filter(Boolean);
 
     root.append(
       App.el('div', { class: 'stack stack-lg' }, [
         stats,
-        wyckoffCard,
+        ...widgets,
         App.el('h2', { style: { marginTop: '8px' } }, 'הכול במקום אחד'),
         sectionGrid,
         notesCard
