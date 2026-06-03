@@ -39,33 +39,7 @@
     }
   }
 
-  // ── Offline banner ────────────────────────────────────────────────────────
-
-  function showOfflineBanner() {
-    if (document.getElementById('fb-offline-banner')) return;
-    const banner = document.createElement('div');
-    banner.id = 'fb-offline-banner';
-    banner.style.cssText =
-      'position:fixed;top:0;left:0;right:0;z-index:9997;' +
-      'background:#fff3cd;border-bottom:1px solid #ffc107;' +
-      'padding:10px 20px;font-family:Heebo,Arial,sans-serif;direction:rtl;' +
-      'font-size:13px;color:#856404;display:flex;align-items:center;gap:10px;';
-    banner.innerHTML =
-      '⚠️ <strong>הסנכרון בין מכשירים אינו פעיל</strong> — ' +
-      'הנתונים נשמרים רק במכשיר זה. ' +
-      '<button id="fb-retry-btn" style="margin-right:8px;padding:4px 10px;' +
-      'background:#ffc107;border:none;border-radius:6px;cursor:pointer;' +
-      'font-family:Heebo,Arial,sans-serif;font-size:12px;font-weight:600">' +
-      'התחבר עכשיו</button>' +
-      '<button id="fb-dismiss-banner" style="margin-right:auto;background:none;border:none;' +
-      'cursor:pointer;font-size:16px;color:#856404">✕</button>';
-    document.body.appendChild(banner);
-    document.getElementById('fb-dismiss-banner').addEventListener('click', () => banner.remove());
-    document.getElementById('fb-retry-btn').addEventListener('click', () => {
-      banner.remove();
-      window.FirebaseSync.setup();
-    });
-  }
+  // showOfflineBanner + setStatus live in firebase-ui.js (window.FirebaseUI).
 
   // ── Login UI ──────────────────────────────────────────────────────────────
 
@@ -138,23 +112,6 @@
     });
   }
 
-  // ── Status display ────────────────────────────────────────────────────────
-
-  function setStatus(state) {
-    const el = document.getElementById('fb-sync-status');
-    if (el) {
-      if (state === 'saving') {
-        el.textContent = '✏️ שומר…'; el.style.color = 'var(--ink-mute)';
-      } else if (state === 'saved') {
-        const t = new Date();
-        el.textContent = `✓ נשמר • ${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`;
-        el.style.color = '';
-      } else if (state === 'error') {
-        el.textContent = '⚠️ לא הצליח לסנכרן'; el.style.color = '#e53e3e';
-      }
-    }
-    if (window._nbSyncHook) { try { window._nbSyncHook(state); } catch {} }
-  }
 
   // ── Document size safety ──────────────────────────────────────────────────
   // Firestore hard limit: 1 048 576 bytes per document.
@@ -273,7 +230,7 @@
     if (value === undefined || !db || !userId) return;
     delete pending[key];
     inflight++;
-    setStatus('saving');
+    window.FirebaseUI.setStatus('saving');
     try {
       let writePromise;
       if      (key === 'topics')            writePromise = syncTopics(value);
@@ -284,11 +241,11 @@
       const timeoutMs = key === 'topics' ? 30000 : 10000;
       await Promise.race([writePromise, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), timeoutMs))]);
       inflight--;
-      if (inflight === 0 && Object.keys(pending).length === 0) setStatus('saved');
+      if (inflight === 0 && Object.keys(pending).length === 0) window.FirebaseUI.setStatus('saved');
     } catch (e) {
       inflight--;
       console.warn(`Push "${key}" failed:`, e.message || e);
-      if (inflight === 0) setStatus('error');
+      if (inflight === 0) window.FirebaseUI.setStatus('error');
     }
   }
 
@@ -518,14 +475,14 @@
         style="font-size:20px;cursor:pointer;background:none;border:none;color:var(--ink-mute);padding:4px;line-height:1">⏏</button>`;
 
     document.getElementById('fb-sync-status').addEventListener('click', async () => {
-      setStatus('saving');
+      window.FirebaseUI.setStatus('saving');
       try {
         const ALL = [...MAIN_DOC_KEYS, ...SUBCOL_KEYS, 'topics'];
         ALL.forEach(k => { const v = Store.get(k); if (v !== undefined) schedulePush(k, v); });
         await flushAll();
-        setStatus('saved');
+        window.FirebaseUI.setStatus('saved');
         if (window.App) App.toast('סנכרון הושלם ✓');
-      } catch { setStatus('error'); }
+      } catch { window.FirebaseUI.setStatus('error'); }
     });
 
     document.getElementById('fb-signout').addEventListener('click', () => {
@@ -539,7 +496,7 @@
     enabled: false,
 
     async setup() {
-      if (!initSDK()) { setTimeout(showOfflineBanner, 1500); return false; }
+      if (!initSDK()) { setTimeout(window.FirebaseUI.showOfflineBanner, 1500); return false; }
 
       try { await auth.getRedirectResult(); } catch {}
 
