@@ -48,7 +48,8 @@
 │       │       └── card.js          הכרטיס בדשבורד — רושם את עצמו ל-DASHBOARD_WIDGETS
 │       │
 │       ├── notebook/
-│       │   ├── index.js             עץ הנושאים + layout + העורך (⚠️ core טרם פוצל) + חושף window.nbTree
+│       │   ├── index.js             עץ הנושאים + layout/sidebar. חושף window.nbTree / nbCore / nbActive
+│       │   ├── editor.js            ⭐ העורך: contenteditable, undo/redo, toolbar, טבלאות → window.nbEditor
 │       │   ├── media.js             ⭐ תמונות/קבצים/טבלאות/בלוקי mood   → window.nbMedia
 │       │   └── export.js            ⭐ הפקת מסמך: תבניות, mood, ייצוא Word/PDF → window.nbExport
 │       │
@@ -93,7 +94,8 @@
 | הדבקת/הוספת **צילום מסך** או תמונה (כללי) | `components/editable/image.js` |
 | תמונות/קבצים/טבלאות במחברת | `notebook/media.js` |
 | ייצוא מחברת ל-Word/PDF, תבניות, mood | `notebook/export.js` |
-| עץ הנושאים / עריכת טקסט במחברת | `notebook/index.js` |
+| עריכת טקסט במחברת (עורך, toolbar, undo, טבלאות) | `notebook/editor.js` |
+| עץ הנושאים / סרגל צד של המחברת | `notebook/index.js` |
 | כלי תמלול — לוגיקת אודיו / mp3 / whisper / ffmpeg | `tools/video-transcriber/<האחריות>.js` |
 | כלי המרת PDF↔Word / תרגום PDF | `tools/<הכלי>/index.js` |
 | עיצוב המחברת | `css/features/notebook.css` |
@@ -118,7 +120,7 @@
 
 | נושא | סטטוס | סיכון |
 |---|---|---|
-| ליבת `notebook/index.js` → tree.js / layout.js / editor.js | עדיין מאוחד (state משותף: activeId, expanded...) | גבוה — דורש בדיקת עורך ידנית |
+| ליבת ה-notebook | ✅ editor.js חולץ. tree+layout נשארו ב-index.js (מלוכדים, 510 ש' — תקין) | — |
 | `firebase-sync.js` → הפרדת auth-UI מלוגיקת הסנכרון | מעורבב | בינוני |
 | `sidebar.js` → הפרדת ייצוא/ייבוא מהניווט | מעורבב | נמוך |
 | איחוד שני מימושי `insertImage` (editable מול notebook/media) | כפילות — שורש באג צילומי-מסך | שינוי התנהגות — דורש אישור |
