@@ -359,9 +359,15 @@
     if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
     return (b / 1048576).toFixed(1) + ' MB';
   }
+  // Image insertion is unified to the canonical implementation in
+  // components/editable/image.js (figure.nb-img + compression), so paste,
+  // toolbar and drag-drop all produce identical images. (The local
+  // insertImage / insertImageFile above are now unused legacy code.)
   window.nbMedia = {
-    insertImage: insertImage, restoreMoodBlocks: restoreMoodBlocks, attachMoodBehaviors: attachMoodBehaviors,
-    insertImageFile: insertImageFile, attachTableResizers: attachTableResizers, wrapImagesInEditor: wrapImagesInEditor,
+    insertImage: function (dataUrl, editor, save) { return window.Editable.insertImage(dataUrl, editor, save); },
+    restoreMoodBlocks: restoreMoodBlocks, attachMoodBehaviors: attachMoodBehaviors,
+    insertImageFile: function (file, editor, save) { return window.Editable.insertImageFromFile(file, editor, save); },
+    attachTableResizers: attachTableResizers, wrapImagesInEditor: wrapImagesInEditor,
     startImageResize: startImageResize, openAttachment: openAttachment, insertFileAttachment: insertFileAttachment, _fmtSize: _fmtSize
   };
 })();
