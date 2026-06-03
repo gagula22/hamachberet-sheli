@@ -123,7 +123,7 @@
 | ליבת ה-notebook | ✅ editor.js חולץ. tree+layout נשארו ב-index.js (מלוכדים, 510 ש' — תקין) | — |
 | `firebase-sync.js` → הפרדת auth-UI מלוגיקת הסנכרון | מעורבב | בינוני |
 | `sidebar.js` → הפרדת ייצוא/ייבוא מהניווט | מעורבב | נמוך |
-| איחוד שני מימושי `insertImage` (editable מול notebook/media) | כפילות — שורש באג צילומי-מסך | שינוי התנהגות — דורש אישור |
+| איחוד `insertImage` | ✅ נותב למימוש הקנוני (editable/image.js). מימושי media.js הישנים = dead code | — |
 | `store-schema` — defaults + מטא-סנכרון פר-נושא | מרוכז ב-store.js+firebase-sync | גבוה — שכבת נתונים |
 | גרסת cache גלובלית ב-index.html (במקום ?v=N פר-קובץ) | per-file | נמוך |
 
