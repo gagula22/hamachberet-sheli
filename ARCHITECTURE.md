@@ -26,7 +26,9 @@
 │   ├── app.js                       bootstrap + hash-router + רשימת SECTIONS
 │   ├── store.js                     אחסון (IndexedDB/localStorage) + state + ייצוא/ייבוא JSON
 │   ├── firebase-config.js           הגדרות Firebase
-│   ├── firebase-sync.js             סנכרון ענן  (⚠️ עדיין מערבב auth+sync+UI — ראה "טרם הופרד")
+│   ├── store-schema.js              ⭐ מקור-אמת יחיד למודל הנתונים (default+sync+merge לכל key)
+│   ├── firebase-sync.js             לוגיקת סנכרון + זרימת התחברות (login modal נשאר עם ה-auth)
+│   ├── firebase-ui.js               ⭐ UI של הסנכרון: באנר, שבב סטטוס, כפתור סנכרון, סרגל משתמש
 │   │
 │   ├── components/
 │   │   ├── sidebar.js               ניווט  (⚠️ עדיין מכיל גם ייצוא/ייבוא — טרם הופרד)
@@ -100,7 +102,9 @@
 | כלי המרת PDF↔Word / תרגום PDF | `tools/<הכלי>/index.js` |
 | עיצוב המחברת | `css/features/notebook.css` |
 | עיצוב משותף (כפתורים, כרטיסים) | `css/components.css` |
-| נתונים / אחסון / סנכרון | `store.js` (מקומי) · `firebase-sync.js` (ענן) |
+| מודל הנתונים — default/סיווג-סנכרון לכל key | `store-schema.js` |
+| אחסון מקומי / לוגיקת מיזוג בענן | `store.js` · `firebase-sync.js` |
+| UI של הסנכרון (באנר, סטטוס, כפתור, סרגל משתמש) | `firebase-ui.js` |
 
 ---
 
@@ -121,10 +125,10 @@
 | נושא | סטטוס | סיכון |
 |---|---|---|
 | ליבת ה-notebook | ✅ editor.js חולץ. tree+layout נשארו ב-index.js (מלוכדים, 510 ש' — תקין) | — |
-| `firebase-sync.js` → הפרדת auth-UI מלוגיקת הסנכרון | מעורבב | בינוני |
-| `sidebar.js` → הפרדת ייצוא/ייבוא מהניווט | מעורבב | נמוך |
+| firebase auth-UI | ✅ UI חולץ ל-`firebase-ui.js` (באנר/סטטוס/כפתור/סרגל). login modal נשאר עם ה-auth (מכוון) | — |
 | איחוד `insertImage` | ✅ נותב למימוש הקנוני (editable/image.js). מימושי media.js הישנים = dead code | — |
-| `store-schema` — defaults + מטא-סנכרון פר-נושא | מרוכז ב-store.js+firebase-sync | גבוה — שכבת נתונים |
+| `store-schema` | ✅ `store-schema.js` = מקור-אמת; defaults + key-lists נגזרים ממנו + assertion קשיח | — |
+| `sidebar.js` → הפרדת ייצוא/ייבוא מהניווט | מעורבב | נמוך |
 | גרסת cache גלובלית ב-index.html (במקום ?v=N פר-קובץ) | per-file | נמוך |
 
 ---
