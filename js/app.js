@@ -34,6 +34,13 @@
       window.addEventListener('hashchange', () => this.render());
       if (!location.hash) location.hash = '#/dashboard';
       this.render();
+      // A hard refresh paints immediately from the (empty) localStorage state,
+      // then IndexedDB loads asynchronously. Re-render the current view once it
+      // is ready so data views (e.g. the notebook topic tree) aren't stuck
+      // empty until the user navigates away and back.
+      if (window.Store && Store.ready) {
+        Store.ready().then(() => this.render()).catch(() => {});
+      }
     },
 
     syncTopbarHeight() {
