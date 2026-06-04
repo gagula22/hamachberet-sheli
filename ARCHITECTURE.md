@@ -31,7 +31,8 @@
 │   ├── firebase-ui.js               ⭐ UI של הסנכרון: באנר, שבב סטטוס, כפתור סנכרון, סרגל משתמש
 │   │
 │   ├── components/
-│   │   ├── sidebar.js               ניווט  (⚠️ עדיין מכיל גם ייצוא/ייבוא — טרם הופרד)
+│   │   ├── sidebar.js               ניווט בלבד (רישום הסקשנים + active state)
+│   │   ├── data-transfer.js         ⭐ בר גיבוי: ייצוא/ייבוא/הדבקת JSON → window.DataBackup
 │   │   └── editable/                רכיב עריכה משותף (מחברת + הערות)
 │   │       ├── utils.js             debounce, compressImage            → window.EditableUtils
 │   │       ├── image.js             ⭐ תמונות/צילומי-מסך: הדבקה, הוספה, figures, גרירה, snap
@@ -128,8 +129,8 @@
 | firebase auth-UI | ✅ UI חולץ ל-`firebase-ui.js` (באנר/סטטוס/כפתור/סרגל). login modal נשאר עם ה-auth (מכוון) | — |
 | איחוד `insertImage` | ✅ נותב למימוש הקנוני (editable/image.js). מימושי media.js הישנים = dead code | — |
 | `store-schema` | ✅ `store-schema.js` = מקור-אמת; defaults + key-lists נגזרים ממנו + assertion קשיח | — |
-| `sidebar.js` → הפרדת ייצוא/ייבוא מהניווט | מעורבב | נמוך |
-| גרסת cache גלובלית ב-index.html (במקום ?v=N פר-קובץ) | per-file | נמוך |
+| `sidebar.js` → הפרדת ייצוא/ייבוא | ✅ בר הגיבוי חולץ ל-`data-transfer.js` (window.DataBackup) | — |
+| גרסת cache גלובלית | ⏸️ **הוחלט לא לבצע** — `?v=N` פר-קובץ עדיף ל-caching (רק קובץ ששונה נטען מחדש). גרסה גלובלית = כל הקבצים נטענים מחדש בכל שינוי. לשקול רק אם קונפליקטים על מספרי-גרסה ב-branches מקבילים ייהפכו לכאב אמיתי | — |
 
 ---
 
