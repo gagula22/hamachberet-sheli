@@ -16,6 +16,7 @@
     todos:        { default: [],                               sync: 'subcol',  merge: 'by-id' },
     goals:        { default: [],                               sync: 'subcol',  merge: 'by-id' },
     transactions: { default: [],                               sync: 'subcol',  merge: 'by-id' },
+    customTemplates: { default: [],                            sync: 'subcol',  merge: 'by-id' },
     mood:         { default: {},                               sync: 'maindoc', merge: 'cloud-wins' },
     water:        { default: {},                               sync: 'maindoc', merge: 'cloud-wins' },
     sleep:        { default: {},                               sync: 'maindoc', merge: 'cloud-wins' },
