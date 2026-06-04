@@ -44,6 +44,12 @@
       if (!firebase.apps.length) firebase.initializeApp(window.FIREBASE_CONFIG);
       db   = firebase.firestore();
       auth = firebase.auth();
+      // Brave / ad-blockers / some proxies break Firestore's default streaming
+      // (WebChannel) transport, so writes silently stay in the local cache —
+      // shown as "synced" but never reaching the server (the "lock" on that
+      // device). Auto-detect that and fall back to HTTP long-polling, which
+      // gets through such blockers. Must be set before any read/write.
+      try { db.settings({ experimentalAutoDetectLongPolling: true }); } catch (e) {}
       db.enablePersistence({ synchronizeTabs: true }).catch(() => {});
       return true;
     } catch (e) {
