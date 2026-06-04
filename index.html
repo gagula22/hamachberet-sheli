@@ -135,7 +135,15 @@
     // already executed by the time this runs — Firebase SDK is guaranteed loaded.
     App.start();
     if (window.FirebaseSync) {
-      FirebaseSync.setup().catch(e => console.warn('Firebase setup error:', e));
+      FirebaseSync.setup()
+        .then(function (ok) {
+          // Once initial cloud data has merged in, re-render the current view so
+          // data synced from another device shows without navigating away.
+          // Skip if the user is actively typing in the notebook editor.
+          var editing = document.activeElement && document.activeElement.closest && document.activeElement.closest('.nb-editor');
+          if (ok && !editing) App.render();
+        })
+        .catch(function (e) { console.warn('Firebase setup error:', e); });
     }
   </script>
 </body>
