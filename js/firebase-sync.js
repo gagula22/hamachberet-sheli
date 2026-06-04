@@ -10,8 +10,21 @@
   //               (only changed/added/deleted items are written — true diffs)
   // MAIN_DOC_KEYS→ small non-array data stays in one merged document
   // 'topics'     → already individual docs under users/${uid}/topics/
-  const SUBCOL_KEYS    = ['notes', 'tasks', 'todos', 'goals', 'transactions'];
-  const MAIN_DOC_KEYS  = ['mood', 'water', 'sleep', 'slots', 'settings', 'habits'];
+  // Derived from store-schema.js (single source of truth), guarded by a hard
+  // assertion: if the classification ever drifts from the known-correct sets,
+  // data would sync to the WRONG Firestore location — so throw loudly here
+  // instead of risking silent data loss.
+  const _SS = window.StoreSchema || {};
+  const SUBCOL_KEYS    = Object.keys(_SS).filter(k => _SS[k].sync === 'subcol');
+  const MAIN_DOC_KEYS  = Object.keys(_SS).filter(k => _SS[k].sync === 'maindoc');
+  (function assertKeyClassification() {
+    const sub  = ['notes', 'tasks', 'todos', 'goals', 'transactions'];
+    const main = ['mood', 'water', 'sleep', 'slots', 'settings', 'habits'];
+    const same = (a, b) => a.length === b.length && a.every(x => b.indexOf(x) > -1);
+    if (!same(SUBCOL_KEYS, sub) || !same(MAIN_DOC_KEYS, main)) {
+      throw new Error('[firebase-sync] StoreSchema key classification mismatch — aborting to protect data.');
+    }
+  })();
 
   // lastPushed: the exact value last successfully written to Firestore per key.
   // Used to diff before every write so unchanged data is never re-sent.

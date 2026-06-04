@@ -1,23 +1,10 @@
 (function () {
   const KEY = 'notebook.v1';
-  const DEFAULTS = {
-    notes: [],
-    tasks: [],
-    todos: [],
-    habits: [
-      { id: 'h1', name: 'לקרוא 20 דקות', color: 'sage', log: {} },
-      { id: 'h2', name: 'פעילות גופנית', color: 'blush', log: {} },
-      { id: 'h3', name: 'מדיטציה',       color: 'lavender', log: {} }
-    ],
-    mood: {},
-    water: {},
-    sleep: {},
-    transactions: [],
-    goals: [],
-    slots: {},
-    topics: [],
-    settings: { userName: '', theme: 'cream' }
-  };
+  // Defaults are derived from the single source of truth in store-schema.js.
+  const _SCHEMA = window.StoreSchema || {};
+  const DEFAULTS = Object.fromEntries(
+    Object.keys(_SCHEMA).map(k => [k, structuredClone(_SCHEMA[k].default)])
+  );
 
   // ── IndexedDB (primary storage — no 5MB limit) ───────────────────────────
   const IDB_NAME = 'notebook-store';
