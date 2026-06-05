@@ -1,203 +1,120 @@
 (function () {
-  // 'Tools' (Kelim) view shell. Each tool lives in its own module under
-  // js/views/tools/. This file only composes them (hero + layout) and registers.
-  // ── Page hero ─────────────────────────────────────────────────────────────
-  // Chips behave as tabs over the *toggleable* cards (Word→PDF /
-  // PDF→Word / תרגום PDF). The transcriber card lives below them and is
-  // always visible — it's the primary tool, the user asked for it to
-  // stay fixed.
-  //
-  // RTL note: the document is <html dir="rtl">, so flex-direction:row
-  // places the first array item on the RIGHT.
-  function buildHero(cards) {
-    const tools = [
-      { icon: '📝', label: 'Word → PDF',   bg: 'linear-gradient(135deg,#FADADD,#F3B7BD)', target: 'tool-w2p' }, // 1 (rightmost)
-      { icon: '📄', label: 'PDF → Word',   bg: 'linear-gradient(135deg,#E6DDF4,#C9B8E3)', target: 'tool-p2w' }, // 2
-      { icon: '🌐', label: 'תרגום PDF',    bg: 'linear-gradient(135deg,#FFF3C4,#F5DF8C)', target: 'tool-ptr' }, // 3
-      { icon: '🔗', label: 'מזג PDF',      bg: 'linear-gradient(135deg,#D9F0E3,#A9D8BE)', target: 'tool-merge' }, // 4
-      { icon: '✂️', label: 'פצל PDF',      bg: 'linear-gradient(135deg,#D9E8F5,#A9C9E8)', target: 'tool-split' }, // 5
-      { icon: '🗑️', label: 'מחק דפים',     bg: 'linear-gradient(135deg,#F5DCDC,#E8AEAE)', target: 'tool-del' },   // 6
-      { icon: '🔄', label: 'סובב PDF',     bg: 'linear-gradient(135deg,#F0E6D2,#D8C39A)', target: 'tool-rot' },   // 7
-      { icon: '🖼️', label: 'PDF ל-JPG',    bg: 'linear-gradient(135deg,#E3DCF5,#BFA9E8)', target: 'tool-pjpg' }, // 8
-      { icon: '📄', label: 'תמונות ל-PDF', bg: 'linear-gradient(135deg,#DCF0F5,#A9D8E8)', target: 'tool-i2p' },  // 9
-      { icon: '🗜️', label: 'דחס PDF',      bg: 'linear-gradient(135deg,#E8E2D2,#CFC0A0)', target: 'tool-cmp' },  // 10
-      { icon: '📑', label: 'שטח טופס',     bg: 'linear-gradient(135deg,#DCEFE2,#AED8BF)', target: 'tool-flat' }, // 11
-      { icon: '🔓', label: 'בטל נעילה',    bg: 'linear-gradient(135deg,#F5E2DC,#E8BFA9)', target: 'tool-unlk' }  // 12
-    ];
+  // 'כלים' (Tools) view — a friendly category grid of tool tiles. Clicking a
+  // tile opens that tool in a popup MODAL. Each tool is its own module under
+  // js/views/tools/ exposing window.Tools.*; this file only composes them.
+  // The tool's card is built lazily on first open and cached (keeps its state).
 
-    const buttons = [];
-    let activeId = null;   // start with no chip selected
-
-    function _setActive(id) {
-      // Clicking the active chip again toggles it off (back to "only
-      // the transcriber is shown").
-      if (id === activeId) id = null;
-      activeId = id;
-      // Show only the matching card; hide the other toggleable ones.
-      Object.keys(cards).forEach(function(cid) {
-        cards[cid].style.display = (cid === id) ? '' : 'none';
-      });
-      // Update chip styling.
-      buttons.forEach(function(b) {
-        var active = b._target === id;
-        if (active) {
-          b.style.background = '#fff';
-          b.style.borderColor = 'var(--ink)';
-          b.style.boxShadow = '0 4px 14px rgba(60,50,40,.14)';
-          b.style.transform = 'translateY(-1px)';
-        } else {
-          b.style.background = 'rgba(255,255,255,.75)';
-          b.style.borderColor = 'var(--line)';
-          b.style.boxShadow = 'none';
-          b.style.transform = 'translateY(0)';
-        }
-      });
-    }
-
-    const chips = tools.map(function(t) {
-      var btn = document.createElement('button');
-      btn.type = 'button';
-      btn._target = t.target;
-      btn.style.cssText = [
-        'display:inline-flex',
-        'align-items:center',
-        'gap:8px',
-        'padding:8px 14px',
-        'border-radius:999px',
-        'background:rgba(255,255,255,.75)',
-        'border:1px solid var(--line)',
-        'font-size:13px',
-        'font-weight:600',
-        'color:var(--ink)',
-        'cursor:pointer',
-        'font-family:inherit',
-        'transition:transform 160ms ease-out, box-shadow 160ms ease-out, background 160ms, border-color 160ms'
-      ].join(';');
-
-      var iconSpan = document.createElement('span');
-      iconSpan.textContent = t.icon;
-      iconSpan.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:' + t.bg + ';font-size:13px;';
-
-      var labelSpan = document.createElement('span');
-      labelSpan.textContent = t.label;
-
-      btn.appendChild(iconSpan);
-      btn.appendChild(labelSpan);
-
-      btn.onmouseover = function(){
-        if (btn._target !== activeId) {
-          btn.style.background = '#fff';
-          btn.style.transform = 'translateY(-1px)';
-          btn.style.boxShadow = '0 4px 12px rgba(60,50,40,.10)';
-        }
-      };
-      btn.onmouseout = function(){
-        if (btn._target !== activeId) {
-          btn.style.background = 'rgba(255,255,255,.75)';
-          btn.style.transform = 'translateY(0)';
-          btn.style.boxShadow = 'none';
-        }
-      };
-      btn.onclick = function(){ _setActive(t.target); };
-
-      buttons.push(btn);
-      return btn;
-    });
-
-    // Apply initial active state once the DOM is in place.
-    setTimeout(function(){ _setActive(activeId); }, 0);
-
-    return App.el('div', {
-      style: {
-        position: 'relative', overflow: 'hidden',
-        background: 'linear-gradient(135deg,#FAF6F0 0%,#FFE9DA 35%,#E6DDF4 70%,#CFE4F7 100%)',
-        borderRadius: 'var(--r-lg)',
-        padding: '32px 36px',
-        border: '1px solid var(--line)',
-        boxShadow: 'var(--shadow-sm)'
-      }
-    }, [
-      App.el('div', {
-        style: { fontSize: '34px', marginBottom: '6px', letterSpacing: '-0.5px',
-                 fontFamily: 'var(--font-head)', fontWeight: '600', color: 'var(--ink)' }
-      }, 'כלים ליצירת מסמכים'),
-      App.el('div', {
-        style: { fontSize: '14.5px', color: 'var(--ink-soft)', marginBottom: '18px',
-                 lineHeight: '1.6', maxWidth: '640px' }
-      }, 'המרה, תרגום ותמלול בעברית — כל הכלים רצים ישר בדפדפן או בענן, בלי להעלות קבצים לאן שלא צריך.'),
-      // RTL doc + justify-content:flex-start ⇒ chips hug the right edge,
-      // first array item (Word→PDF) at the right.
-      App.el('div', {
-        style: { display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'flex-start' }
-      }, chips)
-    ]);
-  }
-
-  // ── Helper: wrap a tool card with a colored top accent stripe ─────────────
   function _wrapWithAccent(card, gradient) {
-    // Add an inline gradient stripe at the top of the card.
-    const stripe = App.el('div', {
-      style: {
-        height: '4px', borderTopLeftRadius: 'var(--r-md)',
-        borderTopRightRadius: 'var(--r-md)',
-        background: gradient,
-        margin: '-24px -24px 18px'  // pull into card padding
-      }
+    var stripe = App.el('div', {
+      style: { height: '4px', borderTopLeftRadius: 'var(--r-md)', borderTopRightRadius: 'var(--r-md)',
+               background: gradient, margin: '-24px -24px 18px' }
     });
     if (card && card.firstChild) card.insertBefore(stripe, card.firstChild);
     else if (card) card.appendChild(stripe);
     return card;
   }
-  // -- Main render -- each tool is its own module (js/views/tools/*) ----------
+
+  // ── Tool registry by category ─────────────────────────────────────────────
+  function categories() {
+    function t(icon, label, bg, build) {
+      return { icon: icon, label: label, bg: 'linear-gradient(135deg,' + bg + ')',
+               accent: 'linear-gradient(90deg,' + bg + ')', build: build };
+    }
+    return [
+      { title: '📂 המרת מסמכים', tools: [
+        t('📝', 'Word → PDF', '#FADADD,#F3B7BD', function () { return window.Tools.wordToPdf(); }),
+        t('📄', 'PDF → Word', '#E6DDF4,#C9B8E3', function () { return window.Tools.pdfToWord(); }),
+        t('🌐', 'תרגום PDF', '#FFF3C4,#F5DF8C', function () { return window.Tools.pdfTranslator(); }),
+        t('🎬', 'תמלול וידאו', '#CFE4F7,#A9CEEE', function () { return window.Tools.videoTranscriber(); })
+      ] },
+      { title: '📑 פעולות על דפים', tools: [
+        t('🔗', 'מזג PDF', '#D9F0E3,#A9D8BE', function () { return window.Tools.pdfMerge(); }),
+        t('✂️', 'פצל PDF', '#D9E8F5,#A9C9E8', function () { return window.Tools.pdfSplit(); }),
+        t('🗑️', 'מחק דפים', '#F5DCDC,#E8AEAE', function () { return window.Tools.pdfDelete(); }),
+        t('🔄', 'סובב PDF', '#F0E6D2,#D8C39A', function () { return window.Tools.pdfRotate(); })
+      ] },
+      { title: '🖼️ תמונות', tools: [
+        t('🖼️', 'PDF ל-JPG', '#E3DCF5,#BFA9E8', function () { return window.Tools.pdfToJpg(); }),
+        t('📄', 'תמונות ל-PDF', '#DCF0F5,#A9D8E8', function () { return window.Tools.imgToPdf(); })
+      ] },
+      { title: '🛠️ אופטימיזציה ואבטחה', tools: [
+        t('🗜️', 'דחס PDF', '#E8E2D2,#CFC0A0', function () { return window.Tools.pdfCompress(); }),
+        t('📑', 'שטח טופס', '#DCEFE2,#AED8BF', function () { return window.Tools.pdfFlatten(); }),
+        t('🔓', 'בטל נעילה', '#F5E2DC,#E8BFA9', function () { return window.Tools.pdfUnlock(); })
+      ] }
+    ];
+  }
+
+  // ── Popup modal ───────────────────────────────────────────────────────────
+  function openModal(tool) {
+    if (!tool._card) { tool._card = tool.build(); _wrapWithAccent(tool._card, tool.accent); }
+    tool._card.style.display = '';
+
+    var overlay = App.el('div', {
+      style: { position: 'fixed', inset: '0', background: 'rgba(40,30,25,.5)', zIndex: '9999',
+               display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+               padding: '48px 16px', overflowY: 'auto', backdropFilter: 'blur(2px)' }
+    });
+    var wrap = App.el('div', { style: { position: 'relative', maxWidth: '720px', width: '100%' } });
+    var closeBtn = App.el('button', {
+      style: { position: 'absolute', top: '-14px', left: '-10px', zIndex: '2',
+               width: '36px', height: '36px', borderRadius: '50%', border: '1px solid var(--line)',
+               background: '#fff', cursor: 'pointer', fontSize: '17px', color: 'var(--ink)',
+               boxShadow: '0 4px 14px rgba(60,50,40,.18)', lineHeight: '1' }
+    }, '✕');
+
+    function close() { overlay.remove(); document.removeEventListener('keydown', onKey); }
+    function onKey(e) { if (e.key === 'Escape') close(); }
+    closeBtn.onclick = close;
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) close(); });
+    document.addEventListener('keydown', onKey);
+
+    wrap.appendChild(closeBtn);
+    wrap.appendChild(tool._card);
+    overlay.appendChild(wrap);
+    document.body.appendChild(overlay);
+  }
+
+  // ── Tile ──────────────────────────────────────────────────────────────────
+  function tile(tool) {
+    var b = App.el('button', {
+      style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px',
+               padding: '18px 12px', background: '#fff', border: '1px solid var(--line)',
+               borderRadius: '14px', cursor: 'pointer', fontFamily: 'inherit',
+               boxShadow: 'var(--shadow-sm)', transition: 'transform 160ms ease-out, box-shadow 160ms, border-color 160ms' }
+    }, [
+      App.el('span', { style: { width: '48px', height: '48px', borderRadius: '14px', display: 'flex',
+        alignItems: 'center', justifyContent: 'center', background: tool.bg, fontSize: '24px' } }, tool.icon),
+      App.el('span', { style: { fontSize: '13px', fontWeight: '600', color: 'var(--ink)', textAlign: 'center' } }, tool.label)
+    ]);
+    b.onclick = function () { openModal(tool); };
+    b.onmouseenter = function () { b.style.transform = 'translateY(-2px)'; b.style.boxShadow = '0 8px 20px rgba(60,50,40,.13)'; b.style.borderColor = 'var(--ink)'; };
+    b.onmouseleave = function () { b.style.transform = 'translateY(0)'; b.style.boxShadow = 'var(--shadow-sm)'; b.style.borderColor = 'var(--line)'; };
+    return b;
+  }
+
   function render(root) {
-    const w2p = window.Tools.wordToPdf();
-    const p2w = window.Tools.pdfToWord();
-    const ptr = window.Tools.pdfTranslator();
-    const merge = window.Tools.pdfMerge();
-    const split = window.Tools.pdfSplit();
-    const del = window.Tools.pdfDelete();
-    const rot = window.Tools.pdfRotate();
-    const pjpg = window.Tools.pdfToJpg();
-    const i2p = window.Tools.imgToPdf();
-    const cmp = window.Tools.pdfCompress();
-    const flat = window.Tools.pdfFlatten();
-    const unlk = window.Tools.pdfUnlock();
-    const vtr = window.Tools.videoTranscriber();
+    var hero = App.el('div', {
+      style: { position: 'relative', overflow: 'hidden',
+               background: 'linear-gradient(135deg,#FAF6F0 0%,#FFE9DA 35%,#E6DDF4 70%,#CFE4F7 100%)',
+               borderRadius: 'var(--r-lg)', padding: '30px 34px', border: '1px solid var(--line)', boxShadow: 'var(--shadow-sm)' }
+    }, [
+      App.el('div', { style: { fontSize: '32px', marginBottom: '6px', letterSpacing: '-0.5px',
+        fontFamily: 'var(--font-head)', fontWeight: '600', color: 'var(--ink)' } }, 'כלים ליצירת מסמכים'),
+      App.el('div', { style: { fontSize: '14.5px', color: 'var(--ink-soft)', lineHeight: '1.6', maxWidth: '660px' } },
+        'בחר כלי — הוא נפתח בחלון. הכל רץ מקומית בדפדפן, בלי להעלות קבצים לאף שרת.')
+    ]);
 
-    w2p.id = 'tool-w2p';
-    p2w.id = 'tool-p2w';
-    ptr.id = 'tool-ptr';
-    merge.id = 'tool-merge';
-    split.id = 'tool-split';
-    del.id = 'tool-del';
-    rot.id = 'tool-rot';
-    pjpg.id = 'tool-pjpg';
-    i2p.id = 'tool-i2p';
-    cmp.id = 'tool-cmp';
-    flat.id = 'tool-flat';
-    unlk.id = 'tool-unlk';
-    vtr.id = 'tool-vtr';
+    var sections = categories().map(function (c) {
+      return App.el('div', {}, [
+        App.el('div', { style: { fontSize: '15px', fontWeight: '600', color: 'var(--ink)',
+          fontFamily: 'var(--font-head)', margin: '4px 0 12px' } }, c.title),
+        App.el('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(140px,1fr))', gap: '12px' } },
+          c.tools.map(tile))
+      ]);
+    });
 
-    _wrapWithAccent(w2p, 'linear-gradient(90deg,#FADADD,#F3B7BD)');
-    _wrapWithAccent(p2w, 'linear-gradient(90deg,#E6DDF4,#C9B8E3)');
-    _wrapWithAccent(ptr, 'linear-gradient(90deg,#FFF3C4,#F5DF8C)');
-    _wrapWithAccent(merge, 'linear-gradient(90deg,#D9F0E3,#A9D8BE)');
-    _wrapWithAccent(split, 'linear-gradient(90deg,#D9E8F5,#A9C9E8)');
-    _wrapWithAccent(del, 'linear-gradient(90deg,#F5DCDC,#E8AEAE)');
-    _wrapWithAccent(rot, 'linear-gradient(90deg,#F0E6D2,#D8C39A)');
-    _wrapWithAccent(pjpg, 'linear-gradient(90deg,#E3DCF5,#BFA9E8)');
-    _wrapWithAccent(i2p, 'linear-gradient(90deg,#DCF0F5,#A9D8E8)');
-    _wrapWithAccent(cmp, 'linear-gradient(90deg,#E8E2D2,#CFC0A0)');
-    _wrapWithAccent(flat, 'linear-gradient(90deg,#DCEFE2,#AED8BF)');
-    _wrapWithAccent(unlk, 'linear-gradient(90deg,#F5E2DC,#E8BFA9)');
-    _wrapWithAccent(vtr, 'linear-gradient(90deg,#CFE4F7,#A9CEEE)');
-
-    const toggleCards = { 'tool-w2p': w2p, 'tool-p2w': p2w, 'tool-ptr': ptr, 'tool-merge': merge, 'tool-split': split, 'tool-del': del, 'tool-rot': rot, 'tool-pjpg': pjpg, 'tool-i2p': i2p, 'tool-cmp': cmp, 'tool-flat': flat, 'tool-unlk': unlk };
-    Object.keys(toggleCards).forEach(function (id) { toggleCards[id].style.display = 'none'; });
-
-    const hero = buildHero(toggleCards);
-
-    root.append(App.el('div', { class: 'stack stack-lg' }, [hero, w2p, p2w, ptr, merge, split, del, rot, pjpg, i2p, cmp, flat, unlk, vtr]));
+    root.append(App.el('div', { class: 'stack stack-lg' }, [hero].concat(sections)));
   }
   App.register('stickers', render);
 })();
