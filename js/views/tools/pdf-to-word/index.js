@@ -84,6 +84,49 @@
       };
     }
 
+    // ── Legacy Hebrew (Windows-1255 + visual order) recovery ─────────────
+    // Many Hebrew PDFs embed fonts with NO Unicode (toUnicode) map and store
+    // text VISUALLY (right-to-left already reversed). PDF.js then returns the
+    // raw byte values, so each Hebrew letter (Win-1255 0xE0–0xFA) comes back as
+    // the Latin-1 char at that code point — e.g. "לכבוד" → "ãåáëì" (gibberish).
+    // This is NOT random gibberish: it is perfectly recoverable WITHOUT OCR.
+    //   1) remap 0xE0–0xFA → Hebrew 0x05D0+(c−0xE0);
+    //   2) the run is in visual order → reverse it to logical order, mirroring
+    //      brackets () [] {} <> as we go;
+    //   3) re-reverse embedded LTR runs (digits / Latin) so numbers like 1986
+    //      and 01/12/22 read correctly again.
+    var _MIRROR = { '(' : ')', ')' : '(', '[' : ']', ']' : '[', '{' : '}', '}' : '{', '<' : '>', '>' : '<' };
+    var _HEB_RE = /[א-ת]/;
+    function _remap1255(s) {
+      var o = '';
+      for (var i = 0; i < s.length; i++) {
+        var c = s.charCodeAt(i);
+        o += (c >= 0xE0 && c <= 0xFA) ? String.fromCharCode(0x05D0 + (c - 0xE0)) : s[i];
+      }
+      return o;
+    }
+    function _fixVisualHebrew(str) {
+      var f = _remap1255(str);
+      if (!_HEB_RE.test(f)) return f;               // pure number/Latin item — leave as-is
+      var r = f.split('').reverse().map(function (ch) { return _MIRROR[ch] || ch; }).join('');
+      // restore internal order of digit / Latin runs reversed by the line flip
+      return r.replace(/[0-9A-Za-z]+/g, function (m) { return m.split('').reverse().join(''); });
+    }
+    // Detect the legacy encoding: >50% of "letter" bytes fall in the Win-1255
+    // Hebrew range (0xE0–0xFA). Real Unicode Hebrew (0x05D0+) and plain English
+    // never trip this, so well-formed PDFs keep the normal extraction path.
+    function _detectVisualHebrew(items) {
+      var heb = 0, tot = 0;
+      for (var i = 0; i < items.length; i++) {
+        var s = items[i].str || '';
+        for (var k = 0; k < s.length; k++) {
+          var c = s.charCodeAt(k);
+          if (c >= 0x41) { tot++; if (c >= 0xE0 && c <= 0xFA) heb++; }
+        }
+      }
+      return tot > 20 && (heb / tot) > 0.5;
+    }
+
     // Reconstruct lines from PDF text items by grouping items with similar
     // baseline Y. Within a line sort by X. PDF origin is bottom-left, so we
     // sort lines by Y descending afterwards. Each part also carries an
@@ -775,6 +818,62 @@
       return html;
     }
 
+    // Dedicated builder for legacy Win-1255 / visual-order Hebrew pages. Groups
+    // items into lines by Y, orders each line right-to-left (X descending =
+    // logical RTL), recovers the real Hebrew per item, and merges lines into
+    // paragraphs on large Y gaps. Images are interleaved by Y like _pageToHtml.
+    function _pageToHtmlVisualHebrew(items, images, pageWidth) {
+      var srcLines = [];
+      (items || []).forEach(function (it) {
+        if (!it.str) return;
+        var t = it.transform || [1,0,0,1,0,0];
+        var x = t[4], y = t[5];
+        var fh = Math.abs(t[0]) || it.height || 10;
+        var L = null;
+        for (var j = srcLines.length - 1; j >= 0 && j >= srcLines.length - 6; j--) {
+          if (Math.abs(srcLines[j].y - y) <= ((srcLines[j].h + fh) / 2) * 0.5) { L = srcLines[j]; break; }
+        }
+        if (L) { L.parts.push({ str: it.str, x: x }); if (fh > L.h) L.h = fh; }
+        else srcLines.push({ y: y, h: fh, parts: [{ str: it.str, x: x }] });
+      });
+      srcLines.forEach(function (L) {
+        L.parts.sort(function (a, b) { return b.x - a.x; });   // RTL logical order
+        L.text = L.parts.map(function (p) { return _fixVisualHebrew(p.str); })
+                        .join(' ').replace(/[ \t]+/g, ' ').trim();
+      });
+
+      var blocks = [];
+      (images || []).forEach(function (im) { blocks.push({ kind: 'image', y: im.y + im.height, image: im }); });
+      srcLines.forEach(function (L) { blocks.push({ kind: 'line', y: L.y, line: L }); });
+      blocks.sort(function (a, b) { return b.y - a.y; });
+
+      var html = '', para = [], prevY = null, prevH = 12;
+      function flush() {
+        if (!para.length) return;
+        html += '<p dir="rtl" style="unicode-bidi:plaintext;direction:rtl;text-align:right;line-height:1.7;margin:0 0 8px;">' +
+                para.join('<br>') + '</p>';
+        para = [];
+      }
+      blocks.forEach(function (b) {
+        if (b.kind === 'image') {
+          flush();
+          var im = b.image;
+          var dispW = im.width ? Math.min(680, Math.round(im.width)) : 480;
+          html += '<p style="text-align:center;margin:14px 0;"><img width="' + dispW +
+                  '" src="' + im.dataUrl + '" style="width:' + dispW + 'px;max-width:100%;height:auto;" /></p>';
+          prevY = im.y; prevH = im.height;
+          return;
+        }
+        var L = b.line;
+        if (!L.text) { prevY = L.y; prevH = L.h; return; }
+        if (prevY !== null && (prevY - L.y) > prevH * 1.8) flush();   // paragraph break on big gap
+        para.push(_escHtml(L.text));
+        prevY = L.y; prevH = L.h;
+      });
+      flush();
+      return html;
+    }
+
     async function processFile(file) {
       if (!file) return;
       if (!window.pdfjsLib) { status.textContent = 'ספריית PDF לא נטענה'; return; }
@@ -865,12 +964,20 @@
         // clearly instead of producing a near-empty "editable" document.
         const totalTextChars = allItems.reduce(function (s, it) { return s + ((it.str || '').length); }, 0);
         const isImageOnly = totalTextChars < 12;
+        // Legacy Hebrew (Windows-1255 + visual order) needs a different builder
+        // that recovers the real Unicode Hebrew and re-orders it logically.
+        const isVisualHebrew = !isImageOnly && _detectVisualHebrew(allItems);
 
         status.textContent = 'בונה את מסמך ה-Word…';
         for (let i = 1; i <= n; i++) {
           bar.style.width = (55 + (i / n) * 40) + '%';
-          const lines = _buildLinesFromItems(perPageItems[i - 1]);
-          const pageHtml = _pageToHtml(lines, perPageImages[i - 1], bodySize, perPageWidth[i - 1]);
+          let pageHtml;
+          if (isVisualHebrew) {
+            pageHtml = _pageToHtmlVisualHebrew(perPageItems[i - 1], perPageImages[i - 1], perPageWidth[i - 1]);
+          } else {
+            const lines = _buildLinesFromItems(perPageItems[i - 1]);
+            pageHtml = _pageToHtml(lines, perPageImages[i - 1], bodySize, perPageWidth[i - 1]);
+          }
           if (n > 1) {
             html += '<p style="font-size:11px;color:#888;text-align:center;margin:20px 0 10px;direction:ltr;">— page ' + i + ' / ' + n + ' —</p>';
           }
@@ -912,6 +1019,9 @@
           status.innerHTML = 'ℹ️ ל-PDF זה <strong>אין שכבת טקסט</strong> (הוא מורכב מתמונות סרוקות) — לכן אי אפשר לחלץ ממנו טקסט נערך. ' +
             'הורד קובץ Word עם תמונות העמודים. <strong>לטקסט נערך</strong>: ייצא את המסמך המקורי ל-Word ישירות (למשל מתוך "ייצוא ל-Word" במחברת).';
           status.style.color = 'var(--ink)';
+        } else if (isVisualHebrew) {
+          status.textContent = '✓ חולץ ' + n + ' עמודים — זוהה קידוד עברי ישן (Windows-1255) ושוחזר לטקסט נערך — הורד ' + file.name.replace(/\.pdf$/i, '.doc');
+          status.style.color = 'var(--sage-deep)';
         } else {
           status.textContent = '✓ חולץ ' + n + ' עמודים עם טקסט נערך, צבעים, הדגשות ותמונות — הורד ' + file.name.replace(/\.pdf$/i, '.doc');
           status.style.color = 'var(--sage-deep)';
