@@ -7,6 +7,16 @@
   // handles 1bpp packed grayscale, RGB/RGBA, ImageBitmap (JPEG/DCT) and
   // stencil masks instead of scrambling them.
   //
+  // It ALSO reconstructs FLOW LAYOUT (reflowable, fully editable — never
+  // absolute boxes): per-paragraph ALIGNMENT (right/center/left/justify),
+  // HEADING levels (font-size ratio), BOLD/ITALIC runs, and — crucially —
+  // two-column / "label ...... value" rows become real Word TABLES so the
+  // columns line up while the text stays editable. This is the pdf2docx /
+  // Solid-Documents "reflowable" strategy expressed as MSO HTML, working
+  // hand-in-hand with the Windows-1255 visual-Hebrew recovery (text is
+  // recovered PER ITEM before any geometry is consumed, so column/alignment
+  // math sees real Hebrew and logical RTL order = X descending).
+  //
   // Output is a self-contained HTML document served as a Blob with MIME
   // 'application/msword' + UTF-8 BOM, downloaded as "<name>.doc". Word opens
   // it as a fully editable RTL document (text stays selectable/editable).
@@ -155,7 +165,13 @@
     // sort lines by Y descending afterwards. Each part also carries an
     // operator-order index (so we can align it with the color timeline) which
     // is filled in by the caller before calling this.
-    function _buildLinesFromItems(items) {
+    //
+    // `recoverHebrew` (optional): when true, each part's `str` is recovered
+    // through _fixVisualHebrew up front, and the part is flagged visualHebrew
+    // so downstream emitters keep RTL logical order (= X descending). All
+    // geometry (x/width/fontSize/bold/italic) is encoding-independent, so the
+    // SAME line model drives both the normal and the visual-Hebrew paths.
+    function _buildLinesFromItems(items, recoverHebrew) {
       var lines = [];   // [{ y, h, parts: [...] }]
       const Y_TOLERANCE_FACTOR = 0.5;  // items within 0.5×height share a line
       items.forEach(function(it) {
@@ -164,15 +180,25 @@
         var t = it.transform || [1,0,0,1,0,0];
         var x = t[4], y = t[5];
         var fontSize = Math.abs(t[0]) || it.height || 10;
+        // width can be 0 for synthetic/visual fonts — estimate from glyph count
+        // so gap/alignment math doesn't see every line as one giant token.
+        var rawStr = it.str;
+        var str = recoverHebrew ? _fixVisualHebrew(rawStr) : rawStr;
+        var width = it.width || 0;
+        if (!width && str) width = str.length * fontSize * 0.5;
+        // synthetic-italic detection from transform shear (some embedded fonts
+        // carry no "italic" in the name); also a fallback for bold via name.
+        var shear = Math.abs(t[1]) + Math.abs(t[2]);
         var part = {
-          str: it.str,
+          str: str,
           x: x,
           y: y,
           fontSize: fontSize,
           bold: _fontIsBold(it.fontName),
-          italic: _fontIsItalic(it.fontName),
-          width: it.width || 0,
+          italic: _fontIsItalic(it.fontName) || (shear > 0.05 && Math.abs(t[0]) > 0),
+          width: width,
           hasEOL: !!it.hasEOL,
+          visualHebrew: !!recoverHebrew,
           // color/bg are assigned later from the operator-list correlation;
           // default to no color (black text) and no highlight.
           color: it.__color || null,   // {r,g,b} or null (=> black)
@@ -193,19 +219,32 @@
       });
       lines.sort(function(a, b) { return b.y - a.y; });
       lines.forEach(function(L) {
+        // Geometry order is ALWAYS X ascending; recovery already produced
+        // logical RTL per item, and gap/column math works on physical X.
+        // For RENDERING the visual-Hebrew line, the emitter re-sorts X
+        // descending so logical RTL reading order is preserved.
         L.parts.sort(function(a, b) { return a.x - b.x; });
       });
       return lines;
     }
 
+    // Body font size = MODE of rounded glyph sizes across the document (more
+    // stable than the median when a page has many headings).
     function _bodyFontSize(lines) {
-      var sizes = [];
+      var counts = {};
+      var best = 0, bestN = 0, total = 0;
       lines.forEach(function(L) {
-        L.parts.forEach(function(p) { if (p.fontSize > 0) sizes.push(p.fontSize); });
+        L.parts.forEach(function(p) {
+          if (p.fontSize > 0) {
+            var r = Math.round(p.fontSize);
+            counts[r] = (counts[r] || 0) + 1;
+            total++;
+            if (counts[r] > bestN) { bestN = counts[r]; best = r; }
+          }
+        });
       });
-      if (!sizes.length) return 10;
-      sizes.sort(function(a, b){ return a - b; });
-      return sizes[Math.floor(sizes.length / 2)];
+      if (!total) return 10;
+      return best || 10;
     }
 
     // Convert a line's parts to inline HTML. Adjacent parts with identical
@@ -222,17 +261,35 @@
              colEq(a.color, b.color) && colEq(a.bg, b.bg);
     }
 
-    function _lineToHtml(parts) {
+    // Strip dot-leaders / underscore fills (form leaders) from a run of text.
+    function _stripLeaders(s) {
+      return String(s).replace(/[.·․‥…_]{4,}/g, ' ').replace(/[ \t]{2,}/g, ' ');
+    }
+
+    // Render parts → inline HTML. `rtlOrder` reverses the gap/visual logic for
+    // visual-Hebrew lines: parts are emitted X DESCENDING (logical RTL) and a
+    // gap is measured on the RTL side.
+    function _lineToHtml(parts, rtlOrder) {
       if (!parts.length) return '';
+      var ordered = parts;
+      if (rtlOrder) {
+        ordered = parts.slice().sort(function(a, b) { return b.x - a.x; });
+      }
       // Merge adjacent same-format runs, tracking gap-spaces between them.
       var runs = [];
       var prev = null;
-      parts.forEach(function(p) {
+      ordered.forEach(function(p) {
         var text = p.str;
         var leadSpace = '';
         if (prev) {
-          var prevEnd = prev.x + (prev.width || 0);
-          var gap = p.x - prevEnd;
+          var gap;
+          if (rtlOrder) {
+            // prev is to the RIGHT of p (larger x); gap = prev.x - (p.x+p.width)
+            gap = prev.x - (p.x + (p.width || 0));
+          } else {
+            var prevEnd = prev.x + (prev.width || 0);
+            gap = p.x - prevEnd;
+          }
           if (gap > prev.fontSize * 0.25 && !/\s$/.test(prev.str) && !/^\s/.test(text)) {
             leadSpace = ' ';
           }
@@ -268,13 +325,44 @@
       return out;
     }
 
-    function _lineTag(line, bodySize) {
-      var maxSize = 0;
-      line.parts.forEach(function(p) { if (p.fontSize > maxSize) maxSize = p.fontSize; });
+    // ── Per-line geometry helpers ────────────────────────────────────────
+    function _lineLeft(L) {
+      var m = Infinity;
+      L.parts.forEach(function(p) { if (p.x < m) m = p.x; });
+      return m;
+    }
+    function _lineRight(L) {
+      var m = -Infinity;
+      L.parts.forEach(function(p) { var e = p.x + (p.width || 0); if (e > m) m = e; });
+      return m;
+    }
+    function _lineMaxSize(L) {
+      var s = 0;
+      L.parts.forEach(function(p) { if (p.fontSize > s) s = p.fontSize; });
+      return s;
+    }
+    function _lineAllBold(L) {
+      if (!L.parts.length) return false;
+      return L.parts.every(function(p) { return p.bold || !/\S/.test(p.str); });
+    }
+    function _lineText(L) {
+      return L.parts.map(function(p) { return p.str; }).join('');
+    }
+
+    // Heading level from font-size ratio, guarded so big *paragraphs* don't
+    // become headings: require the line to be SHORT (< 0.8 of the block) OR
+    // bold. Also promote narrow bold lines slightly larger than body to h3.
+    function _lineTag(L, bodySize, blockW) {
+      var maxSize = _lineMaxSize(L);
       var ratio = bodySize > 0 ? maxSize / bodySize : 1;
-      if (ratio >= 1.85) return 'h1';
-      if (ratio >= 1.55) return 'h2';
-      if (ratio >= 1.25) return 'h3';
+      var lineW = _lineRight(L) - _lineLeft(L);
+      var shortLine = !blockW || lineW < blockW * 0.8;
+      var bold = _lineAllBold(L);
+      var headingOK = shortLine || bold;
+      if (ratio >= 1.85 && headingOK) return 'h1';
+      if (ratio >= 1.55 && headingOK) return 'h2';
+      if (ratio >= 1.25 && headingOK) return 'h3';
+      if (bold && ratio >= 1.12 && shortLine) return 'h3';  // Hebrew sub-headers
       return 'p';
     }
 
@@ -285,7 +373,10 @@
 
     function _detectListType(line) {
       if (!line.parts.length) return null;
-      var firstStr = line.parts[0].str || '';
+      // For visual-Hebrew lines the logical-first token is the RIGHTMOST one.
+      var firstStr = (line.parts[0].visualHebrew
+        ? line.parts.slice().sort(function(a,b){ return b.x - a.x; })[0].str
+        : line.parts[0].str) || '';
       if (_BULLET_RE.test(firstStr)) return 'ul';
       if (_NUMBER_RE.test(firstStr)) return 'ol';
       if (_HEB_NUM_RE.test(firstStr)) return 'ol';
@@ -294,30 +385,223 @@
 
     function _stripListMarker(line) {
       if (!line.parts.length) return line;
-      var p0 = line.parts[0];
+      var rtl = line.parts[0].visualHebrew;
+      var newParts = line.parts.slice();
+      var idx = 0;
+      if (rtl) {
+        // logical-first = rightmost; find its index in the (X-asc) array
+        var maxX = -Infinity;
+        newParts.forEach(function(p, i) { if (p.x > maxX) { maxX = p.x; idx = i; } });
+      }
+      var p0 = newParts[idx];
       var stripped = (p0.str || '').replace(_BULLET_RE, '')
                                    .replace(_NUMBER_RE, '')
                                    .replace(_HEB_NUM_RE, '');
       if (stripped === p0.str) return line;
-      var newParts = line.parts.slice();
-      newParts[0] = Object.assign({}, p0, { str: stripped });
+      newParts[idx] = Object.assign({}, p0, { str: stripped });
       return Object.assign({}, line, { parts: newParts });
     }
 
-    function _isCentered(line, pageWidth) {
-      if (!line.parts.length || !pageWidth) return false;
-      var minX = Infinity, maxX = -Infinity;
-      line.parts.forEach(function(p) {
-        if (p.x < minX) minX = p.x;
-        var endX = p.x + (p.width || 0);
-        if (endX > maxX) maxX = endX;
+    // ── Alignment detection vs the TEXT-BLOCK frame ──────────────────────
+    // Returns 'right' | 'center' | 'left' | 'justify' | null (null = natural).
+    // Uses the block frame (min/max X over all body lines) rather than the
+    // physical page width, so a margined RTL body isn't mistaken for centered.
+    function _classifyAlign(L, frame, bodySize, isLastLine, rtl) {
+      var lineLeft = _lineLeft(L);
+      var lineRight = _lineRight(L);
+      if (!isFinite(lineLeft) || !isFinite(lineRight)) return null;
+      var blockW = frame.right - frame.left;
+      if (blockW <= 0) return null;
+      var lineWidth = lineRight - lineLeft;
+      var tol = Math.max(bodySize * 1.5, blockW * 0.04);
+      var leftGap = lineLeft - frame.left;
+      var rightGap = frame.right - lineRight;
+
+      // CENTER: both edges inset by a similar amount, line not full-width.
+      if (leftGap > tol && rightGap > tol &&
+          Math.abs(leftGap - rightGap) < tol && lineWidth < blockW * 0.9) {
+        return 'center';
+      }
+      if (rtl) {
+        // RTL natural = hugs the RIGHT edge.
+        if (rightGap <= tol) {
+          // JUSTIFY: a non-last line that also fills the LEFT edge.
+          if (!isLastLine && leftGap <= tol && lineWidth > blockW * 0.6) return 'justify';
+          return 'right';
+        }
+        // pushed to the far LEFT inside an RTL doc
+        if (leftGap <= tol && rightGap > 2 * tol) return 'left';
+        return 'right';
+      } else {
+        if (leftGap <= tol) {
+          if (!isLastLine && rightGap <= tol && lineWidth > blockW * 0.6) return 'justify';
+          return 'left';
+        }
+        if (rightGap <= tol && leftGap > 2 * tol) return 'right';
+        return 'left';
+      }
+    }
+
+    // ── Column / "label : value" table detection ─────────────────────────
+    // Split a line into cell fragments by wide X gaps and dot-leaders. Returns
+    // [{ x0, x1, parts }] in geometry (X-ascending) order.
+    function _splitLineCells(L, bodySize, pageWidth) {
+      var parts = L.parts.slice().sort(function(a, b) { return a.x - b.x; });
+      var fontSize = _lineMaxSize(L) || bodySize || 10;
+      var gapThresh = Math.max(2.5 * fontSize * 0.25 * 1, fontSize * 1.6, pageWidth * 0.06);
+      var cells = [];
+      var cur = null;
+      for (var i = 0; i < parts.length; i++) {
+        var p = parts[i];
+        var isLeader = /[.·․‥…_]{4,}/.test(p.str || '');
+        if (cur) {
+          var gap = p.x - (cur.x1);
+          if (gap > gapThresh || isLeader) {
+            cells.push(cur);
+            cur = null;
+          }
+        }
+        if (isLeader) {
+          // leader part is the separator itself; don't start a cell from it
+          continue;
+        }
+        if (!cur) {
+          cur = { x0: p.x, x1: p.x + (p.width || 0), parts: [p] };
+        } else {
+          cur.parts.push(p);
+          var e = p.x + (p.width || 0);
+          if (e > cur.x1) cur.x1 = e;
+        }
+      }
+      if (cur) cells.push(cur);
+      return cells;
+    }
+
+    // Cluster 1-D X positions into column centers (sort + merge).
+    function _clusterX(positions, tol) {
+      var sorted = positions.slice().sort(function(a, b) { return a - b; });
+      var clusters = [];
+      sorted.forEach(function(x) {
+        var last = clusters.length ? clusters[clusters.length - 1] : null;
+        if (last && (x - last.sum / last.n) <= tol) {
+          last.sum += x; last.n += 1;
+        } else {
+          clusters.push({ sum: x, n: 1 });
+        }
       });
-      if (!isFinite(minX) || !isFinite(maxX)) return false;
-      var lineMid = (minX + maxX) / 2;
-      var pageMid = pageWidth / 2;
-      var lineWidth = maxX - minX;
-      if (lineWidth > pageWidth * 0.7) return false;
-      return Math.abs(lineMid - pageMid) < pageWidth * 0.08;
+      return clusters.map(function(c) { return c.sum / c.n; });
+    }
+
+    // Given a group of consecutive candidate rows (each = {L, cells}), build a
+    // global column grid and emit a Word table, or return null if not a
+    // confident table. RTL emits columns rightmost-first (logical order).
+    function _buildTableHtml(rows, bodySize, pageWidth, rtl, rects, frame) {
+      if (rows.length < 2) return null;
+      // collect cell left-edge centers across all rows
+      var lefts = [];
+      rows.forEach(function(r) { r.cells.forEach(function(c) { lefts.push(c.x0); }); });
+      var tol = Math.max(bodySize * 1.2, pageWidth * 0.03);
+      var centers = _clusterX(lefts, tol);
+      if (centers.length < 2) return null;
+
+      // A column is "stable" if it receives a fragment in >=60% of rows.
+      function nearestCol(x) {
+        var bi = 0, bd = Infinity;
+        for (var i = 0; i < centers.length; i++) {
+          var d = Math.abs(x - centers[i]);
+          if (d < bd) { bd = d; bi = i; }
+        }
+        return bi;
+      }
+      var hits = centers.map(function() { return 0; });
+      rows.forEach(function(r) {
+        var seen = {};
+        r.cells.forEach(function(c) { seen[nearestCol(c.x0)] = true; });
+        Object.keys(seen).forEach(function(ci) { hits[ci]++; });
+      });
+      var stableIdx = [];
+      for (var i = 0; i < centers.length; i++) {
+        if (hits[i] >= rows.length * 0.6) stableIdx.push(i);
+      }
+      if (stableIdx.length < 2) return null;
+
+      // Re-map centers to only stable columns.
+      var stableCenters = stableIdx.map(function(i) { return centers[i]; });
+      function nearestStable(x) {
+        var bi = 0, bd = Infinity;
+        for (var i = 0; i < stableCenters.length; i++) {
+          var d = Math.abs(x - stableCenters[i]);
+          if (d < bd) { bd = d; bi = i; }
+        }
+        return bi;
+      }
+
+      // column order for output: RTL → rightmost source column first.
+      var order = stableCenters.map(function(_, i) { return i; });
+      if (rtl) order = order.slice().reverse();
+
+      // column widths (% of frame) from gaps between stable centers.
+      var blockW = (frame.right - frame.left) || pageWidth || 1;
+      var bounds = stableCenters.slice();
+      bounds.push(frame.right);                  // right edge of last column span
+      var widths = [];
+      for (var ci = 0; ci < stableCenters.length; ci++) {
+        var w = (bounds[ci + 1] - stableCenters[ci]);
+        widths.push(Math.max(5, Math.round((w / blockW) * 100)));
+      }
+
+      // LATTICE vs STREAM: look for ruling rectangles spanning row width.
+      var lattice = false;
+      if (rects && rects.length) {
+        var yTop = -Infinity, yBot = Infinity;
+        rows.forEach(function(r) {
+          if (r.L.y > yTop) yTop = r.L.y;
+          if (r.L.y < yBot) yBot = r.L.y;
+        });
+        for (var rr = 0; rr < rects.length && !lattice; rr++) {
+          var R = rects[rr];
+          var rw = R.x1 - R.x0, rh = R.y1 - R.y0;
+          // thin wide horizontal rule, or a tall thin vertical rule near grid
+          if ((rh <= 3 && rw > blockW * 0.4) || (rw <= 3 && rh > (yTop - yBot) * 0.4)) {
+            lattice = true;
+          }
+        }
+      }
+
+      var border = lattice ? '1px solid #000' : 'none';
+      var html = '<table dir="' + (rtl ? 'rtl' : 'ltr') + '" border="' + (lattice ? '1' : '0') +
+        '" cellspacing="0" cellpadding="0" style="border-collapse:collapse;width:100%;table-layout:fixed;' +
+        (rtl ? 'mso-table-dir:bidi;direction:rtl;' : 'direction:ltr;') + '">';
+
+      rows.forEach(function(r, ri) {
+        // assign fragments to stable columns
+        var byCol = stableCenters.map(function() { return null; });
+        r.cells.forEach(function(c) {
+          var idx = nearestStable(c.x0);
+          if (!byCol[idx]) byCol[idx] = c.parts.slice();
+          else byCol[idx] = byCol[idx].concat(c.parts);
+        });
+        html += '<tr>';
+        order.forEach(function(colIdx, outI) {
+          var frag = byCol[colIdx];
+          var widthAttr = (ri === 0) ? (' width="' + widths[colIdx] + '%"') : '';
+          var cellStyle = 'padding:2px 6px;border:' + border + ';vertical-align:top;' +
+            (rtl ? 'direction:rtl;text-align:right;' : 'text-align:left;') +
+            'unicode-bidi:plaintext;width:' + widths[colIdx] + '%;';
+          var inner;
+          if (frag && frag.length) {
+            inner = _lineToHtml(frag, rtl);
+            inner = _stripLeaders(inner);
+          } else {
+            inner = '&nbsp;';
+          }
+          if (!inner || !inner.replace(/&nbsp;|\s/g, '')) inner = '&nbsp;';
+          html += '<td' + widthAttr + ' style="' + cellStyle + '">' + inner + '</td>';
+        });
+        html += '</tr>';
+      });
+      html += '</table>';
+      return html;
     }
 
     // ── Matrix multiply (CTM tracking) ───────────────────────────────────
@@ -579,15 +863,20 @@
           // (a) reasonably wide and tall (spans a word/line), and (b) a non-black,
           // non-white fill. Thin/tiny rects (candles, wicks, rules) and pure
           // black/white fills are dropped at the source. We also cap the total.
+          //
+          // EXCEPTION: a thin WIDE rect is a table ruling line — keep it (it's
+          // the lattice-table signal) even though it's not a highlight.
           if (pendingRect && rects.length < 2500) {
             var rW = pendingRect.x1 - pendingRect.x0;
             var rH = pendingRect.y1 - pendingRect.y0;
             var rLum = 0.299 * fill.r + 0.587 * fill.g + 0.114 * fill.b;
-            if (rW >= 8 && rH >= 4 && rLum >= 30 && rLum <= 245 &&
-                !(fill.r >= 248 && fill.g >= 248 && fill.b >= 248)) {
+            var isRule = (rH <= 3 && rW >= 30) || (rW <= 3 && rH >= 12);
+            if (isRule ||
+                (rW >= 8 && rH >= 4 && rLum >= 30 && rLum <= 245 &&
+                 !(fill.r >= 248 && fill.g >= 248 && fill.b >= 248))) {
               rects.push({
                 x0: pendingRect.x0, y0: pendingRect.y0, x1: pendingRect.x1, y1: pendingRect.y1,
-                color: { r: fill.r, g: fill.g, b: fill.b }, order: i
+                color: { r: fill.r, g: fill.g, b: fill.b }, order: i, rule: isRule
               });
             }
           }
@@ -653,21 +942,6 @@
     // ── Correlate colors + highlight rects with text items ───────────────
     // Mutates each item, stamping it with __color (text fill) and __bg
     // (highlight background) which _buildLinesFromItems then reads.
-    //
-    // TEXT COLOR: PDF.js emits one showText op per getTextContent item (in
-    // the same order) for normal content in 3.x, so color[k] = timeline[k].
-    // If the counts mismatch (marked content / TJ-vs-Tj splitting), we fall
-    // back to the nearest preceding timeline entry by op order — and finally
-    // leave it black. Pure/near-black is treated as "no color".
-    //
-    // HIGHLIGHT: for each text bbox we look for a recorded fill-rect that
-    //   (1) was drawn BEFORE the text (rect.order < the run's showText order),
-    //   (2) overlaps >55% of the text bbox,
-    //   (3) is not too tall (height ≤ 2.2× line height — excludes section /
-    //       full-page backgrounds),
-    //   (4) has a non-black, non-white color (luminance 30–245),
-    //   (5) is not a page background (≤70% page width OR ≤50% page height).
-    // If several qualify we pick the smallest-area one (tightest highlight).
     function _correlate(items, walk, pageWidth, pageHeight) {
       var timeline = walk.colorTimeline;
       var rects = walk.rects;
@@ -684,8 +958,6 @@
         return { x0: x, y0: y - fh * 0.25, x1: x + wdt, y1: y + fh * 0.8, h: fh, wdt: wdt };
       }
 
-      // Precompute the showText op-order for each item (for the "before"
-      // test). When counts line up, item k corresponds to timeline[k].order.
       items.forEach(function(it, k) {
         var bb = bboxOf(it);
 
@@ -694,7 +966,6 @@
         if (sameLen) {
           col = timeline[k];
         } else if (timeline.length) {
-          // nearest preceding by index proportion as a coarse fallback
           var idx = Math.min(timeline.length - 1, Math.floor(k * timeline.length / Math.max(1, items.length)));
           col = timeline[idx];
         }
@@ -708,19 +979,15 @@
         var best = null, bestArea = Infinity;
         for (var ri = 0; ri < rects.length; ri++) {
           var R = rects[ri];
-          // (1) painted before the text
+          if (R.rule) continue;                 // ruling lines are not highlights
           if (R.order >= showOrder) continue;
-          // (4) color must be a real highlight (not black text, not white bg)
           var lum = _lum(R.color);
           if (lum < 30 || lum > 245) continue;
           if (_isNearWhite(R.color)) continue;
           var rw = R.x1 - R.x0, rh = R.y1 - R.y0;
           if (rw <= 0 || rh <= 0) continue;
-          // (5) reject page-background-sized rects
           if (pageWidth && pageHeight && rw > pageWidth * 0.7 && rh > pageHeight * 0.5) continue;
-          // (3) reject tall section fills
           if (rh > bb.h * 2.2) continue;
-          // (2) overlap area > 55% of the text bbox
           var ox = Math.max(0, Math.min(bb.x1, R.x1) - Math.max(bb.x0, R.x0));
           var oy = Math.max(0, Math.min(bb.y1, R.y1) - Math.max(bb.y0, R.y0));
           var overlap = ox * oy;
@@ -733,79 +1000,173 @@
       return items;
     }
 
-    // Page → HTML, interleaving images with text by Y so figures land near
-    // their source position. (Structure logic preserved from the heuristic
-    // version; runs now also carry color/bg.)
-    function _pageToHtml(lines, images, bodySize, pageWidth) {
+    // ── Compute the text-block frame (min/max X over body lines) ──────────
+    function _blockFrame(lines, bodySize) {
+      var left = Infinity, right = -Infinity;
+      lines.forEach(function(L) {
+        var l = _lineLeft(L), r = _lineRight(L);
+        if (isFinite(l) && l < left) left = l;
+        if (isFinite(r) && r > right) right = r;
+      });
+      if (!isFinite(left) || !isFinite(right)) { left = 0; right = 0; }
+      return { left: left, right: right };
+    }
+
+    // ── Unified page emitter (flow + alignment + headings + tables) ───────
+    // `rtl` true for visual-Hebrew pages (logical RTL = X descending). The
+    // SAME pipeline drives both paths; the only differences are the RTL flag,
+    // run ordering, and default paragraph direction.
+    function _emitPage(lines, images, bodySize, pageWidth, rtl, rects) {
+      var frame = _blockFrame(lines, bodySize);
+      var blockW = (frame.right - frame.left) || pageWidth || 1;
+
+      // Pre-classify each line: tag (p/h*), align, list type, cells.
+      var lineInfos = lines.map(function(L, i) {
+        var listType = _detectListType(L);
+        var tag = listType ? 'p' : _lineTag(L, bodySize, blockW);
+        var cells = (tag === 'p' && !listType) ? _splitLineCells(L, bodySize, pageWidth) : [];
+        return { L: L, tag: tag, listType: listType, cells: cells };
+      });
+
+      // Decide "last line of paragraph" for justify: a line is last if the
+      // next line starts a big vertical gap, has a different tag, or is a list.
+      function isLastOfPara(idx) {
+        if (idx >= lineInfos.length - 1) return true;
+        var cur = lineInfos[idx], nxt = lineInfos[idx + 1];
+        if (nxt.listType || nxt.tag !== cur.tag) return true;
+        var gap = cur.L.y - nxt.L.y;
+        var h = cur.L.h || bodySize;
+        return gap > h * 1.4;
+      }
+
+      // Build draw blocks interleaved with images by Y.
       var blocks = [];
-      images.forEach(function(im) {
+      (images || []).forEach(function(im) {
         blocks.push({ kind: 'image', y: im.y + im.height, image: im });
       });
-      lines.forEach(function(L) {
-        blocks.push({ kind: 'line', y: L.y, line: L });
+      lineInfos.forEach(function(info, i) {
+        blocks.push({ kind: 'line', y: info.L.y, info: info, idx: i });
       });
       blocks.sort(function(a, b) { return b.y - a.y; });
 
       var html = '';
-      var openTag = null, openParts = [], openCentered = false;
+      var openTag = null, openParts = [], openAlign = null;
       var listType = null, listItems = [];
       var prevY = null, prevH = bodySize;
 
+      function alignStyle(a) {
+        if (a === 'center') return 'text-align:center;';
+        if (a === 'justify') return 'text-align:justify;text-justify:inter-word;';
+        if (a === 'left') return 'text-align:left;';
+        if (a === 'right') return 'text-align:right;';
+        return '';
+      }
+
       function flushPara() {
-        if (!openTag || !openParts.length) { openTag = null; openParts = []; openCentered = false; return; }
+        if (!openTag || !openParts.length) { openTag = null; openParts = []; openAlign = null; return; }
         var inner = openParts.join('<br>');
-        var style = 'unicode-bidi:plaintext;direction:auto;margin:0 0 8px;';
+        var style = 'unicode-bidi:plaintext;direction:' + (rtl ? 'rtl' : 'auto') + ';margin:0 0 8px;';
         if (openTag === 'p') style += 'line-height:1.7;';
-        if (openCentered) style += 'text-align:center;';
-        html += '<' + openTag + ' style="' + style + '">' + inner + '</' + openTag + '>';
-        openTag = null; openParts = []; openCentered = false;
+        style += alignStyle(openAlign);
+        var dirAttr = rtl ? ' dir="rtl"' : '';
+        html += '<' + openTag + dirAttr + ' style="' + style + '">' + inner + '</' + openTag + '>';
+        openTag = null; openParts = []; openAlign = null;
       }
       function flushList() {
         if (!listType || !listItems.length) { listType = null; listItems = []; return; }
         var lis = listItems.map(function(it) {
-          return '<li style="unicode-bidi:plaintext;direction:auto;line-height:1.7;margin-bottom:4px;">' + it + '</li>';
+          return '<li style="unicode-bidi:plaintext;direction:' + (rtl ? 'rtl' : 'auto') +
+            ';line-height:1.7;margin-bottom:4px;">' + it + '</li>';
         }).join('');
-        html += '<' + listType + ' style="margin:8px 0;padding-right:28px;padding-left:0;">' + lis + '</' + listType + '>';
+        var listStyle = 'margin:8px 0;' + (rtl ? 'padding-right:28px;padding-left:0;' : 'padding-left:28px;padding-right:0;');
+        html += '<' + listType + ' style="' + listStyle + '">' + lis + '</' + listType + '>';
         listType = null; listItems = [];
       }
       function flushAll() { flushPara(); flushList(); }
+
+      // We process line-blocks in document Y order, but TABLE detection needs
+      // to look ahead over consecutive multi-cell rows. So pre-scan the Y-sorted
+      // line blocks to mark table groups.
+      var lineBlocks = blocks.filter(function(b) { return b.kind === 'line'; });
+      // assign a stable key to each line block so tableGroupOf can reference it
+      lineBlocks.forEach(function(b, i) { b._k = i; });
+      var tableGroupOf = {};   // block key → group id
+      var tableRows = {};      // gid -> [{L, cells}]
+      (function detectTables() {
+        var gid = 0, i = 0;
+        while (i < lineBlocks.length) {
+          var info = lineBlocks[i].info;
+          var isRow = info.tag === 'p' && !info.listType && info.cells.length >= 2;
+          if (!isRow) { i++; continue; }
+          var j = i, group = [];
+          while (j < lineBlocks.length) {
+            var inf = lineBlocks[j].info;
+            if (!(inf.tag === 'p' && !inf.listType && inf.cells.length >= 2)) break;
+            group.push(lineBlocks[j]);
+            j++;
+          }
+          if (group.length >= 2) {
+            gid++;
+            tableRows[gid] = group.map(function(b) { return { L: b.info.L, cells: b.info.cells }; });
+            group.forEach(function(b) { tableGroupOf[b._k] = gid; });
+          }
+          i = j > i ? j : i + 1;
+        }
+      })();
+      var emittedGroup = {};
 
       blocks.forEach(function(b) {
         if (b.kind === 'image') {
           flushAll();
           var im = b.image;
-          // Word ignores % width on <img> — give it a px width so big scans
-          // don't overflow, capped to the content area (~680px).
           var dispW = im.width ? Math.min(680, Math.round(im.width)) : 480;
           html += '<p style="text-align:center;margin:14px 0;"><img width="' + dispW +
                   '" src="' + im.dataUrl + '" style="width:' + dispW + 'px;max-width:100%;height:auto;" /></p>';
-          prevY = im.y;
-          prevH = im.height;
+          prevY = im.y; prevH = im.height;
           return;
         }
 
-        var L = b.line;
+        var info = b.info;
+        var L = info.L;
 
-        var lt = _detectListType(L);
-        if (lt) {
+        // ── Table group? emit the whole table once, then skip its rows ──
+        var gid = tableGroupOf[b._k];
+        if (gid) {
+          if (emittedGroup[gid]) { prevY = L.y; prevH = L.h; return; }
+          var tHtml = _buildTableHtml(tableRows[gid], bodySize, pageWidth, rtl, rects, frame);
+          if (tHtml) {
+            flushAll();
+            html += tHtml;
+            emittedGroup[gid] = true;
+            tableRows[gid].forEach(function(r) { if (prevY === null || r.L.y < prevY) prevY = r.L.y; });
+            prevH = L.h;
+            return;
+          }
+          // table not confident → fall through as ordinary paragraphs
+          emittedGroup[gid] = 'fallback';
+        }
+
+        // ── List item ──
+        if (info.listType) {
           flushPara();
           var stripped = _stripListMarker(L);
-          var liHtml = _lineToHtml(stripped.parts);
-          if (!liHtml.trim()) return;
-          if (listType === lt) {
+          var liHtml = _lineToHtml(stripped.parts, rtl);
+          if (!liHtml.trim()) { prevY = L.y; prevH = L.h; return; }
+          if (listType === info.listType) {
             listItems.push(liHtml);
           } else {
             flushList();
-            listType = lt;
+            listType = info.listType;
             listItems = [liHtml];
           }
           prevY = L.y; prevH = L.h;
           return;
         }
 
+        // continuation of a list paragraph spanning lines
         if (listType && listItems.length) {
           if (prevY !== null && (prevY - L.y) < prevH * 1.6) {
-            var contHtml = _lineToHtml(L.parts);
+            var contHtml = _lineToHtml(L.parts, rtl);
             if (contHtml.trim()) {
               listItems[listItems.length - 1] += ' ' + contHtml;
               prevY = L.y; prevH = L.h;
@@ -815,10 +1176,11 @@
           flushList();
         }
 
-        var tag = _lineTag(L, bodySize);
-        var centered = _isCentered(L, pageWidth);
-        var inlineHtml = _lineToHtml(L.parts);
-        if (!inlineHtml.trim()) return;
+        // ── Ordinary paragraph / heading line ──
+        var tag = info.tag;
+        var align = _classifyAlign(L, frame, bodySize, isLastOfPara(b.idx), rtl);
+        var inlineHtml = _lineToHtml(L.parts, rtl);
+        if (!inlineHtml.trim()) { prevY = L.y; prevH = L.h; return; }
 
         var gapBreak = false;
         if (prevY !== null) {
@@ -826,12 +1188,15 @@
           if (gap > prevH * 1.4) gapBreak = true;
         }
 
-        if (openTag !== tag || openCentered !== centered || gapBreak) {
+        if (openTag !== tag || gapBreak) {
           flushPara();
           openTag = tag;
-          openCentered = centered;
+          openAlign = align;
           openParts = [inlineHtml];
         } else {
+          // merge into the current paragraph; majority alignment (ties → side)
+          if (align && align !== 'justify') openAlign = openAlign || align;
+          if (align === 'justify') openAlign = 'justify';
           openParts.push(inlineHtml);
         }
         prevY = L.y; prevH = L.h;
@@ -841,60 +1206,17 @@
       return html;
     }
 
-    // Dedicated builder for legacy Win-1255 / visual-order Hebrew pages. Groups
-    // items into lines by Y, orders each line right-to-left (X descending =
-    // logical RTL), recovers the real Hebrew per item, and merges lines into
-    // paragraphs on large Y gaps. Images are interleaved by Y like _pageToHtml.
-    function _pageToHtmlVisualHebrew(items, images, pageWidth) {
-      var srcLines = [];
-      (items || []).forEach(function (it) {
-        if (!it.str) return;
-        var t = it.transform || [1,0,0,1,0,0];
-        var x = t[4], y = t[5];
-        var fh = Math.abs(t[0]) || it.height || 10;
-        var L = null;
-        for (var j = srcLines.length - 1; j >= 0 && j >= srcLines.length - 6; j--) {
-          if (Math.abs(srcLines[j].y - y) <= ((srcLines[j].h + fh) / 2) * 0.5) { L = srcLines[j]; break; }
-        }
-        if (L) { L.parts.push({ str: it.str, x: x }); if (fh > L.h) L.h = fh; }
-        else srcLines.push({ y: y, h: fh, parts: [{ str: it.str, x: x }] });
-      });
-      srcLines.forEach(function (L) {
-        L.parts.sort(function (a, b) { return b.x - a.x; });   // RTL logical order
-        L.text = L.parts.map(function (p) { return _fixVisualHebrew(p.str); })
-                        .join(' ').replace(/[ \t]+/g, ' ').trim();
-      });
+    // Normal (already-Unicode) editable path.
+    function _pageToHtml(lines, images, bodySize, pageWidth, rects) {
+      return _emitPage(lines, images, bodySize, pageWidth, false, rects);
+    }
 
-      var blocks = [];
-      (images || []).forEach(function (im) { blocks.push({ kind: 'image', y: im.y + im.height, image: im }); });
-      srcLines.forEach(function (L) { blocks.push({ kind: 'line', y: L.y, line: L }); });
-      blocks.sort(function (a, b) { return b.y - a.y; });
-
-      var html = '', para = [], prevY = null, prevH = 12;
-      function flush() {
-        if (!para.length) return;
-        html += '<p dir="rtl" style="unicode-bidi:plaintext;direction:rtl;text-align:right;line-height:1.7;margin:0 0 8px;">' +
-                para.join('<br>') + '</p>';
-        para = [];
-      }
-      blocks.forEach(function (b) {
-        if (b.kind === 'image') {
-          flush();
-          var im = b.image;
-          var dispW = im.width ? Math.min(680, Math.round(im.width)) : 480;
-          html += '<p style="text-align:center;margin:14px 0;"><img width="' + dispW +
-                  '" src="' + im.dataUrl + '" style="width:' + dispW + 'px;max-width:100%;height:auto;" /></p>';
-          prevY = im.y; prevH = im.height;
-          return;
-        }
-        var L = b.line;
-        if (!L.text) { prevY = L.y; prevH = L.h; return; }
-        if (prevY !== null && (prevY - L.y) > prevH * 1.8) flush();   // paragraph break on big gap
-        para.push(_escHtml(L.text));
-        prevY = L.y; prevH = L.h;
-      });
-      flush();
-      return html;
+    // Visual-Hebrew editable path. Text is recovered PER ITEM in
+    // _buildLinesFromItems(items, true); here we just run the same flow
+    // pipeline with the RTL flag set.
+    function _pageToHtmlVisualHebrew(items, images, bodySize, pageWidth, rects) {
+      var lines = _buildLinesFromItems(items, true);
+      return _emitPage(lines, images, bodySize, pageWidth, true, rects);
     }
 
     async function processFile(file) {
@@ -954,6 +1276,7 @@
         const perPageItems   = new Array(n);
         const perPageImages  = new Array(n);
         const perPageWidth   = new Array(n);
+        const perPageRects   = new Array(n);
         const CONCURRENCY    = 6;
         let nextPage         = 1;
         let donePages        = 0;
@@ -1007,6 +1330,7 @@
             perPageItems[myIdx - 1]  = items;
             perPageImages[myIdx - 1] = images;
             perPageWidth[myIdx - 1]  = pageW;
+            perPageRects[myIdx - 1]  = walk ? walk.rects : [];
             donePages++;
             bar.style.width = (5 + (donePages / n) * 50) + '%';
             status.textContent = 'מנתח עמוד ' + donePages + ' / ' + n + '…';
@@ -1037,10 +1361,10 @@
           bar.style.width = (55 + (i / n) * 40) + '%';
           let pageHtml;
           if (isVisualHebrew) {
-            pageHtml = _pageToHtmlVisualHebrew(perPageItems[i - 1], perPageImages[i - 1], perPageWidth[i - 1]);
+            pageHtml = _pageToHtmlVisualHebrew(perPageItems[i - 1], perPageImages[i - 1], bodySize, perPageWidth[i - 1], perPageRects[i - 1]);
           } else {
             const lines = _buildLinesFromItems(perPageItems[i - 1]);
-            pageHtml = _pageToHtml(lines, perPageImages[i - 1], bodySize, perPageWidth[i - 1]);
+            pageHtml = _pageToHtml(lines, perPageImages[i - 1], bodySize, perPageWidth[i - 1], perPageRects[i - 1]);
           }
           if (n > 1) {
             html += '<p style="font-size:11px;color:#888;text-align:center;margin:20px 0 10px;direction:ltr;">— page ' + i + ' / ' + n + ' —</p>';
@@ -1066,6 +1390,8 @@
           "  h3 { font-size:13pt; font-weight:bold; margin:10px 0 6px; }",
           "  p  { font-size:12pt; line-height:1.7; margin:0 0 8px; }",
           "  p, h1, h2, h3, li { unicode-bidi: plaintext; direction: auto; text-align: right; }",
+          "  table { border-collapse:collapse; width:100%; margin:8px 0; }",
+          "  td { font-size:12pt; vertical-align:top; }",
           "  strong { font-weight: bold; }",
           "  em { font-style: italic; }",
           "  img { max-width:100%; height:auto; }",
@@ -1085,10 +1411,10 @@
             'הורד קובץ Word עם תמונות העמודים. <strong>לטקסט נערך</strong>: ייצא את המסמך המקורי ל-Word ישירות (למשל מתוך "ייצוא ל-Word" במחברת).';
           status.style.color = 'var(--ink)';
         } else if (isVisualHebrew) {
-          status.textContent = '✓ חולץ ' + n + ' עמודים — זוהה קידוד עברי ישן (Windows-1255) ושוחזר לטקסט נערך — הורד ' + file.name.replace(/\.pdf$/i, '.doc');
+          status.textContent = '✓ חולץ ' + n + ' עמודים — זוהה קידוד עברי ישן (Windows-1255) ושוחזר לטקסט נערך עם שמירת מבנה (יישור, כותרות, טבלאות) — הורד ' + file.name.replace(/\.pdf$/i, '.doc');
           status.style.color = 'var(--sage-deep)';
         } else {
-          status.textContent = '✓ חולץ ' + n + ' עמודים עם טקסט נערך, צבעים, הדגשות ותמונות — הורד ' + file.name.replace(/\.pdf$/i, '.doc');
+          status.textContent = '✓ חולץ ' + n + ' עמודים עם טקסט נערך, יישור, כותרות, טבלאות, צבעים והדגשות — הורד ' + file.name.replace(/\.pdf$/i, '.doc');
           status.style.color = 'var(--sage-deep)';
         }
       } catch (e) {
@@ -1127,7 +1453,7 @@
       ]),
       fileInput, zone, optsRow, status, bar,
       App.el('p', { style: { fontSize: '12px', color: 'var(--ink-mute)', margin: '10px 0 0', lineHeight: '1.6' } },
-        '✨ בחר מצב: "טקסט נערך" — מחלץ טקסט לעריכה (כולל שחזור עברית מקודדת ישנה Windows-1255), עם שמירת מבנה מקורבת. "מראה מדויק" — כל עמוד כתמונה, עיצוב זהה ל-100% למקור, אך לא ניתן לעריכה. לעיצוב רשמי מדויק בחר "מראה מדויק"; לעריכת תוכן בחר "טקסט נערך".')
+        '✨ בחר מצב: "טקסט נערך" — מחלץ טקסט לעריכה (כולל שחזור עברית מקודדת ישנה Windows-1255), עם שמירת מבנה: יישור פסקאות, כותרות, הדגשות, וטבלאות לשורות דו-טוריות. "מראה מדויק" — כל עמוד כתמונה, עיצוב זהה ל-100% למקור, אך לא ניתן לעריכה. לעיצוב רשמי מדויק בחר "מראה מדויק"; לעריכת תוכן בחר "טקסט נערך".')
     ]);
   }
   window.Tools = window.Tools || {};
