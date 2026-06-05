@@ -39,14 +39,37 @@
     imgLabelText.innerHTML = 'כלול תמונות מוטמעות <span style="color:var(--ink-mute);font-weight:400;">(איטי יותר ב־PDF גדולים)</span>';
     imgLabel.appendChild(imgLabelText);
 
+    // ── Conversion mode: editable text vs. exact page-images ──────────────
+    // Fundamental tradeoff: editable text can't perfectly reproduce the source
+    // layout (it's reconstructed from glyph positions), while page-images are a
+    // 100% faithful copy of the design but not editable. Let the user choose.
+    function _modeRadio(value, checked, title, sub) {
+      const r = document.createElement('input');
+      r.type = 'radio'; r.name = 'pdf2word-mode'; r.value = value; r.checked = checked;
+      r.style.cssText = 'margin:0;cursor:pointer;';
+      const lbl = document.createElement('label');
+      lbl.style.cssText = 'display:inline-flex;align-items:center;gap:7px;font-size:13px;color:var(--ink);cursor:pointer;user-select:none;';
+      lbl.appendChild(r);
+      const span = document.createElement('span');
+      span.innerHTML = title + ' <span style="color:var(--ink-mute);font-weight:400;">' + sub + '</span>';
+      lbl.appendChild(span);
+      return lbl;
+    }
+    const modeEditable = _modeRadio('editable', true,  '📝 טקסט נערך', '(ניתן לעריכה · עיצוב מקורב)');
+    const modeImage    = _modeRadio('image',    false, '🖼️ מראה מדויק כמו המקור', '(תמונות עמוד · עיצוב זהה · לא נערך)');
+    function getMode() {
+      var checked = document.querySelector('input[name="pdf2word-mode"]:checked');
+      return checked ? checked.value : 'editable';
+    }
+
     const optsRow = App.el('div', {
       style: {
-        display: 'flex', flexWrap: 'wrap', gap: '14px', alignItems: 'center',
-        marginTop: '12px', padding: '10px 14px',
+        display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-start',
+        marginTop: '12px', padding: '12px 14px',
         background: 'var(--cream)', borderRadius: 'var(--r-sm)',
         border: '1px solid var(--line)'
       }
-    }, [imgLabel]);
+    }, [modeEditable, modeImage]);
 
     // ── Helpers for structure-preserving extraction ──────────────────────
     function _escHtml(s) {
@@ -887,6 +910,47 @@
         const n   = pdf.numPages;
         let html  = '';
 
+        // ── EXACT mode: render each page to a faithful image (100% identical
+        // design — letterhead, columns, alignment, logos — but not editable).
+        if (getMode() === 'image') {
+          const titleImg = _escHtml(file.name.replace(/\.pdf$/i, ''));
+          let imgsHtml = '';
+          for (let i = 1; i <= n; i++) {
+            const page = await pdf.getPage(i);
+            const viewport = page.getViewport({ scale: 2 });
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.ceil(viewport.width);
+            canvas.height = Math.ceil(viewport.height);
+            const ctx = canvas.getContext('2d', { alpha: false });
+            ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+            await page.render({ canvasContext: ctx, viewport: viewport }).promise;
+            const src = canvas.toDataURL('image/jpeg', 0.85);
+            page.cleanup && page.cleanup();
+            const brk = i < n ? 'page-break-after:always;' : '';
+            imgsHtml += '<div style="text-align:center;' + brk + '"><img width="700" src="' + src +
+                        '" style="width:700px;max-width:100%;height:auto;" /></div>';
+            bar.style.width = (5 + (i / n) * 88) + '%';
+            status.textContent = 'מרנדר עמוד ' + i + ' / ' + n + '…';
+          }
+          const docImg = [
+            "<html xmlns:o='urn:schemas-microsoft-com:office:office'",
+            " xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>",
+            "<head><meta charset='utf-8'><title>" + titleImg + "</title>",
+            "<style>@page Section1{size:595.3pt 841.9pt;margin:1cm 1cm 1cm 1cm;mso-paper-source:0;}",
+            "div.Section1{page:Section1;} body{margin:0;padding:0;} img{max-width:100%;height:auto;}</style>",
+            "</head><body dir='rtl'><div class='Section1'>", imgsHtml, "</div></body></html>"
+          ].join('');
+          const blobImg = new Blob(['﻿', docImg], { type: 'application/msword' });
+          const urlImg = URL.createObjectURL(blobImg);
+          const aImg = document.createElement('a');
+          aImg.href = urlImg; aImg.download = file.name.replace(/\.pdf$/i, '.doc'); aImg.click();
+          setTimeout(function () { URL.revokeObjectURL(urlImg); }, 2000);
+          bar.style.width = '100%';
+          status.textContent = '✓ הומרו ' + n + ' עמודים במראה זהה למקור — הורד ' + file.name.replace(/\.pdf$/i, '.doc');
+          status.style.color = 'var(--sage-deep)';
+          return;
+        }
+
         const perPageItems   = new Array(n);
         const perPageImages  = new Array(n);
         const perPageWidth   = new Array(n);
@@ -1007,7 +1071,8 @@
           "  img { max-width:100%; height:auto; }",
           "</style>",
           "</head><body dir='rtl'><div class='Section1'>",
-          "<h1 style='font-size:22pt;text-align:center;margin-bottom:24px;'>" + titleHtml + "</h1>",
+          // No injected filename heading — it created confusing empty space at
+          // the top that isn't in the source. Start directly with the content.
           html, "</div></body></html>"
         ].join('');
         const blob = new Blob(['﻿', docHtml], { type: 'application/msword' });
@@ -1062,7 +1127,7 @@
       ]),
       fileInput, zone, optsRow, status, bar,
       App.el('p', { style: { fontSize: '12px', color: 'var(--ink-mute)', margin: '10px 0 0', lineHeight: '1.6' } },
-        '✨ טקסט נערך לחלוטין עם שמירה על מבנה: כותרות, פסקאות, רשימות (• / 1. / א.), כותרות ממורכזות, Bold/Italic, צבע טקסט, הדגשות רקע (צהוב/ירוק) ותמונות מוטמעות במקומן. בטל את הסימון להמרה מהירה של טקסט בלבד.')
+        '✨ בחר מצב: "טקסט נערך" — מחלץ טקסט לעריכה (כולל שחזור עברית מקודדת ישנה Windows-1255), עם שמירת מבנה מקורבת. "מראה מדויק" — כל עמוד כתמונה, עיצוב זהה ל-100% למקור, אך לא ניתן לעריכה. לעיצוב רשמי מדויק בחר "מראה מדויק"; לעריכת תוכן בחר "טקסט נערך".')
     ]);
   }
   window.Tools = window.Tools || {};
