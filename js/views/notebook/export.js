@@ -584,7 +584,9 @@ ${gratitude ? `<div>
     }));
 
     // ── Step 1: stamp each figure's rendered pixel-width onto data-ew
-    const MAX_IMG_W = 480;
+    // Cap at the A4 page content width (~600px at 96dpi ≈ full page with default
+    // 1-inch margins) so full-width editor images fill the exported page.
+    const MAX_IMG_W = 600;
     editor.querySelectorAll('figure.nb-img').forEach(fig => {
       const liveW = fig.getBoundingClientRect().width;
       const styleW = parseInt(fig.style.width) || 0;
@@ -622,11 +624,15 @@ ${gratitude ? `<div>
       const img = fig.querySelector('img');
       if (!img) return;
       const w = parseInt(fig.dataset.ew) || 300;
+      // Width as a PERCENTAGE of the page (600px = full editor page width), so a
+      // full-width image fills the exported page and a half-width image stays
+      // half — identical in Word and PDF, regardless of the page's pixel size.
+      const pct = Math.min(100, Math.max(10, Math.round(w / 600 * 100)));
       const clonedImg = img.cloneNode(true);
-      clonedImg.setAttribute('width', w);
+      clonedImg.removeAttribute('width');
       clonedImg.setAttribute('height', 'auto');
-      // setAttribute — preserves all properties in the serialised HTML
-      clonedImg.setAttribute('style', `width:${w}px;height:auto;display:block;margin:0 auto;`);
+      // setAttribute — preserves the raw string through HTML serialisation.
+      clonedImg.setAttribute('style', `width:${pct}%;height:auto;display:block;margin:0 auto;max-width:100%;`);
 
       // <table> is the only element Word reliably keeps on one page.
       // mso-pagination:widow-orphan keep-together = Word's native "keep together" flag.
@@ -755,6 +761,7 @@ ${gratitude ? `<div>
 
     const baseStyles = `
       body{font-family:Arial,sans-serif;font-size:11pt;direction:rtl;padding:40px;max-width:820px;margin:0 auto;color:#3b3a3a;}
+      p,li,td,div{font-size:11pt;line-height:1.6;}
       h1{font-size:28px;margin-bottom:24px;}
       table[align="center"]{border-collapse:collapse;page-break-inside:avoid;mso-pagination:widow-orphan keep-together;}
       table[align="center"] td{text-align:center;padding:8px 0;}
@@ -773,82 +780,31 @@ ${gratitude ? `<div>
     // in Chrome/Edge since Save-as-PDF is the default destination on most systems).
     // This is the only approach that reliably handles Hebrew RTL + images.
     if (format === 'pdf') {
-      // 1. Build the print content element
-      const printId = 'nb-pdf-content-' + Date.now();
-      const printDiv = document.createElement('div');
-      printDiv.id = printId;
-      printDiv.setAttribute('dir', 'rtl');
-      printDiv.setAttribute('style', 'font-size:11pt;font-family:Arial,sans-serif;display:none;');
-      printDiv.innerHTML = `<h1 style="font-size:24pt;margin-bottom:18pt;font-family:Arial,sans-serif;">${title}</h1>${body}`;
-
-      // 2. Print-only stylesheet: hide everything else, show only our div
-      const printStyle = document.createElement('style');
-      printStyle.id = printId + '-style';
-      printStyle.textContent = `
-        @media print {
-          body > *:not(#${printId}) { display: none !important; visibility: hidden !important; }
-          #${printId} {
-            display: block !important;
-            visibility: visible !important;
-            position: static !important;
-            font-family: Arial, sans-serif;
-            font-size: 11pt;
-            color: #000;
-            direction: rtl;
-            line-height: 1.7;
-          }
-          #${printId} h1,#${printId} h2,#${printId} h3 { margin-bottom: 8pt; }
-          #${printId} p { margin: 6pt 0; }
-          #${printId} p[align="center"] { text-align: center; }
-          #${printId} img { max-width: 100%; height: auto; }
-          #${printId} .nb-mood-embed { border: 1pt solid #f0c4cc; border-radius: 6pt; padding: 10pt; margin: 10pt 0; background: #fffaf8; }
-          #${printId} .nb-mood-btn { width: 28pt; height: 28pt; border-radius: 50%; font-size: 16pt; display: inline-flex; align-items: center; justify-content: center; }
-          #${printId} .nb-mood-btn.selected { background: #fadadd; border: 1pt solid #e5a8b0; }
-          #${printId} .nb-mood-note { border: 1pt solid #ddd; border-radius: 5pt; padding: 6pt; width: 100%; min-height: 40pt; font-family: Arial; }
-          #${printId} .nb-page-spacer { page-break-after: always; break-after: page; height: 0; overflow: hidden; }
-          #${printId} .nb-img-del { display: none !important; }
-          #${printId} figure.nb-img, #${printId} p[align="center"] { page-break-inside: avoid; break-inside: avoid; }
-          @page { margin: 15mm; size: A4; }
-        }`;
-
-      document.head.appendChild(printStyle);
-      document.body.appendChild(printDiv);
-
-      // 3. Show instruction modal BEFORE opening print dialog
-      const modal = document.createElement('div');
-      modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:center;justify-content:center;';
-      modal.innerHTML = `
-        <div style="background:#fff;border-radius:18px;padding:32px 36px;max-width:420px;width:90%;direction:rtl;font-family:Arial,sans-serif;box-shadow:0 20px 60px rgba(0,0,0,.3);">
-          <div style="font-size:36px;text-align:center;margin-bottom:12px;">📄</div>
-          <h2 style="margin:0 0 16px;font-size:20px;text-align:center;color:#3b3a3a;">ייצוא ל-PDF</h2>
-          <p style="margin:0 0 14px;color:#555;font-size:14px;line-height:1.6;">בחלון ההדפסה שייפתח, עשה את הצעדים הבאים:</p>
-          <ol style="margin:0 0 20px;padding-right:20px;color:#333;font-size:14px;line-height:2;">
-            <li>לחץ על <strong>"יעד"</strong> (Destination)</li>
-            <li>בחר <strong>"שמור כ-PDF"</strong> או <strong>"Microsoft Print to PDF"</strong></li>
-            <li>לחץ <strong>"שמור"</strong></li>
-          </ol>
-          <div style="background:#f0f7ff;border-radius:10px;padding:10px 14px;margin-bottom:20px;font-size:13px;color:#444;display:flex;gap:10px;align-items:center;">
-            <span style="font-size:20px;">💡</span>
-            <span>בכרום ובאדג׳ ניתן גם ללחוץ <strong>Ctrl+Shift+P</strong> ישירות מהאתר</span>
-          </div>
-          <button id="nb-pdf-go" style="width:100%;padding:13px;background:linear-gradient(135deg,#FADADD,#E6DDF4);border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;font-family:Arial;color:#3b3a3a;">
-            הבנתי — פתח חלון הדפסה ▶
-          </button>
-        </div>`;
-      document.body.appendChild(modal);
-
-      document.getElementById('nb-pdf-go').addEventListener('click', () => {
-        modal.remove();
-        setTimeout(() => {
-          window.print();
-          setTimeout(() => { printStyle.remove(); printDiv.remove(); }, 1500);
-        }, 150);
-      });
-
-      // Also close modal on backdrop click
-      modal.addEventListener('click', e => {
-        if (e.target === modal) modal.remove();
-      });
+      // One-click PDF download (like Word) via html2pdf — no print dialog.
+      if (!window.html2pdf) { App.toast('ספריית ה-PDF עוד נטענת, נסי שוב בעוד רגע'); return; }
+      App.toast('מכין PDF…');
+      // Wrap at the A4 content width (~190mm = 718px @96dpi) so 11pt stays
+      // 11pt and the percentage-width images fill the page exactly.
+      const wrap = document.createElement('div');
+      wrap.setAttribute('dir', 'rtl');
+      wrap.setAttribute('style', 'position:fixed;left:-99999px;top:0;width:718px;background:#fff;color:#3b3a3a;font-family:Arial,sans-serif;font-size:11pt;direction:rtl;line-height:1.6;box-sizing:border-box;');
+      wrap.innerHTML = '<style>' + baseStyles +
+        '.nb-page-spacer{display:block;height:0;page-break-after:always;}' +
+        ' td img,figure img{max-width:100%;height:auto;}</style>' +
+        '<h1 style="font-size:22pt;margin:0 0 12pt;font-family:Arial,sans-serif;">' + title + '</h1>' + body;
+      document.body.appendChild(wrap);
+      const opt = {
+        margin: [10, 10, 12, 10],
+        filename: title + '.pdf',
+        image: { type: 'jpeg', quality: 0.96 },
+        html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', windowWidth: 718 },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        pagebreak: { mode: ['css', 'legacy'], avoid: ['table'] }
+      };
+      window.html2pdf().set(opt).from(wrap).save()
+        .then(function () { App.toast('✓ קובץ PDF הורד'); })
+        .catch(function (e) { App.toast('שגיאה בייצוא PDF'); console.warn('PDF export failed', e); })
+        .then(function () { wrap.remove(); });
       return;
     }
 
