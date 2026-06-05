@@ -596,12 +596,24 @@ ${gratitude ? `<div>
       const styleW = parseInt(fig.style.width) || 0;
       const w = liveW > 0 ? liveW : styleW > 0 ? styleW : 300;
       fig.dataset.ew = String(Math.round(Math.min(w, pageW)));
+      // Stamp the rendered aspect ratio so the Word export can compute a correct
+      // absolute height (Word needs explicit px width+height; it ignores % on <img>).
+      const im = fig.querySelector('img');
+      if (im) {
+        const r = im.getBoundingClientRect();
+        if (r.width > 0 && r.height > 0) {
+          fig.dataset.nw = String(Math.round(r.width));
+          fig.dataset.nh = String(Math.round(r.height));
+        }
+      }
     });
 
     const cloned = editor.cloneNode(true);
 
-    // Clean up data-ew from the live editor
-    editor.querySelectorAll('figure.nb-img').forEach(fig => { delete fig.dataset.ew; });
+    // Clean up stamped data-* from the live editor
+    editor.querySelectorAll('figure.nb-img').forEach(fig => {
+      delete fig.dataset.ew; delete fig.dataset.nw; delete fig.dataset.nh;
+    });
 
     // ── Step 2: fix mood-embed textarea values in clone
     cloned.querySelectorAll('.nb-mood-embed').forEach(block => {
@@ -628,14 +640,28 @@ ${gratitude ? `<div>
       const img = fig.querySelector('img');
       if (!img) return;
       const w = parseInt(fig.dataset.ew) || 300;
-      // Width as a PERCENTAGE of the page width (pageW), so a full-width image
-      // fills the exported page and a half-width image stays half — identical in
-      // Word and PDF, regardless of the page's pixel size.
+      // Width as a PERCENTAGE of the page width (pageW): a full-width figure → 100%,
+      // a half-width figure → 50%. The PDF/print path honours this % (real browser).
       const pct = Math.min(100, Math.max(10, Math.round(w / pageW * 100)));
+
+      // Word IGNORES percentage widths on <img> and falls back to the image's
+      // native pixel size → wide screenshots overflow the page. So we ALSO give
+      // an absolute px width via the width/height HTML attributes, which Word
+      // honours. We size it to the A4 content area (≈18cm @ 1.5cm margins ≈ 680px)
+      // so a full-width image fills the page WITHOUT overflowing. Browsers ignore
+      // the px attributes because the inline `width:%` style overrides them.
+      const WORD_CONTENT_W = 670;
+      const absPx = Math.max(60, Math.round(pct / 100 * WORD_CONTENT_W));
+      const nw = parseInt(fig.dataset.nw) || 0;
+      const nh = parseInt(fig.dataset.nh) || 0;
+      const absH = (nw > 0 && nh > 0) ? Math.round(absPx * nh / nw) : 0;
+
       const clonedImg = img.cloneNode(true);
-      clonedImg.removeAttribute('width');
-      clonedImg.setAttribute('height', 'auto');
-      // setAttribute — preserves the raw string through HTML serialisation.
+      clonedImg.setAttribute('width', String(absPx));        // px — Word uses this
+      if (absH > 0) clonedImg.setAttribute('height', String(absH));
+      else clonedImg.removeAttribute('height');
+      // Inline % style — browsers (PDF/print) use this and ignore the px attribute,
+      // so the image stays responsive / full-width on the printed page.
       clonedImg.setAttribute('style', `width:${pct}%;height:auto;display:block;margin:0 auto;max-width:100%;`);
 
       // <table> is the only element Word reliably keeps on one page.
@@ -764,8 +790,11 @@ ${gratitude ? `<div>
     const body = cloned.innerHTML;
 
     const baseStyles = `
-      body{font-family:Arial,sans-serif;font-size:11pt;direction:rtl;padding:40px;max-width:820px;margin:0 auto;color:#3b3a3a;}
+      @page Section1{size:595.3pt 841.9pt;margin:1.5cm 1.5cm 1.5cm 1.5cm;mso-header-margin:35.4pt;mso-footer-margin:35.4pt;mso-paper-source:0;}
+      div.Section1{page:Section1;}
+      body{font-family:Arial,sans-serif;font-size:11pt;direction:rtl;padding:0;margin:0;color:#3b3a3a;}
       p,li,td,div{font-size:11pt;line-height:1.6;}
+      img{max-width:100%;height:auto;}
       h1{font-size:28px;margin-bottom:24px;}
       table[align="center"]{border-collapse:collapse;page-break-inside:avoid;mso-pagination:widow-orphan keep-together;}
       table[align="center"] td{text-align:center;padding:8px 0;}
@@ -827,7 +856,7 @@ ${gratitude ? `<div>
         ` xmlns='http://www.w3.org/TR/REC-html40'>`,
         `<head><meta charset='utf-8'><title>${title}</title>`,
         `<style>${baseStyles}</style></head>`,
-        `<body dir="rtl" style="font-size:11pt;font-family:Arial,sans-serif;"><h1>${title}</h1>${body}</body></html>`
+        `<body dir="rtl" style="font-size:11pt;font-family:Arial,sans-serif;"><div class="Section1"><h1>${title}</h1>${body}</div></body></html>`
       ].join('');
       const blob = new Blob(['﻿', html], { type: 'application/msword' });
       const url = URL.createObjectURL(blob);

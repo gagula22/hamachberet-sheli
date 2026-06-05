@@ -5,7 +5,7 @@
 |---|---|
 | **האתר החי** | https://gagula22.github.io/hamachberet-sheli |
 | **קוד מקור** | https://github.com/gagula22/hamachberet-sheli |
-| **קבצים מקומיים** | `C:\Users\user\Documents\מחברת\` |
+| **קבצים מקומיים** | `C:\Users\ACER\Documents\claude AI\מחברת\` |
 | **Firebase** | gagula22@gmail.com |
 
 ---
@@ -142,7 +142,7 @@
 
 ```bash
 # לעבוד על הפרויקט
-cd "C:\Users\user\Documents\מחברת"
+cd "C:\Users\ACER\Documents\claude AI\מחברת"
 
 # לדחוף שינוי
 git add -A && git commit -m "תיאור" && git push origin main
