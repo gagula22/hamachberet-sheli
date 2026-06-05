@@ -16,34 +16,62 @@
 
   // ── Tool registry by category ─────────────────────────────────────────────
   function categories() {
-    function t(icon, label, bg, build) {
+    function t(icon, label, bg, desc, build) {
       return { icon: icon, label: label, bg: 'linear-gradient(135deg,' + bg + ')',
-               accent: 'linear-gradient(90deg,' + bg + ')', build: build };
+               accent: 'linear-gradient(90deg,' + bg + ')', desc: desc, build: build };
     }
     return [
       { title: '📂 המרת מסמכים', tools: [
-        t('📝', 'Word → PDF', '#FADADD,#F3B7BD', function () { return window.Tools.wordToPdf(); }),
-        t('📄', 'PDF → Word', '#E6DDF4,#C9B8E3', function () { return window.Tools.pdfToWord(); }),
-        t('🌐', 'תרגום PDF', '#FFF3C4,#F5DF8C', function () { return window.Tools.pdfTranslator(); }),
-        t('🎬', 'תמלול וידאו', '#CFE4F7,#A9CEEE', function () { return window.Tools.videoTranscriber(); })
+        t('📝', 'Word → PDF', '#FADADD,#F3B7BD', 'ממיר מסמך Word (.doc/.docx) ל-PDF — הורדה אוטומטית, התמונות נשמרות.', function () { return window.Tools.wordToPdf(); }),
+        t('📄', 'PDF → Word', '#E6DDF4,#C9B8E3', 'ממיר PDF ל-Word נערך (כולל שחזור עברית מקודדת), או למראה מדויק כתמונות.', function () { return window.Tools.pdfToWord(); }),
+        t('🌐', 'תרגום PDF', '#FFF3C4,#F5DF8C', 'מחלץ טקסט מ-PDF ומתרגם אותו לשפה שתבחרי.', function () { return window.Tools.pdfTranslator(); }),
+        t('🎬', 'תמלול וידאו', '#CFE4F7,#A9CEEE', 'מתמלל וידאו/אודיו בעברית למסמך Word, עם צילומי מסך מהסרטון.', function () { return window.Tools.videoTranscriber(); })
       ] },
       { title: '📑 פעולות על דפים', tools: [
-        t('🔗', 'מזג PDF', '#D9F0E3,#A9D8BE', function () { return window.Tools.pdfMerge(); }),
-        t('✂️', 'פצל PDF', '#D9E8F5,#A9C9E8', function () { return window.Tools.pdfSplit(); }),
-        t('🗑️', 'מחק דפים', '#F5DCDC,#E8AEAE', function () { return window.Tools.pdfDelete(); }),
-        t('🔄', 'סובב PDF', '#F0E6D2,#D8C39A', function () { return window.Tools.pdfRotate(); })
+        t('🔗', 'מזג PDF', '#D9F0E3,#A9D8BE', 'מאחד כמה קובצי PDF לקובץ אחד, לפי הסדר שתבחרי.', function () { return window.Tools.pdfMerge(); }),
+        t('✂️', 'פצל PDF', '#D9E8F5,#A9C9E8', 'מחלץ דפים נבחרים (למשל 1-3,5) לקובץ PDF חדש.', function () { return window.Tools.pdfSplit(); }),
+        t('🗑️', 'מחק דפים', '#F5DCDC,#E8AEAE', 'מסיר דפים נבחרים מה-PDF ושומר את כל השאר.', function () { return window.Tools.pdfDelete(); }),
+        t('🔄', 'סובב PDF', '#F0E6D2,#D8C39A', 'מסובב דפים ב-90/180/270 מעלות — את כל הדפים או חלק.', function () { return window.Tools.pdfRotate(); })
       ] },
       { title: '🖼️ תמונות', tools: [
-        t('🖼️', 'PDF ל-JPG', '#E3DCF5,#BFA9E8', function () { return window.Tools.pdfToJpg(); }),
-        t('📄', 'תמונות ל-PDF', '#DCF0F5,#A9D8E8', function () { return window.Tools.imgToPdf(); })
+        t('🖼️', 'PDF ל-JPG', '#E3DCF5,#BFA9E8', 'ממיר כל עמוד לתמונת JPG. כמה עמודים → קובץ zip.', function () { return window.Tools.pdfToJpg(); }),
+        t('📄', 'תמונות ל-PDF', '#DCF0F5,#A9D8E8', 'מאחד תמונות JPG/PNG לקובץ PDF — תמונה לעמוד.', function () { return window.Tools.imgToPdf(); })
       ] },
       { title: '🛠️ אופטימיזציה ואבטחה', tools: [
-        t('🗜️', 'דחס PDF', '#E8E2D2,#CFC0A0', function () { return window.Tools.pdfCompress(); }),
-        t('📑', 'שטח טופס', '#DCEFE2,#AED8BF', function () { return window.Tools.pdfFlatten(); }),
-        t('🔓', 'בטל נעילה', '#F5E2DC,#E8BFA9', function () { return window.Tools.pdfUnlock(); })
+        t('🗜️', 'דחס PDF', '#E8E2D2,#CFC0A0', 'מקטין נפח של PDF סרוק/כבד — בחירת רמת איכות.', function () { return window.Tools.pdfCompress(); }),
+        t('📑', 'שטח טופס', '#DCEFE2,#AED8BF', 'מקבע שדות טופס כך שלא ניתן לערוך אותם יותר.', function () { return window.Tools.pdfFlatten(); }),
+        t('🔓', 'בטל נעילה', '#F5E2DC,#E8BFA9', 'מסיר הגבלות הדפסה/העתקה מ-PDF נעול (לא סיסמת פתיחה).', function () { return window.Tools.pdfUnlock(); })
       ] }
     ];
   }
+
+  // ── Hover tooltip (small popup explaining each tool) ──────────────────────
+  var _tip = null;
+  function _ensureTip() {
+    if (_tip) return _tip;
+    _tip = document.createElement('div');
+    _tip.style.cssText = 'position:fixed;z-index:10000;max-width:240px;background:#3b3a3a;color:#fff;' +
+      'font-size:12px;line-height:1.5;padding:8px 11px;border-radius:9px;box-shadow:0 8px 22px rgba(0,0,0,.28);' +
+      'pointer-events:none;opacity:0;transition:opacity 120ms;font-family:inherit;direction:rtl;text-align:right;';
+    document.body.appendChild(_tip);
+    return _tip;
+  }
+  function showTip(target, text) {
+    var tip = _ensureTip();
+    tip.textContent = text;
+    tip.style.display = 'block';
+    tip.style.opacity = '0';
+    var r = target.getBoundingClientRect();
+    var tw = tip.offsetWidth, th = tip.offsetHeight;
+    var left = r.left + r.width / 2 - tw / 2;
+    left = Math.max(8, Math.min(left, window.innerWidth - tw - 8));
+    var top = r.top - th - 9;
+    if (top < 8) top = r.bottom + 9;  // flip below if no room above
+    tip.style.left = left + 'px';
+    tip.style.top = top + 'px';
+    requestAnimationFrame(function () { if (_tip) _tip.style.opacity = '1'; });
+  }
+  function hideTip() { if (_tip) _tip.style.opacity = '0'; }
 
   // ── Popup modal ───────────────────────────────────────────────────────────
   function openModal(tool) {
@@ -87,9 +115,11 @@
         alignItems: 'center', justifyContent: 'center', background: tool.bg, fontSize: '24px' } }, tool.icon),
       App.el('span', { style: { fontSize: '13px', fontWeight: '600', color: 'var(--ink)', textAlign: 'center' } }, tool.label)
     ]);
+    if (tool.desc) b.title = tool.desc;   // native fallback
     b.onclick = function () { openModal(tool); };
-    b.onmouseenter = function () { b.style.transform = 'translateY(-2px)'; b.style.boxShadow = '0 8px 20px rgba(60,50,40,.13)'; b.style.borderColor = 'var(--ink)'; };
-    b.onmouseleave = function () { b.style.transform = 'translateY(0)'; b.style.boxShadow = 'var(--shadow-sm)'; b.style.borderColor = 'var(--line)'; };
+    b.onmouseenter = function () { b.style.transform = 'translateY(-2px)'; b.style.boxShadow = '0 8px 20px rgba(60,50,40,.13)'; b.style.borderColor = 'var(--ink)'; if (tool.desc) showTip(b, tool.desc); };
+    b.onmouseleave = function () { b.style.transform = 'translateY(0)'; b.style.boxShadow = 'var(--shadow-sm)'; b.style.borderColor = 'var(--line)'; hideTip(); };
+    b.addEventListener('click', hideTip);
     return b;
   }
 
