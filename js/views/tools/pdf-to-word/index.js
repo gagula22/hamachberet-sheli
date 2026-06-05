@@ -395,18 +395,29 @@
 
     function _resolvePageObj(page, objId) {
       return new Promise(function(resolve) {
-        // Safety timeout: if an image object never becomes available (missing /
-        // malformed XObject) page.objs.get's callback can hang forever and freeze
-        // the whole conversion. Resolve null after 8s so the page still finishes.
+        // An image XObject can live in page.objs (page-local) OR page.commonObjs
+        // (global — its id starts with "g_"). Critically, some images are only
+        // sent to the main thread when the page is RENDERED; from getOperatorList
+        // alone their resolve-callback may NEVER fire. So we (a) check BOTH stores
+        // synchronously, (b) register a callback on BOTH, and (c) keep a SHORT
+        // safety timeout — if the object never arrives we skip that one image
+        // (resolve null) instead of freezing the whole conversion forever.
         var settled = false;
         var done = function(obj) { if (!settled) { settled = true; resolve(obj); } };
-        setTimeout(function () { done(null); }, 8000);
+        setTimeout(function () { done(null); }, 2500);
+        var stores = [page.commonObjs, page.objs];
         try {
-          if (page.objs.has && page.objs.has(objId)) {
-            done(page.objs.get(objId));
-            return;
+          for (var s = 0; s < stores.length; s++) {
+            var store = stores[s];
+            if (store && store.has && store.has(objId)) { done(store.get(objId)); return; }
           }
-          page.objs.get(objId, function(obj) { done(obj); });
+          // Not available yet — register on both; whichever holds it fires first.
+          for (var s2 = 0; s2 < stores.length; s2++) {
+            (function (store) {
+              if (!store || !store.get) return;
+              try { store.get(objId, function (obj) { done(obj); }); } catch (e) { /* wrong store */ }
+            })(stores[s2]);
+          }
         } catch (e) { done(null); }
       });
     }
