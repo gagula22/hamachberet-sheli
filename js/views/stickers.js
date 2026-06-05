@@ -17,7 +17,9 @@
       { icon: '🔗', label: 'מזג PDF',      bg: 'linear-gradient(135deg,#D9F0E3,#A9D8BE)', target: 'tool-merge' }, // 4
       { icon: '✂️', label: 'פצל PDF',      bg: 'linear-gradient(135deg,#D9E8F5,#A9C9E8)', target: 'tool-split' }, // 5
       { icon: '🗑️', label: 'מחק דפים',     bg: 'linear-gradient(135deg,#F5DCDC,#E8AEAE)', target: 'tool-del' },   // 6
-      { icon: '🔄', label: 'סובב PDF',     bg: 'linear-gradient(135deg,#F0E6D2,#D8C39A)', target: 'tool-rot' }    // 7
+      { icon: '🔄', label: 'סובב PDF',     bg: 'linear-gradient(135deg,#F0E6D2,#D8C39A)', target: 'tool-rot' },   // 7
+      { icon: '🖼️', label: 'PDF ל-JPG',    bg: 'linear-gradient(135deg,#E3DCF5,#BFA9E8)', target: 'tool-pjpg' }, // 8
+      { icon: '📄', label: 'תמונות ל-PDF', bg: 'linear-gradient(135deg,#DCF0F5,#A9D8E8)', target: 'tool-i2p' }   // 9
     ];
 
     const buttons = [];
@@ -152,6 +154,8 @@
     const split = window.Tools.pdfSplit();
     const del = window.Tools.pdfDelete();
     const rot = window.Tools.pdfRotate();
+    const pjpg = window.Tools.pdfToJpg();
+    const i2p = window.Tools.imgToPdf();
     const vtr = window.Tools.videoTranscriber();
 
     w2p.id = 'tool-w2p';
@@ -161,6 +165,8 @@
     split.id = 'tool-split';
     del.id = 'tool-del';
     rot.id = 'tool-rot';
+    pjpg.id = 'tool-pjpg';
+    i2p.id = 'tool-i2p';
     vtr.id = 'tool-vtr';
 
     _wrapWithAccent(w2p, 'linear-gradient(90deg,#FADADD,#F3B7BD)');
@@ -170,14 +176,16 @@
     _wrapWithAccent(split, 'linear-gradient(90deg,#D9E8F5,#A9C9E8)');
     _wrapWithAccent(del, 'linear-gradient(90deg,#F5DCDC,#E8AEAE)');
     _wrapWithAccent(rot, 'linear-gradient(90deg,#F0E6D2,#D8C39A)');
+    _wrapWithAccent(pjpg, 'linear-gradient(90deg,#E3DCF5,#BFA9E8)');
+    _wrapWithAccent(i2p, 'linear-gradient(90deg,#DCF0F5,#A9D8E8)');
     _wrapWithAccent(vtr, 'linear-gradient(90deg,#CFE4F7,#A9CEEE)');
 
-    const toggleCards = { 'tool-w2p': w2p, 'tool-p2w': p2w, 'tool-ptr': ptr, 'tool-merge': merge, 'tool-split': split, 'tool-del': del, 'tool-rot': rot };
+    const toggleCards = { 'tool-w2p': w2p, 'tool-p2w': p2w, 'tool-ptr': ptr, 'tool-merge': merge, 'tool-split': split, 'tool-del': del, 'tool-rot': rot, 'tool-pjpg': pjpg, 'tool-i2p': i2p };
     Object.keys(toggleCards).forEach(function (id) { toggleCards[id].style.display = 'none'; });
 
     const hero = buildHero(toggleCards);
 
-    root.append(App.el('div', { class: 'stack stack-lg' }, [hero, w2p, p2w, ptr, merge, split, del, rot, vtr]));
+    root.append(App.el('div', { class: 'stack stack-lg' }, [hero, w2p, p2w, ptr, merge, split, del, rot, pjpg, i2p, vtr]));
   }
   App.register('stickers', render);
 })();

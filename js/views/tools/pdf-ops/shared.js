@@ -17,6 +17,21 @@
     return _libP;
   }
 
+  var _zipP = null;
+  function ensureZip() {
+    if (window.JSZip) return Promise.resolve(window.JSZip);
+    if (_zipP) return _zipP;
+    _zipP = new Promise(function (res, rej) {
+      var base = location.href.replace(/#.*/, '').replace(/index\.html.*/, '');
+      var s = document.createElement('script');
+      s.src = base + 'js/vendor/jszip.min.js';
+      s.onload = function () { window.JSZip ? res(window.JSZip) : rej(new Error('JSZip missing')); };
+      s.onerror = function () { rej(new Error('JSZip load failed')); };
+      document.head.appendChild(s);
+    });
+    return _zipP;
+  }
+
   function download(bytes, name, type) {
     var blob = new Blob([bytes], { type: type || 'application/pdf' });
     var url = URL.createObjectURL(blob);
@@ -69,5 +84,5 @@
     el.style.color = kind === 'ok' ? 'var(--sage-deep)' : kind === 'err' ? '#c00' : 'var(--ink-mute)';
   }
 
-  window.PdfOps = { ensureLib: ensureLib, download: download, dropzone: dropzone, parseRanges: parseRanges, statusEl: statusEl, setStatus: setStatus };
+  window.PdfOps = { ensureLib: ensureLib, ensureZip: ensureZip, download: download, dropzone: dropzone, parseRanges: parseRanges, statusEl: statusEl, setStatus: setStatus };
 })();
