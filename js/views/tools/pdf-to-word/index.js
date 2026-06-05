@@ -395,13 +395,19 @@
 
     function _resolvePageObj(page, objId) {
       return new Promise(function(resolve) {
+        // Safety timeout: if an image object never becomes available (missing /
+        // malformed XObject) page.objs.get's callback can hang forever and freeze
+        // the whole conversion. Resolve null after 8s so the page still finishes.
+        var settled = false;
+        var done = function(obj) { if (!settled) { settled = true; resolve(obj); } };
+        setTimeout(function () { done(null); }, 8000);
         try {
           if (page.objs.has && page.objs.has(objId)) {
-            resolve(page.objs.get(objId));
+            done(page.objs.get(objId));
             return;
           }
-          page.objs.get(objId, function(obj) { resolve(obj); });
-        } catch (e) { resolve(null); }
+          page.objs.get(objId, function(obj) { done(obj); });
+        } catch (e) { done(null); }
       });
     }
 
@@ -488,13 +494,25 @@
           } catch (e) { pendingRect = null; }
 
         } else if (op === OPS.fill || op === OPS.eoFill) {
-          // A fill right after a rectangle path = a filled rectangle. Record
-          // it with the current fill color as a highlight candidate.
-          if (pendingRect) {
-            rects.push({
-              x0: pendingRect.x0, y0: pendingRect.y0, x1: pendingRect.x1, y1: pendingRect.y1,
-              color: { r: fill.r, g: fill.g, b: fill.b }, order: i
-            });
+          // A fill right after a rectangle path = a filled rectangle. Record it
+          // as a highlight candidate — but PRE-FILTER hard. Chart PDFs are built
+          // from thousands of tiny colored rectangles (every candlestick = a
+          // rect); collecting them all and correlating each against every text
+          // item is O(items×rects) and freezes the tab. A real text highlight is
+          // (a) reasonably wide and tall (spans a word/line), and (b) a non-black,
+          // non-white fill. Thin/tiny rects (candles, wicks, rules) and pure
+          // black/white fills are dropped at the source. We also cap the total.
+          if (pendingRect && rects.length < 2500) {
+            var rW = pendingRect.x1 - pendingRect.x0;
+            var rH = pendingRect.y1 - pendingRect.y0;
+            var rLum = 0.299 * fill.r + 0.587 * fill.g + 0.114 * fill.b;
+            if (rW >= 8 && rH >= 4 && rLum >= 30 && rLum <= 245 &&
+                !(fill.r >= 248 && fill.g >= 248 && fill.b >= 248)) {
+              rects.push({
+                x0: pendingRect.x0, y0: pendingRect.y0, x1: pendingRect.x1, y1: pendingRect.y1,
+                color: { r: fill.r, g: fill.g, b: fill.b }, order: i
+              });
+            }
           }
           pendingRect = null;
 
