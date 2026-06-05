@@ -67,7 +67,8 @@
 │       │   │   ├── img-to-pdf.js      JPG/PNG→PDF (pdf-lib)               → window.Tools.imgToPdf
 │       │   │   ├── compress.js        דחיסה ע"י רסטור עמודים→JPG          → window.Tools.pdfCompress
 │       │   │   ├── flatten.js         שיטוח טפסים (pdf-lib form.flatten)  → window.Tools.pdfFlatten
-│       │   │   └── unlock.js          הסרת הגבלות בעלים (re-save)         → window.Tools.pdfUnlock
+│       │   │   ├── unlock.js          הסרת הגבלות בעלים (re-save)         → window.Tools.pdfUnlock
+│       │   │   └── ocr.js             PDF סרוק→Word נערך, OCR עברי מקומי (Tesseract.js מאורז ב-js/vendor/tesseract) → window.Tools.pdfOcr
 │       │   ├── pdf-translator/
 │       │   │   ├── translate.js     מנוע התרגום הטהור   → window.PTR_ENGINE
 │       │   │   └── index.js         UI + תזמור           → window.Tools.pdfTranslator
