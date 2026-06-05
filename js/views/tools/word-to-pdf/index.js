@@ -1,33 +1,12 @@
 (function () {
-  // Word -> PDF. Extracted from stickers.js (separation of concerns).
-  // ── Shared: PDF instruction modal ────────────────────────────────────────
-  function showPdfModal(onConfirm) {
-    const modal = document.createElement('div');
-    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:center;justify-content:center;';
-    modal.innerHTML = `
-      <div style="background:#fff;border-radius:18px;padding:32px 36px;max-width:420px;width:90%;direction:rtl;font-family:inherit;box-shadow:0 20px 60px rgba(0,0,0,.3);">
-        <div style="font-size:36px;text-align:center;margin-bottom:12px;">📄</div>
-        <h2 style="margin:0 0 16px;font-size:20px;text-align:center;">ייצוא ל-PDF</h2>
-        <p style="color:var(--ink-soft);margin:0 0 14px;font-size:14px;line-height:1.6;">בחלון ההדפסה שייפתח:</p>
-        <ol style="margin:0 0 20px;padding-right:20px;font-size:14px;line-height:2.2;">
-          <li>לחץ על <strong>"יעד"</strong> (Destination)</li>
-          <li>בחר <strong>"שמור כ-PDF"</strong> או <strong>"Microsoft Print to PDF"</strong></li>
-          <li>לחץ <strong>"שמור"</strong></li>
-        </ol>
-        <button id="tools-pdf-go" style="width:100%;padding:13px;background:linear-gradient(135deg,#FADADD,#E6DDF4);border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;color:#3b3a3a;">
-          הבנתי — פתח חלון הדפסה ▶
-        </button>
-      </div>`;
-    document.body.appendChild(modal);
-    document.getElementById('tools-pdf-go').addEventListener('click', () => {
-      modal.remove();
-      setTimeout(onConfirm, 150);
-    });
-    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
-  }
+  // Word -> PDF. Converts .doc/.docx to a REAL, auto-downloaded PDF named after
+  // the source file — via the shared HTML→PDF engine (window.HtmlToPdf). That
+  // engine renders the content full-width and paginates at block boundaries, so
+  // images are never cut or pushed past the page edge. (No print dialog.)
   // ── Tool 1: Word → PDF ───────────────────────────────────────────────────
   function buildWordToPdf() {
     let previewHtml = '';
+    let srcName = 'document';
 
     const status   = App.el('p', { style: { margin: '10px 0 0', fontSize: '13px' } });
     const preview  = App.el('div', {
@@ -40,33 +19,33 @@
       style: { display: 'none', marginTop: '12px',
                background: 'var(--blush)', border: '1px solid var(--blush-deep)',
                borderRadius: 'var(--r-sm)', padding: '10px 20px', fontWeight: 600, cursor: 'pointer' },
-      onClick: () => {
-        const pid = 'tools-pdf-' + Date.now();
-        const div = document.createElement('div');
-        div.id = pid; div.setAttribute('dir', 'auto'); div.style.display = 'none';
-        div.innerHTML = previewHtml;
-        const st = document.createElement('style');
-        st.textContent = `
-          @media print {
-            body > *:not(#${pid}) { display:none !important; }
-            #${pid} { display:block !important; direction:auto;
-                      font-family:Arial,"Times New Roman",serif; color:#000; line-height:1.7; }
-            #${pid} img { max-width:100%; }
-            #${pid} p, #${pid} li, #${pid} td, #${pid} th { unicode-bidi:plaintext; }
-            @page { margin:15mm; size:A4; }
-          }`;
-        document.head.appendChild(st);
-        document.body.appendChild(div);
-        showPdfModal(() => {
-          window.print();
-          setTimeout(() => { st.remove(); div.remove(); }, 1500);
-        });
+      onClick: async () => {
+        if (!previewHtml) return;
+        if (!window.HtmlToPdf) { status.textContent = 'מנוע ה-PDF לא נטען'; status.style.color = '#c00'; return; }
+        const origText = exportBtn.textContent;
+        exportBtn.disabled = true;
+        exportBtn.textContent = '⏳ יוצר PDF…';
+        try {
+          // dir:'auto' so each paragraph picks its own direction (handles mixed
+          // Hebrew/English Word documents correctly).
+          await window.HtmlToPdf.generate('', previewHtml, { fileName: srcName, dir: 'auto' });
+          status.textContent = '✓ קובץ PDF הורד: ' + srcName + '.pdf';
+          status.style.color = 'var(--sage-deep)';
+        } catch (e) {
+          console.error('[word2pdf]', e);
+          status.textContent = 'שגיאה ביצירת ה-PDF';
+          status.style.color = '#c00';
+        } finally {
+          exportBtn.disabled = false;
+          exportBtn.textContent = origText;
+        }
       }
     }, '📄 ייצוא ל-PDF');
 
     async function processFile(file) {
       if (!file) return;
       const ext = file.name.split('.').pop().toLowerCase();
+      srcName = file.name.replace(/\.(docx?|html?)$/i, '');
       status.textContent = 'טוען קובץ…';
       status.style.color = 'var(--ink-mute)';
       preview.style.display = 'none';
@@ -75,6 +54,7 @@
         if (ext === 'docx') {
           if (!window.mammoth) throw new Error('mammoth not loaded');
           const ab = await file.arrayBuffer();
+          // convertToHtml inlines images as base64 data-URLs by default.
           const res = await mammoth.convertToHtml({ arrayBuffer: ab });
           previewHtml = res.value;
         } else {

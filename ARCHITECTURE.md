@@ -33,6 +33,7 @@
 │   ├── components/
 │   │   ├── sidebar.js               ניווט בלבד (רישום הסקשנים + active state)
 │   │   ├── data-transfer.js         ⭐ בר גיבוי: ייצוא/ייבוא/הדבקת JSON → window.DataBackup
+│   │   ├── html-to-pdf.js           ⭐ מנוע משותף: HTML → קובץ PDF אמיתי (רינדור html2canvas + עימוד לפי בלוקים) → window.HtmlToPdf
 │   │   └── editable/                רכיב עריכה משותף (מחברת + הערות)
 │   │       ├── utils.js             debounce, compressImage            → window.EditableUtils
 │   │       ├── image.js             ⭐ תמונות/צילומי-מסך: הדבקה, הוספה, figures, גרירה, snap
@@ -101,6 +102,7 @@
 | עץ הנושאים / סרגל צד של המחברת | `notebook/index.js` |
 | כלי תמלול — לוגיקת אודיו / mp3 / whisper / ffmpeg | `tools/video-transcriber/<האחריות>.js` |
 | כלי המרת PDF↔Word / תרגום PDF | `tools/<הכלי>/index.js` |
+| יצירת קובץ PDF מ-HTML (מחברת + Word→PDF) | `components/html-to-pdf.js` (`window.HtmlToPdf`) |
 | עיצוב המחברת | `css/features/notebook.css` |
 | עיצוב משותף (כפתורים, כרטיסים) | `css/components.css` |
 | מודל הנתונים — default/סיווג-סנכרון לכל key | `store-schema.js` |
@@ -158,8 +160,9 @@
 הורדה אוטומטית `<שם המחברת>.doc`.
 
 **ייצוא PDF (`format==='pdf'`):** **יצירת PDF אמיתי + הורדה אוטומטית** `<שם המחברת>.pdf`
-(כמו Word, בלי חלון שמירה). מימוש ב-`exportPdfFile`:
-1. **טעינה עצלה** של `html2canvas` + `jsPDF` מ-CDN (`ensurePdfLibs`, נטען פעם אחת).
+(כמו Word, בלי חלון שמירה). `exportPdfFile` מאצל למנוע המשותף `window.HtmlToPdf.generate`
+(`components/html-to-pdf.js`) — אותו מנוע משמש גם את כלי Word→PDF. מה המנוע עושה:
+1. **טעינה עצלה** של `html2canvas` + `jsPDF` מ-CDN (`ensureLibs`, נטען פעם אחת).
    הספרייה המקומית `vendor/html2pdf` **שבורה** (דף ריק) — לא בשימוש.
 2. **רינדור בפעם אחת** של כל התוכן ל-canvas יחיד עם **`width`/`windowWidth=680` מפורשים**.
    ⚠️ קריטי: בלי זה html2canvas חותך לרוחב ה-viewport → טקסט עברית נחתך בצד ושורות חופפות.
@@ -169,3 +172,11 @@
 4. **fallback:** אם ה-CDN חסום (רשת עבודה) → `exportPdfViaPrint` (שמור-כ-PDF של הדפדפן,
    עם החלפת `document.title` לשם המחברת כברירת-מחדל).
 - מגבלה ידועה: ב-PDF הטקסט הוא תמונה (לא בר-חיפוש). למי שצריך טקסט בר-חיפוש → Word.
+
+**כלי Word→PDF (`tools/word-to-pdf/index.js`):** טוען .doc/.docx (mammoth → HTML, תמונות כ-base64),
+מציג תצוגה מקדימה, וביצוא קורא ל-`HtmlToPdf.generate(..., {dir:'auto'})` — הורדה אוטומטית בשם
+הקובץ, תמונות ברוחב מלא בלי חיתוך/גלישה. החליף את מודאל ההדפסה המסורבל הישן.
+
+**כלי PDF→Word (`tools/pdf-to-word/index.js`):** מרנדר **כל עמוד לתמונה נאמנה** (PDF.js `page.render`)
+ומטמיע ב-.doc — מראה זהה למקור (גרפים/הדגשות/סימונים נשמרים). לא שחזור טקסט היוריסטי
+(שהיה מבולגן ושבר תמונות). tradeoff מודע: הטקסט אינו ניתן לעריכה — מתאים למסמכים עשירים ויזואלית.
