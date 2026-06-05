@@ -58,8 +58,11 @@
 │       │   └── export.js            ⭐ הפקת מסמך: תבניות, mood, ייצוא Word/PDF → window.nbExport
 │       │
 │       ├── tools/                   view "כלים" — כל כלי עצמאי לחלוטין
-│       │   ├── word-to-pdf/index.js          → window.Tools.wordToPdf
-│       │   ├── pdf-to-word/index.js           → window.Tools.pdfToWord
+│       │   ├── word-to-pdf/index.js          → window.Tools.wordToPdf (משתף components/html-to-pdf.js)
+│       │   ├── pdf-to-word/index.js           → window.Tools.pdfToWord (טקסט נערך+שחזור Win-1255 / מראה-מדויק; ראה §6)
+│       │   ├── pdf-ops/              ⭐ פעולות PDF מקומיות (pdf-lib מאורז ב-js/vendor) — אפס העלאה
+│       │   │   ├── shared.js         ensureLib/download/dropzone/parseRanges → window.PdfOps
+│       │   │   ├── merge.js  split.js  delete.js  rotate.js → window.Tools.pdf{Merge,Split,Delete,Rotate}
 │       │   ├── pdf-translator/
 │       │   │   ├── translate.js     מנוע התרגום הטהור   → window.PTR_ENGINE
 │       │   │   └── index.js         UI + תזמור           → window.Tools.pdfTranslator
