@@ -14,7 +14,10 @@
       { icon: '📝', label: 'Word → PDF',   bg: 'linear-gradient(135deg,#FADADD,#F3B7BD)', target: 'tool-w2p' }, // 1 (rightmost)
       { icon: '📄', label: 'PDF → Word',   bg: 'linear-gradient(135deg,#E6DDF4,#C9B8E3)', target: 'tool-p2w' }, // 2
       { icon: '🌐', label: 'תרגום PDF',    bg: 'linear-gradient(135deg,#FFF3C4,#F5DF8C)', target: 'tool-ptr' }, // 3
-      { icon: '🔗', label: 'מזג PDF',      bg: 'linear-gradient(135deg,#D9F0E3,#A9D8BE)', target: 'tool-merge' } // 4
+      { icon: '🔗', label: 'מזג PDF',      bg: 'linear-gradient(135deg,#D9F0E3,#A9D8BE)', target: 'tool-merge' }, // 4
+      { icon: '✂️', label: 'פצל PDF',      bg: 'linear-gradient(135deg,#D9E8F5,#A9C9E8)', target: 'tool-split' }, // 5
+      { icon: '🗑️', label: 'מחק דפים',     bg: 'linear-gradient(135deg,#F5DCDC,#E8AEAE)', target: 'tool-del' },   // 6
+      { icon: '🔄', label: 'סובב PDF',     bg: 'linear-gradient(135deg,#F0E6D2,#D8C39A)', target: 'tool-rot' }    // 7
     ];
 
     const buttons = [];
@@ -146,26 +149,35 @@
     const p2w = window.Tools.pdfToWord();
     const ptr = window.Tools.pdfTranslator();
     const merge = window.Tools.pdfMerge();
+    const split = window.Tools.pdfSplit();
+    const del = window.Tools.pdfDelete();
+    const rot = window.Tools.pdfRotate();
     const vtr = window.Tools.videoTranscriber();
 
     w2p.id = 'tool-w2p';
     p2w.id = 'tool-p2w';
     ptr.id = 'tool-ptr';
     merge.id = 'tool-merge';
+    split.id = 'tool-split';
+    del.id = 'tool-del';
+    rot.id = 'tool-rot';
     vtr.id = 'tool-vtr';
 
     _wrapWithAccent(w2p, 'linear-gradient(90deg,#FADADD,#F3B7BD)');
     _wrapWithAccent(p2w, 'linear-gradient(90deg,#E6DDF4,#C9B8E3)');
     _wrapWithAccent(ptr, 'linear-gradient(90deg,#FFF3C4,#F5DF8C)');
     _wrapWithAccent(merge, 'linear-gradient(90deg,#D9F0E3,#A9D8BE)');
+    _wrapWithAccent(split, 'linear-gradient(90deg,#D9E8F5,#A9C9E8)');
+    _wrapWithAccent(del, 'linear-gradient(90deg,#F5DCDC,#E8AEAE)');
+    _wrapWithAccent(rot, 'linear-gradient(90deg,#F0E6D2,#D8C39A)');
     _wrapWithAccent(vtr, 'linear-gradient(90deg,#CFE4F7,#A9CEEE)');
 
-    const toggleCards = { 'tool-w2p': w2p, 'tool-p2w': p2w, 'tool-ptr': ptr, 'tool-merge': merge };
+    const toggleCards = { 'tool-w2p': w2p, 'tool-p2w': p2w, 'tool-ptr': ptr, 'tool-merge': merge, 'tool-split': split, 'tool-del': del, 'tool-rot': rot };
     Object.keys(toggleCards).forEach(function (id) { toggleCards[id].style.display = 'none'; });
 
     const hero = buildHero(toggleCards);
 
-    root.append(App.el('div', { class: 'stack stack-lg' }, [hero, w2p, p2w, ptr, merge, vtr]));
+    root.append(App.el('div', { class: 'stack stack-lg' }, [hero, w2p, p2w, ptr, merge, split, del, rot, vtr]));
   }
   App.register('stickers', render);
 })();
