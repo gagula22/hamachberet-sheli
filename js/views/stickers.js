@@ -13,7 +13,8 @@
     const tools = [
       { icon: '📝', label: 'Word → PDF',   bg: 'linear-gradient(135deg,#FADADD,#F3B7BD)', target: 'tool-w2p' }, // 1 (rightmost)
       { icon: '📄', label: 'PDF → Word',   bg: 'linear-gradient(135deg,#E6DDF4,#C9B8E3)', target: 'tool-p2w' }, // 2
-      { icon: '🌐', label: 'תרגום PDF',    bg: 'linear-gradient(135deg,#FFF3C4,#F5DF8C)', target: 'tool-ptr' }  // 3
+      { icon: '🌐', label: 'תרגום PDF',    bg: 'linear-gradient(135deg,#FFF3C4,#F5DF8C)', target: 'tool-ptr' }, // 3
+      { icon: '🔗', label: 'מזג PDF',      bg: 'linear-gradient(135deg,#D9F0E3,#A9D8BE)', target: 'tool-merge' } // 4
     ];
 
     const buttons = [];
@@ -144,24 +145,27 @@
     const w2p = window.Tools.wordToPdf();
     const p2w = window.Tools.pdfToWord();
     const ptr = window.Tools.pdfTranslator();
+    const merge = window.Tools.pdfMerge();
     const vtr = window.Tools.videoTranscriber();
 
     w2p.id = 'tool-w2p';
     p2w.id = 'tool-p2w';
     ptr.id = 'tool-ptr';
+    merge.id = 'tool-merge';
     vtr.id = 'tool-vtr';
 
     _wrapWithAccent(w2p, 'linear-gradient(90deg,#FADADD,#F3B7BD)');
     _wrapWithAccent(p2w, 'linear-gradient(90deg,#E6DDF4,#C9B8E3)');
     _wrapWithAccent(ptr, 'linear-gradient(90deg,#FFF3C4,#F5DF8C)');
+    _wrapWithAccent(merge, 'linear-gradient(90deg,#D9F0E3,#A9D8BE)');
     _wrapWithAccent(vtr, 'linear-gradient(90deg,#CFE4F7,#A9CEEE)');
 
-    const toggleCards = { 'tool-w2p': w2p, 'tool-p2w': p2w, 'tool-ptr': ptr };
+    const toggleCards = { 'tool-w2p': w2p, 'tool-p2w': p2w, 'tool-ptr': ptr, 'tool-merge': merge };
     Object.keys(toggleCards).forEach(function (id) { toggleCards[id].style.display = 'none'; });
 
     const hero = buildHero(toggleCards);
 
-    root.append(App.el('div', { class: 'stack stack-lg' }, [hero, w2p, p2w, ptr, vtr]));
+    root.append(App.el('div', { class: 'stack stack-lg' }, [hero, w2p, p2w, ptr, merge, vtr]));
   }
   App.register('stickers', render);
 })();
