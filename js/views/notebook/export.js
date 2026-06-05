@@ -779,36 +779,43 @@ ${gratitude ? `<div>
 
     // ── PDF export ────────────────────────────────────────────────────────────
     // Strategy: inject a hidden print-only layer into the current page.
-    // @media print CSS hides everything except this layer, so window.print()
-    // shows ONLY the notebook content. The user clicks "Save as PDF" (one click
-    // in Chrome/Edge since Save-as-PDF is the default destination on most systems).
-    // This is the only approach that reliably handles Hebrew RTL + images.
+    // ── PDF export: the browser's own Save-as-PDF (reliable RTL + images +
+    // selectable text). Opened DIRECTLY — no instruction modal. (html2pdf /
+    // html2canvas produced blank pages, so we don't use it.)
     if (format === 'pdf') {
-      // One-click PDF download (like Word) via html2pdf — no print dialog.
-      if (!window.html2pdf) { App.toast('ספריית ה-PDF עוד נטענת, נסי שוב בעוד רגע'); return; }
-      App.toast('מכין PDF…');
-      // Wrap at the A4 content width (~190mm = 718px @96dpi) so 11pt stays
-      // 11pt and the percentage-width images fill the page exactly.
-      const wrap = document.createElement('div');
-      wrap.setAttribute('dir', 'rtl');
-      wrap.setAttribute('style', 'position:fixed;left:-99999px;top:0;width:718px;background:#fff;color:#3b3a3a;font-family:Arial,sans-serif;font-size:11pt;direction:rtl;line-height:1.6;box-sizing:border-box;');
-      wrap.innerHTML = '<style>' + baseStyles +
-        '.nb-page-spacer{display:block;height:0;page-break-after:always;}' +
-        ' td img,figure img{max-width:100%;height:auto;}</style>' +
-        '<h1 style="font-size:22pt;margin:0 0 12pt;font-family:Arial,sans-serif;">' + title + '</h1>' + body;
-      document.body.appendChild(wrap);
-      const opt = {
-        margin: [10, 10, 12, 10],
-        filename: title + '.pdf',
-        image: { type: 'jpeg', quality: 0.96 },
-        html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', windowWidth: 718 },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        pagebreak: { mode: ['css', 'legacy'], avoid: ['table'] }
-      };
-      window.html2pdf().set(opt).from(wrap).save()
-        .then(function () { App.toast('✓ קובץ PDF הורד'); })
-        .catch(function (e) { App.toast('שגיאה בייצוא PDF'); console.warn('PDF export failed', e); })
-        .then(function () { wrap.remove(); });
+      const printId = 'nb-pdf-content-' + Date.now();
+      const printDiv = document.createElement('div');
+      printDiv.id = printId;
+      printDiv.setAttribute('dir', 'rtl');
+      printDiv.setAttribute('style', 'display:none;font-size:11pt;font-family:Arial,sans-serif;');
+      printDiv.innerHTML = `<h1 style="font-size:24pt;margin-bottom:18pt;font-family:Arial,sans-serif;">${title}</h1>${body}`;
+
+      const printStyle = document.createElement('style');
+      printStyle.id = printId + '-style';
+      printStyle.textContent = `
+        @media print {
+          body > *:not(#${printId}) { display: none !important; visibility: hidden !important; }
+          #${printId} {
+            display: block !important; visibility: visible !important; position: static !important;
+            font-family: Arial, sans-serif; font-size: 11pt; color: #000; direction: rtl; line-height: 1.7;
+          }
+          #${printId} h1,#${printId} h2,#${printId} h3 { margin-bottom: 8pt; }
+          #${printId} p,#${printId} li,#${printId} td { font-size: 11pt; }
+          #${printId} p { margin: 6pt 0; }
+          #${printId} p[align="center"] { text-align: center; }
+          #${printId} img { max-width: 100%; height: auto; }
+          #${printId} table[align="center"] { width: 100%; }
+          #${printId} .nb-img-del { display: none !important; }
+          #${printId} figure.nb-img, #${printId} p[align="center"] { page-break-inside: avoid; break-inside: avoid; }
+          @page { margin: 15mm; size: A4; }
+        }`;
+      document.head.appendChild(printStyle);
+      document.body.appendChild(printDiv);
+      App.toast('נפתח חלון שמירה — בחרי יעד: שמור כ-PDF');
+      setTimeout(function () {
+        window.print();
+        setTimeout(function () { printStyle.remove(); printDiv.remove(); }, 1500);
+      }, 250);
       return;
     }
 
