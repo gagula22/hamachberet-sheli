@@ -41,10 +41,11 @@
     img.alt = '';
     fig.appendChild(img);
 
-    // Clamp initial width to the printable content area
+    // Default a pasted/inserted image to the full page width. It can be shrunk
+    // afterwards; clampFigToEditor stops it from growing past the page width.
+    // Fall back to the A4 page width if the editor isn't measured yet.
     const maxW = editorContentWidth(editor);
-    const initW = Math.min(300, maxW);
-    if (initW > 0) fig.style.width = initW + 'px';
+    fig.style.width = (maxW > 0 ? maxW : A4_CONTENT_W) + 'px';
 
     const delBtn = document.createElement('button');
     delBtn.className = 'nb-img-del';
@@ -382,7 +383,7 @@
       // Set initial width if missing
       if (!fig.style.width) {
         const maxW = editorContentWidth(editor);
-        fig.style.width = Math.min(300, maxW) + 'px';
+        fig.style.width = (maxW > 0 ? maxW : A4_CONTENT_W) + 'px';
       }
     });
 

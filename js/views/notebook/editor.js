@@ -121,23 +121,9 @@
     wrapImagesInEditor(editor);
     attachTableResizers(editor, save); // uses RAF internally — safe at load time
 
-    // ── Paste: images from clipboard ──────────────────────────────────────
-    editor.addEventListener('paste', (e) => {
-      const items = (e.clipboardData && e.clipboardData.items) || [];
-      for (const item of items) {
-        if (item.type && item.type.startsWith('image/')) {
-          e.preventDefault();
-          const file = item.getAsFile();
-          if (file) {
-            const named = (!file.name || file.name === 'image.png')
-              ? new File([file], 'paste-' + Date.now() + '.png', { type: file.type })
-              : file;
-            insertImageFile(named, editor, save);
-          }
-          return;
-        }
-      }
-    });
+    // Clipboard image/screenshot paste is owned by editable/image.js
+    // (Editable.attachImageBehaviors above) — no separate handler here, so a
+    // pasted screenshot is inserted exactly once.
 
     // ── Drag-and-drop files into editor ──────────────────────────────────
     let _dragCounter = 0;
