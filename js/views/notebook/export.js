@@ -639,19 +639,18 @@ ${gratitude ? `<div>
     cloned.querySelectorAll('figure.nb-img').forEach(fig => {
       const img = fig.querySelector('img');
       if (!img) return;
-      const w = parseInt(fig.dataset.ew) || 300;
-      // Width as a PERCENTAGE of the page width (pageW): a full-width figure → 100%,
-      // a half-width figure → 50%. The PDF/print path honours this % (real browser).
-      const pct = Math.min(100, Math.max(10, Math.round(w / pageW * 100)));
-
-      // Word IGNORES percentage widths on <img> and falls back to the image's
-      // native pixel size → wide screenshots overflow the page. So we ALSO give
-      // an absolute px width via the width/height HTML attributes, which Word
-      // honours. We size it to the A4 content area (≈18cm @ 1.5cm margins ≈ 680px)
-      // so a full-width image fills the page WITHOUT overflowing. Browsers ignore
-      // the px attributes because the inline `width:%` style overrides them.
+      // Images export at FULL page width (like the body text) — this is the
+      // explicit, repeated requirement. The editor-vs-figure pixel measurement was
+      // unreliable (landed ~62%), so we don't derive a percentage from it.
+      //
+      // PDF/print path: width:100% style → fills the print column (real browser).
+      // Word path: Word IGNORES % widths on <img> and falls back to the native
+      // pixel size (→ overflow). So we ALSO set an absolute px width via the
+      // width/height HTML attributes, which Word honours, sized to the A4 content
+      // area (18cm @ 1.5cm margins ≈ 680px) so it fills the page without overflow.
+      // Browsers ignore the px attributes because the inline width:100% style wins.
       const WORD_CONTENT_W = 670;
-      const absPx = Math.max(60, Math.round(pct / 100 * WORD_CONTENT_W));
+      const absPx = WORD_CONTENT_W;
       const nw = parseInt(fig.dataset.nw) || 0;
       const nh = parseInt(fig.dataset.nh) || 0;
       const absH = (nw > 0 && nh > 0) ? Math.round(absPx * nh / nw) : 0;
@@ -660,9 +659,9 @@ ${gratitude ? `<div>
       clonedImg.setAttribute('width', String(absPx));        // px — Word uses this
       if (absH > 0) clonedImg.setAttribute('height', String(absH));
       else clonedImg.removeAttribute('height');
-      // Inline % style — browsers (PDF/print) use this and ignore the px attribute,
-      // so the image stays responsive / full-width on the printed page.
-      clonedImg.setAttribute('style', `width:${pct}%;height:auto;display:block;margin:0 auto;max-width:100%;`);
+      // Inline 100% style — browsers (PDF/print) use this and ignore the px
+      // attribute, so the image is full-width on the printed page.
+      clonedImg.setAttribute('style', `width:100%;height:auto;display:block;margin:0 auto;max-width:100%;`);
 
       // <table> is the only element Word reliably keeps on one page.
       // mso-pagination:widow-orphan keep-together = Word's native "keep together" flag.
@@ -840,10 +839,19 @@ ${gratitude ? `<div>
         }`;
       document.head.appendChild(printStyle);
       document.body.appendChild(printDiv);
-      App.toast('נפתח חלון שמירה — בחרי יעד: שמור כ-PDF');
+      // The browser's Save-as-PDF uses document.title as the DEFAULT filename.
+      // Temporarily swap it to the notebook name so the saved file is named
+      // after the notebook (instead of the app title), then restore it.
+      const _origTitle = document.title;
+      document.title = title;
+      App.toast('נפתח חלון שמירה — שם הקובץ: ' + title);
       setTimeout(function () {
         window.print();
-        setTimeout(function () { printStyle.remove(); printDiv.remove(); }, 1500);
+        setTimeout(function () {
+          printStyle.remove();
+          printDiv.remove();
+          document.title = _origTitle;
+        }, 1500);
       }, 250);
       return;
     }
