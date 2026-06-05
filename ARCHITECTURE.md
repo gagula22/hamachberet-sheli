@@ -61,8 +61,10 @@
 │       │   ├── word-to-pdf/index.js          → window.Tools.wordToPdf (משתף components/html-to-pdf.js)
 │       │   ├── pdf-to-word/index.js           → window.Tools.pdfToWord (טקסט נערך+שחזור Win-1255 / מראה-מדויק; ראה §6)
 │       │   ├── pdf-ops/              ⭐ פעולות PDF מקומיות (pdf-lib מאורז ב-js/vendor) — אפס העלאה
-│       │   │   ├── shared.js         ensureLib/download/dropzone/parseRanges → window.PdfOps
+│       │   │   ├── shared.js         ensureLib/ensureZip/download/dropzone/parseRanges → window.PdfOps (pdf-lib+JSZip מאורזים)
 │       │   │   ├── merge.js  split.js  delete.js  rotate.js → window.Tools.pdf{Merge,Split,Delete,Rotate}
+│       │   │   ├── pdf-to-jpg.js      רינדור עמודים→JPG (zip ל-רב-עמודי) → window.Tools.pdfToJpg
+│       │   │   └── img-to-pdf.js      JPG/PNG→PDF (pdf-lib)               → window.Tools.imgToPdf
 │       │   ├── pdf-translator/
 │       │   │   ├── translate.js     מנוע התרגום הטהור   → window.PTR_ENGINE
 │       │   │   └── index.js         UI + תזמור           → window.Tools.pdfTranslator
