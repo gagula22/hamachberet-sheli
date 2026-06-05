@@ -573,6 +573,119 @@ ${gratitude ? `<div>
     });
   }
 
+  // ── Lazy-load the PDF libraries (html2canvas + jsPDF) from CDN on first use.
+  // The bundled vendor/html2pdf is broken here (renders blank pages), so we use
+  // fresh, known-good builds. Cached after the first successful load.
+  let _pdfLibsPromise = null;
+  function ensurePdfLibs() {
+    if (window.html2canvas && window.jspdf && window.jspdf.jsPDF) return Promise.resolve();
+    if (_pdfLibsPromise) return _pdfLibsPromise;
+    function load(src) {
+      return new Promise((res, rej) => {
+        const s = document.createElement('script');
+        s.src = src; s.async = true;
+        s.onload = res; s.onerror = () => rej(new Error('load ' + src));
+        document.head.appendChild(s);
+      });
+    }
+    _pdfLibsPromise = (async () => {
+      if (!window.html2canvas) await load('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
+      if (!(window.jspdf && window.jspdf.jsPDF)) await load('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+    })();
+    return _pdfLibsPromise;
+  }
+
+  // ── Generate a real PDF file and auto-download it named after the notebook
+  // (exactly like the Word export — no Save-as dialog, no manual filename).
+  // Each TOP-LEVEL block is rendered to its own image, so a page break never
+  // CUTS through a paragraph or an image. Hebrew RTL + images render as on screen.
+  async function exportPdfFile(title, bodyHtml) {
+    await ensurePdfLibs();
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF('p', 'pt', 'a4');
+    const PW = pdf.internal.pageSize.getWidth();
+    const PH = pdf.internal.pageSize.getHeight();
+    const M = 40;                  // page margin (pt)
+    const CW = PW - M * 2;         // usable content width (pt)
+    const usableH = PH - M * 2;    // usable content height (pt)
+
+    const host = document.createElement('div');
+    host.style.cssText = 'position:fixed;left:-10000px;top:0;width:720px;background:#fff;' +
+      'direction:rtl;font-family:Arial,sans-serif;font-size:15px;line-height:1.6;color:#000;';
+    host.innerHTML = '<h1 style="font-size:26px;margin:0 0 16px;">' + title + '</h1>' + bodyHtml;
+    document.body.appendChild(host);
+
+    try {
+      // Wait for every image to finish decoding before snapshotting.
+      await Promise.all(Array.from(host.querySelectorAll('img')).map(img =>
+        (img.complete && img.naturalWidth) ? null
+          : new Promise(r => { img.onload = img.onerror = r; })
+      ));
+
+      let y = M;
+      const blocks = Array.from(host.children);
+      for (const block of blocks) {
+        // Skip truly empty spacer blocks (but keep ones holding an image).
+        if (!block.textContent.trim() && !block.querySelector('img')) continue;
+        const canvas = await window.html2canvas(block, {
+          scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false
+        });
+        if (!canvas.width || !canvas.height) continue;
+        let w = CW;
+        let h = canvas.height * w / canvas.width;
+        // A single block taller than a full page → scale it down to fit one page
+        // (keeps images whole instead of slicing them).
+        if (h > usableH) { const s = usableH / h; h = usableH; w = w * s; }
+        if (y + h > PH - M) { pdf.addPage(); y = M; }
+        const imgData = canvas.toDataURL('image/jpeg', 0.92);
+        pdf.addImage(imgData, 'JPEG', M + (CW - w) / 2, y, w, h);
+        y += h + 5;
+      }
+      pdf.save(title + '.pdf');
+    } finally {
+      host.remove();
+    }
+  }
+
+  // Fallback: the browser's own Save-as-PDF (used only if the PDF libs can't load,
+  // e.g. a corporate network blocking the CDN). Opens the print dialog directly.
+  function exportPdfViaPrint(title, body) {
+    const printId = 'nb-pdf-content-' + Date.now();
+    const printDiv = document.createElement('div');
+    printDiv.id = printId;
+    printDiv.setAttribute('dir', 'rtl');
+    printDiv.setAttribute('style', 'display:none;font-size:11pt;font-family:Arial,sans-serif;');
+    printDiv.innerHTML = '<h1 style="font-size:24pt;margin-bottom:18pt;font-family:Arial,sans-serif;">' + title + '</h1>' + body;
+
+    const printStyle = document.createElement('style');
+    printStyle.id = printId + '-style';
+    printStyle.textContent =
+      '@media print {' +
+      '  body > *:not(#' + printId + ') { display: none !important; visibility: hidden !important; }' +
+      '  #' + printId + ' { display: block !important; visibility: visible !important; position: static !important;' +
+      '    font-family: Arial, sans-serif; font-size: 11pt; color: #000; direction: rtl; line-height: 1.7; }' +
+      '  #' + printId + ' h1,#' + printId + ' h2,#' + printId + ' h3 { margin-bottom: 8pt; }' +
+      '  #' + printId + ' p,#' + printId + ' li,#' + printId + ' td { font-size: 11pt; }' +
+      '  #' + printId + ' p { margin: 6pt 0; }' +
+      '  #' + printId + ' img { max-width: 100%; height: auto; }' +
+      '  #' + printId + ' table[align="center"] { width: 100%; }' +
+      '  #' + printId + ' .nb-img-del { display: none !important; }' +
+      '  #' + printId + ' figure.nb-img, #' + printId + ' p[align="center"] { page-break-inside: avoid; break-inside: avoid; }' +
+      '  @page { margin: 15mm; size: A4; }' +
+      '}';
+    document.head.appendChild(printStyle);
+    document.body.appendChild(printDiv);
+    const _origTitle = document.title;
+    document.title = title;
+    App.toast('נפתח חלון שמירה — שם הקובץ: ' + title);
+    setTimeout(function () {
+      window.print();
+      setTimeout(function () {
+        printStyle.remove(); printDiv.remove(); document.title = _origTitle;
+      }, 1500);
+    }, 250);
+  }
+
   async function exportDoc(topic, editor, format) {
     const title = topic.name || 'מחברת';
 
@@ -811,48 +924,16 @@ ${gratitude ? `<div>
     // selectable text). Opened DIRECTLY — no instruction modal. (html2pdf /
     // html2canvas produced blank pages, so we don't use it.)
     if (format === 'pdf') {
-      const printId = 'nb-pdf-content-' + Date.now();
-      const printDiv = document.createElement('div');
-      printDiv.id = printId;
-      printDiv.setAttribute('dir', 'rtl');
-      printDiv.setAttribute('style', 'display:none;font-size:11pt;font-family:Arial,sans-serif;');
-      printDiv.innerHTML = `<h1 style="font-size:24pt;margin-bottom:18pt;font-family:Arial,sans-serif;">${title}</h1>${body}`;
-
-      const printStyle = document.createElement('style');
-      printStyle.id = printId + '-style';
-      printStyle.textContent = `
-        @media print {
-          body > *:not(#${printId}) { display: none !important; visibility: hidden !important; }
-          #${printId} {
-            display: block !important; visibility: visible !important; position: static !important;
-            font-family: Arial, sans-serif; font-size: 11pt; color: #000; direction: rtl; line-height: 1.7;
-          }
-          #${printId} h1,#${printId} h2,#${printId} h3 { margin-bottom: 8pt; }
-          #${printId} p,#${printId} li,#${printId} td { font-size: 11pt; }
-          #${printId} p { margin: 6pt 0; }
-          #${printId} p[align="center"] { text-align: center; }
-          #${printId} img { max-width: 100%; height: auto; }
-          #${printId} table[align="center"] { width: 100%; }
-          #${printId} .nb-img-del { display: none !important; }
-          #${printId} figure.nb-img, #${printId} p[align="center"] { page-break-inside: avoid; break-inside: avoid; }
-          @page { margin: 15mm; size: A4; }
-        }`;
-      document.head.appendChild(printStyle);
-      document.body.appendChild(printDiv);
-      // The browser's Save-as-PDF uses document.title as the DEFAULT filename.
-      // Temporarily swap it to the notebook name so the saved file is named
-      // after the notebook (instead of the app title), then restore it.
-      const _origTitle = document.title;
-      document.title = title;
-      App.toast('נפתח חלון שמירה — שם הקובץ: ' + title);
-      setTimeout(function () {
-        window.print();
-        setTimeout(function () {
-          printStyle.remove();
-          printDiv.remove();
-          document.title = _origTitle;
-        }, 1500);
-      }, 250);
+      App.toast('יוצר PDF…');
+      try {
+        // Real PDF file, auto-downloaded as "<notebook>.pdf" — no Save dialog.
+        await exportPdfFile(title, body);
+        App.toast('✓ קובץ PDF הורד: ' + title);
+      } catch (e) {
+        // CDN blocked / lib error → fall back to the browser's Save-as-PDF.
+        console.warn('PDF auto-download failed, falling back to print:', e);
+        exportPdfViaPrint(title, body);
+      }
       return;
     }
 

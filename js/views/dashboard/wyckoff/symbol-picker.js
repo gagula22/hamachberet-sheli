@@ -10,8 +10,11 @@
       alert('לא נמצאו מטבעות. נסה/י שוב בעוד דקה (TradingView צריך לרוץ עם CDP).');
       return;
     }
-    let selectedSymbol = allSymbols[0].symbol;
     let currentFilter = 'perp'; // 'perp' | 'spot' | 'all'
+    // Default-select the first symbol VISIBLE under the initial filter, so a blind
+    // "send" never fires a hidden default (e.g. CRYPTOCAP:BTC.D — a macro symbol the
+    // 'perp' tab hides and the validator used to reject → "פורמט שגוי").
+    let selectedSymbol = (allSymbols.find(s => s.type === currentFilter) || allSymbols[0]).symbol;
 
     // Overlay
     const overlay = document.createElement('div');
@@ -50,7 +53,13 @@
         background:${isActive ? '#0a7' : '#fff'};
         color:${isActive ? '#fff' : '#374151'};
         font-weight:${isActive ? 600 : 400};`;
-      btn.onclick = () => { currentFilter = value; renderTabs(); renderList(); };
+      btn.onclick = () => {
+        currentFilter = value;
+        // Keep the selection visible inside the new filter so it always matches what's shown.
+        const visible = allSymbols.filter(s => value === 'all' || s.type === value);
+        if (visible.length && !visible.some(s => s.symbol === selectedSymbol)) selectedSymbol = visible[0].symbol;
+        renderTabs(); renderList();
+      };
       return btn;
     }
 
@@ -162,9 +171,11 @@
       // Use custom input value if set, else selectedSymbol
       const customVal = customInput.value.trim().toUpperCase();
       const finalSymbol = customVal || selectedSymbol;
-      // Validate: SOURCE:TICKER format or plain TICKER
-      if (!finalSymbol.match(/^([A-Z]+:)?[A-Z0-9]+(\.P)?$/)) {
-        alert('פורמט שגוי. דוגמאות תקינות:\n• BYBIT:BTCUSDT.P\n• BINANCE:ETHUSDT\n• SOLUSDT.P');
+      // Accept every real TradingView shape that appears in the watchlist:
+      // SRC:TICKER, suffixes like .P / .D, and ratio symbols with "/" and multiple ":".
+      // (The old /^([A-Z]+:)?[A-Z0-9]+(\.P)?$/ wrongly rejected CRYPTOCAP:BTC.D etc.)
+      if (!finalSymbol.match(/^[A-Z0-9][A-Z0-9.:\/]*$/)) {
+        alert('פורמט שגוי. דוגמאות תקינות:\n• BYBIT:BTCUSDT.P\n• CRYPTOCAP:BTC.D\n• SOLUSDT.P');
         return;
       }
       send.disabled = true;
