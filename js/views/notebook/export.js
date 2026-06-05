@@ -597,8 +597,14 @@ ${gratitude ? `<div>
 
   // ── Generate a real PDF file and auto-download it named after the notebook
   // (exactly like the Word export — no Save-as dialog, no manual filename).
-  // Each TOP-LEVEL block is rendered to its own image, so a page break never
-  // CUTS through a paragraph or an image. Hebrew RTL + images render as on screen.
+  //
+  // The whole content is rendered to ONE canvas in a single html2canvas pass
+  // (rendering blocks individually distorts RTL text — letters jam together and
+  // lines overlap). Two things are essential:
+  //   • explicit width/windowWidth — otherwise html2canvas clips the off-screen
+  //     host to the (narrow) viewport width, cutting text on the side.
+  //   • the tall canvas is sliced into pages ONLY at top-level block boundaries,
+  //     so a page break never cuts through a paragraph or an image.
   async function exportPdfFile(title, bodyHtml) {
     await ensurePdfLibs();
     const { jsPDF } = window.jspdf;
@@ -608,9 +614,11 @@ ${gratitude ? `<div>
     const M = 40;                  // page margin (pt)
     const CW = PW - M * 2;         // usable content width (pt)
     const usableH = PH - M * 2;    // usable content height (pt)
+    const HOST_W = 680;            // render width (px) — matches A4 content area
+    const SCALE = 2;               // 2× for crisp output
 
     const host = document.createElement('div');
-    host.style.cssText = 'position:fixed;left:-10000px;top:0;width:720px;background:#fff;' +
+    host.style.cssText = 'position:fixed;left:-10000px;top:0;width:' + HOST_W + 'px;background:#fff;' +
       'direction:rtl;font-family:Arial,sans-serif;font-size:15px;line-height:1.6;color:#000;';
     host.innerHTML = '<h1 style="font-size:26px;margin:0 0 16px;">' + title + '</h1>' + bodyHtml;
     document.body.appendChild(host);
@@ -621,26 +629,57 @@ ${gratitude ? `<div>
         (img.complete && img.naturalWidth) ? null
           : new Promise(r => { img.onload = img.onerror = r; })
       ));
+      // Drop any UI-only buttons that slipped into the clone.
+      host.querySelectorAll('.nb-img-del,.nb-img-move').forEach(el => el.remove());
 
-      let y = M;
-      const blocks = Array.from(host.children);
-      for (const block of blocks) {
-        // Skip truly empty spacer blocks (but keep ones holding an image).
-        if (!block.textContent.trim() && !block.querySelector('img')) continue;
-        const canvas = await window.html2canvas(block, {
-          scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false
-        });
-        if (!canvas.width || !canvas.height) continue;
-        let w = CW;
-        let h = canvas.height * w / canvas.width;
-        // A single block taller than a full page → scale it down to fit one page
-        // (keeps images whole instead of slicing them).
-        if (h > usableH) { const s = usableH / h; h = usableH; w = w * s; }
-        if (y + h > PH - M) { pdf.addPage(); y = M; }
-        const imgData = canvas.toDataURL('image/jpeg', 0.92);
-        pdf.addImage(imgData, 'JPEG', M + (CW - w) / 2, y, w, h);
-        y += h + 5;
+      const totalDomH = host.scrollHeight;
+      const canvas = await window.html2canvas(host, {
+        scale: SCALE, backgroundColor: '#ffffff', useCORS: true, logging: false,
+        width: HOST_W, windowWidth: HOST_W, windowHeight: totalDomH
+      });
+
+      // Safe page-break positions = the bottom edge of each top-level block (px).
+      const bounds = [0];
+      Array.from(host.children).forEach(b => {
+        const bottom = b.offsetTop + b.offsetHeight;
+        if (bottom > 0) bounds.push(bottom);
+      });
+      bounds.push(totalDomH);
+      const stops = Array.from(new Set(bounds)).sort((a, b) => a - b);
+
+      const ptPerPx = CW / HOST_W;
+      const pageMaxDomH = Math.floor(usableH / ptPerPx);  // max px of content per page
+
+      let startY = 0, first = true, guard = 0;
+      while (startY < totalDomH - 1 && guard++ < 200) {
+        let endY = startY + pageMaxDomH;
+        if (endY >= totalDomH) {
+          endY = totalDomH;
+        } else {
+          // Snap the page bottom DOWN to the last block boundary that fits.
+          let snapped = 0;
+          for (const b of stops) { if (b > startY && b <= endY) snapped = b; }
+          if (snapped > startY) endY = snapped;
+          // else: a single block taller than a page → hard cut (unavoidable).
+        }
+        const srcY = Math.round(startY * SCALE);
+        const srcH = Math.min(Math.round((endY - startY) * SCALE), canvas.height - srcY);
+        if (srcH <= 0) break;
+
+        const slice = document.createElement('canvas');
+        slice.width = canvas.width;
+        slice.height = srcH;
+        const ctx = slice.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, slice.width, slice.height);
+        ctx.drawImage(canvas, 0, srcY, canvas.width, srcH, 0, 0, slice.width, srcH);
+
+        if (!first) pdf.addPage();
+        pdf.addImage(slice.toDataURL('image/jpeg', 0.92), 'JPEG', M, M, CW, (srcH / SCALE) * ptPerPx);
+        first = false;
+        startY = endY;
       }
+
       pdf.save(title + '.pdf');
     } finally {
       host.remove();
