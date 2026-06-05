@@ -90,11 +90,30 @@ async function exportToWord() {
         } catch (e) { return null; }
     }
 
-    // Replace images with base64 data URLs
+    // Replace images with base64 data URLs AND wrap each chart in a Word-safe
+    // table with explicit px width+height attributes. Word renders a data-URL
+    // image ONLY in this structure; a bare <img> with a CSS width shows as an
+    // empty bordered box (this is what made the charts disappear in Word).
+    const liveImgs = document.querySelectorAll('img.chart');
     const images = body.querySelectorAll('img.chart');
-    for (const img of images) {
+    for (let i = 0; i < images.length; i++) {
+        const img = images[i], live = liveImgs[i];
         const dataUrl = await imgToDataUrl(img.src);
         if (dataUrl) img.src = dataUrl;
+        const natW = (live && live.naturalWidth) || 950, natH = (live && live.naturalHeight) || 540;
+        const w = 600, h = Math.max(80, Math.round(w * natH / natW));
+        img.removeAttribute('class');
+        img.setAttribute('width', String(w));
+        img.setAttribute('height', String(h));
+        img.setAttribute('style', 'display:block;margin:0 auto;');
+        const tbl = document.createElement('table');
+        tbl.setAttribute('border', '0'); tbl.setAttribute('cellpadding', '0'); tbl.setAttribute('cellspacing', '0');
+        tbl.setAttribute('align', 'center'); tbl.setAttribute('width', '100%');
+        tbl.setAttribute('style', 'border-collapse:collapse;margin:10px 0;page-break-inside:avoid;mso-pagination:widow-orphan keep-together;');
+        const tr = document.createElement('tr'), td = document.createElement('td');
+        td.setAttribute('align', 'center'); td.setAttribute('style', 'text-align:center;padding:6px 0;');
+        img.parentNode.insertBefore(tbl, img);
+        td.appendChild(img); tr.appendChild(td); tbl.appendChild(tr);
     }
 
     const fullHtml = `<html xmlns:o="urn:schemas-microsoft-com:office:office"
