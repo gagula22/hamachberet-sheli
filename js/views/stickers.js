@@ -19,7 +19,10 @@
       { icon: '🗑️', label: 'מחק דפים',     bg: 'linear-gradient(135deg,#F5DCDC,#E8AEAE)', target: 'tool-del' },   // 6
       { icon: '🔄', label: 'סובב PDF',     bg: 'linear-gradient(135deg,#F0E6D2,#D8C39A)', target: 'tool-rot' },   // 7
       { icon: '🖼️', label: 'PDF ל-JPG',    bg: 'linear-gradient(135deg,#E3DCF5,#BFA9E8)', target: 'tool-pjpg' }, // 8
-      { icon: '📄', label: 'תמונות ל-PDF', bg: 'linear-gradient(135deg,#DCF0F5,#A9D8E8)', target: 'tool-i2p' }   // 9
+      { icon: '📄', label: 'תמונות ל-PDF', bg: 'linear-gradient(135deg,#DCF0F5,#A9D8E8)', target: 'tool-i2p' },  // 9
+      { icon: '🗜️', label: 'דחס PDF',      bg: 'linear-gradient(135deg,#E8E2D2,#CFC0A0)', target: 'tool-cmp' },  // 10
+      { icon: '📑', label: 'שטח טופס',     bg: 'linear-gradient(135deg,#DCEFE2,#AED8BF)', target: 'tool-flat' }, // 11
+      { icon: '🔓', label: 'בטל נעילה',    bg: 'linear-gradient(135deg,#F5E2DC,#E8BFA9)', target: 'tool-unlk' }  // 12
     ];
 
     const buttons = [];
@@ -156,6 +159,9 @@
     const rot = window.Tools.pdfRotate();
     const pjpg = window.Tools.pdfToJpg();
     const i2p = window.Tools.imgToPdf();
+    const cmp = window.Tools.pdfCompress();
+    const flat = window.Tools.pdfFlatten();
+    const unlk = window.Tools.pdfUnlock();
     const vtr = window.Tools.videoTranscriber();
 
     w2p.id = 'tool-w2p';
@@ -167,6 +173,9 @@
     rot.id = 'tool-rot';
     pjpg.id = 'tool-pjpg';
     i2p.id = 'tool-i2p';
+    cmp.id = 'tool-cmp';
+    flat.id = 'tool-flat';
+    unlk.id = 'tool-unlk';
     vtr.id = 'tool-vtr';
 
     _wrapWithAccent(w2p, 'linear-gradient(90deg,#FADADD,#F3B7BD)');
@@ -178,14 +187,17 @@
     _wrapWithAccent(rot, 'linear-gradient(90deg,#F0E6D2,#D8C39A)');
     _wrapWithAccent(pjpg, 'linear-gradient(90deg,#E3DCF5,#BFA9E8)');
     _wrapWithAccent(i2p, 'linear-gradient(90deg,#DCF0F5,#A9D8E8)');
+    _wrapWithAccent(cmp, 'linear-gradient(90deg,#E8E2D2,#CFC0A0)');
+    _wrapWithAccent(flat, 'linear-gradient(90deg,#DCEFE2,#AED8BF)');
+    _wrapWithAccent(unlk, 'linear-gradient(90deg,#F5E2DC,#E8BFA9)');
     _wrapWithAccent(vtr, 'linear-gradient(90deg,#CFE4F7,#A9CEEE)');
 
-    const toggleCards = { 'tool-w2p': w2p, 'tool-p2w': p2w, 'tool-ptr': ptr, 'tool-merge': merge, 'tool-split': split, 'tool-del': del, 'tool-rot': rot, 'tool-pjpg': pjpg, 'tool-i2p': i2p };
+    const toggleCards = { 'tool-w2p': w2p, 'tool-p2w': p2w, 'tool-ptr': ptr, 'tool-merge': merge, 'tool-split': split, 'tool-del': del, 'tool-rot': rot, 'tool-pjpg': pjpg, 'tool-i2p': i2p, 'tool-cmp': cmp, 'tool-flat': flat, 'tool-unlk': unlk };
     Object.keys(toggleCards).forEach(function (id) { toggleCards[id].style.display = 'none'; });
 
     const hero = buildHero(toggleCards);
 
-    root.append(App.el('div', { class: 'stack stack-lg' }, [hero, w2p, p2w, ptr, merge, split, del, rot, pjpg, i2p, vtr]));
+    root.append(App.el('div', { class: 'stack stack-lg' }, [hero, w2p, p2w, ptr, merge, split, del, rot, pjpg, i2p, cmp, flat, unlk, vtr]));
   }
   App.register('stickers', render);
 })();
