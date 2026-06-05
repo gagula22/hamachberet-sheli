@@ -584,14 +584,18 @@ ${gratitude ? `<div>
     }));
 
     // ── Step 1: stamp each figure's rendered pixel-width onto data-ew
-    // Cap at the A4 page content width (~600px at 96dpi ≈ full page with default
-    // 1-inch margins) so full-width editor images fill the exported page.
-    const MAX_IMG_W = 600;
+    // The editor content width IS the page width: a figure as wide as it exports
+    // at 100% (full page); a half-width figure at 50%.
+    const _ecs = getComputedStyle(editor);
+    const pageW = (function () {
+      const w = editor.clientWidth - parseFloat(_ecs.paddingLeft || 0) - parseFloat(_ecs.paddingRight || 0);
+      return w > 0 ? w : 600;
+    })();
     editor.querySelectorAll('figure.nb-img').forEach(fig => {
       const liveW = fig.getBoundingClientRect().width;
       const styleW = parseInt(fig.style.width) || 0;
       const w = liveW > 0 ? liveW : styleW > 0 ? styleW : 300;
-      fig.dataset.ew = String(Math.round(Math.min(w, MAX_IMG_W)));
+      fig.dataset.ew = String(Math.round(Math.min(w, pageW)));
     });
 
     const cloned = editor.cloneNode(true);
@@ -624,10 +628,10 @@ ${gratitude ? `<div>
       const img = fig.querySelector('img');
       if (!img) return;
       const w = parseInt(fig.dataset.ew) || 300;
-      // Width as a PERCENTAGE of the page (600px = full editor page width), so a
-      // full-width image fills the exported page and a half-width image stays
-      // half — identical in Word and PDF, regardless of the page's pixel size.
-      const pct = Math.min(100, Math.max(10, Math.round(w / 600 * 100)));
+      // Width as a PERCENTAGE of the page width (pageW), so a full-width image
+      // fills the exported page and a half-width image stays half — identical in
+      // Word and PDF, regardless of the page's pixel size.
+      const pct = Math.min(100, Math.max(10, Math.round(w / pageW * 100)));
       const clonedImg = img.cloneNode(true);
       clonedImg.removeAttribute('width');
       clonedImg.setAttribute('height', 'auto');

@@ -20,14 +20,15 @@
   // A4 printable width: 210mm − 2×25.4mm margins ≈ 602px at 96 DPI → rounded to 600.
   const A4_CONTENT_W = 600;
 
-  // Returns the effective max image width: the smaller of A4 printable width
-  // and the editor's actual content area (for narrow/mobile screens).
+  // Returns the editor's full content width (where the text flows), so a
+  // full-width image spans the whole page exactly like the text — not just the
+  // narrower A4 sub-width. A4_CONTENT_W is only a fallback when unmeasured.
   function editorContentWidth(editor) {
     const cs = getComputedStyle(editor);
     const contentW = editor.clientWidth
                    - parseFloat(cs.paddingLeft  || 0)
                    - parseFloat(cs.paddingRight || 0);
-    return Math.min(contentW, A4_CONTENT_W);
+    return contentW > 0 ? contentW : A4_CONTENT_W;
   }
 
   function insertImage(dataUrl, editor, save) {

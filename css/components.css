@@ -538,7 +538,7 @@ figure.nb-img {
   resize: both;
   overflow: hidden;
   width: 300px;
-  max-width: min(100%, 600px); /* A4 printable width ≈ 600px — never cut on print/export */
+  max-width: 100%; /* fill the editor content width like the text */
   height: auto;
   min-width: 80px;
   min-height: 60px;
