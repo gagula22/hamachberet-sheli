@@ -81,7 +81,7 @@
 │       │       ├── ui-toast.js      התראות צפות          → window.VT_TOAST
 │       │       └── index.js         main UI + whisper (מחזיק whisper state)
 │       │
-│       ├── stickers.js              מעטפת "כלים": hero + layout + register (קורא ל-window.Tools.*)
+│       ├── stickers.js              מעטפת "כלים": hero + רשת אריחים לפי קטגוריה; כל אריח פותח את הכלי ב-MODAL מוקפץ (✕/ESC/רקע). הכרטיסים נבנים lazily ונשמרים. קורא ל-window.Tools.*
 │       ├── calendar.js              ניתוב יומן → daily/weekly/monthly
 │       ├── daily.js weekly.js monthly.js   תצוגות יומן
 │       └── notes.js todos.js habits.js mood.js water.js budget.js goals.js
