@@ -64,7 +64,10 @@
 │       │   │   ├── shared.js         ensureLib/ensureZip/download/dropzone/parseRanges → window.PdfOps (pdf-lib+JSZip מאורזים)
 │       │   │   ├── merge.js  split.js  delete.js  rotate.js → window.Tools.pdf{Merge,Split,Delete,Rotate}
 │       │   │   ├── pdf-to-jpg.js      רינדור עמודים→JPG (zip ל-רב-עמודי) → window.Tools.pdfToJpg
-│       │   │   └── img-to-pdf.js      JPG/PNG→PDF (pdf-lib)               → window.Tools.imgToPdf
+│       │   │   ├── img-to-pdf.js      JPG/PNG→PDF (pdf-lib)               → window.Tools.imgToPdf
+│       │   │   ├── compress.js        דחיסה ע"י רסטור עמודים→JPG          → window.Tools.pdfCompress
+│       │   │   ├── flatten.js         שיטוח טפסים (pdf-lib form.flatten)  → window.Tools.pdfFlatten
+│       │   │   └── unlock.js          הסרת הגבלות בעלים (re-save)         → window.Tools.pdfUnlock
 │       │   ├── pdf-translator/
 │       │   │   ├── translate.js     מנוע התרגום הטהור   → window.PTR_ENGINE
 │       │   │   └── index.js         UI + תזמור           → window.Tools.pdfTranslator
