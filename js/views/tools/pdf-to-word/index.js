@@ -1120,8 +1120,16 @@
           flushAll();
           var im = b.image;
           var dispW = im.width ? Math.min(680, Math.round(im.width)) : 480;
-          html += '<p style="text-align:center;margin:14px 0;"><img width="' + dispW +
-                  '" src="' + im.dataUrl + '" style="width:' + dispW + 'px;max-width:100%;height:auto;" /></p>';
+          // Word reliably renders a data-URL image only when it is wrapped in a
+          // <table> and carries explicit px width AND height attributes — this is
+          // the exact structure the notebook Word export uses (confirmed working).
+          // A bare <img> with a CSS width shows as an empty bordered box in Word.
+          var dispH = (im.width && im.height) ? Math.round(dispW * im.height / im.width) : 0;
+          html += '<table border="0" cellpadding="0" cellspacing="0" align="center" width="100%" ' +
+                  'style="border-collapse:collapse;margin:10px 0;page-break-inside:avoid;mso-pagination:widow-orphan keep-together;">' +
+                  '<tr><td align="center" style="text-align:center;padding:6px 0;">' +
+                  '<img width="' + dispW + '"' + (dispH > 0 ? ' height="' + dispH + '"' : '') +
+                  ' src="' + im.dataUrl + '" style="display:block;margin:0 auto;" /></td></tr></table>';
           prevY = im.y; prevH = im.height;
           return;
         }
