@@ -19,7 +19,11 @@
       vendorJs:  'js/vendor/maplibre/maplibre-gl.js',
       vendorCss: 'js/vendor/maplibre/maplibre-gl.css',
       cdnJs:     'https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js',
-      cdnCss:    'https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css'
+      cdnCss:    'https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css',
+      // תוסף עיצוב טקסט RTL — בלעדיו תוויות עברית מצוירות בסדר אותיות הפוך.
+      // נטען עצלה (lazy) ע"י maplibre רק כשמופיעה תווית RTL ראשונה.
+      vendorRtl: 'js/vendor/maplibre/maplibre-gl-rtl-text.min.js',
+      cdnRtl:    'https://unpkg.com/@mapbox/mapbox-gl-rtl-text@0.2.3/mapbox-gl-rtl-text.min.js'
     },
 
     // ארץ ישראל: מרכז ברירת-מחדל + maxBounds רחב ([מערב,דרום],[מזרח,צפון])
@@ -72,10 +76,37 @@
       }
     },
 
-    // מראה מבני התלת-מימד (fill-extrusion): צבע מהאריח אם קיים, אחרת חול בהיר
+    // מראה מבני התלת-מימד (fill-extrusion): צבע מהאריח אם קיים, אחרת חול בהיר.
+    // אין תלת-מימד פוטוריאליסטי חינמי לישראל (גוגל לא פתחו 3D Tiles לארץ) —
+    // לכן הקוביות שקופות-למחצה, כדי שתצלום הלוויין האמיתי ייראה דרכן.
     buildings3d: {
       fallbackColor: '#d9cfc0',
-      opacity: 0.85
+      opacity: 0.55
+    },
+
+    // ── תוויות וגבולות (שכבת ה-vector של OpenFreeMap, סכימת OpenMapTiles) ──
+    // glyphs = שרת הגופנים של אותו ספק (אומת 200). השדות text-field מעדיפים
+    // name:he ונופלים ל-name. הכל מודלק/מכובה יחד דרך handle.setLabels(on).
+    labels: {
+      glyphs: 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf',
+      font:     ['Noto Sans Regular'],
+      fontBold: ['Noto Sans Bold'],
+      streets: {            // שמות רחובות — source-layer: transportation_name
+        minzoom: 13,
+        color: '#ffffff', halo: '#1f2733', haloWidth: 1.6
+      },
+      hoods: {               // שכונות/רובעים — place: suburb/quarter/neighbourhood
+        minzoom: 11, maxzoom: 16.5,
+        color: '#ffe9b8', halo: '#3a3322', haloWidth: 1.8
+      },
+      cities: {              // ערים/עיירות/יישובים — place: city/town/village
+        minzoom: 6,  maxzoom: 14,
+        color: '#ffffff', halo: '#222b38', haloWidth: 2
+      },
+      boundaries: {          // גבולות מוניציפליים/שכונתיים — boundary: admin_level 8-10
+        minzoom: 10,
+        color: '#ffd86e', opacity: 0.7
+      }
     },
 
     // שמיים + אובך אופק למצב 3d (מוחל רק אם הגרסה תומכת ב-setSky)

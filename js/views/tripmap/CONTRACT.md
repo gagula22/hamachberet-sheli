@@ -38,6 +38,7 @@ TripMapEngine.create(containerEl, opts?) → Promise<handle>
 handle.map                                      // אובייקט maplibre גולמי (לשימוש B בלבד)
 handle.setMode('2d'|'3d')                       // 3d = terrain + pitch + מבנים extrusion
 handle.setBasemap('satellite'|'streets')
+handle.setLabels(on)                            // שמות רחובות/שכונות/ערים + גבולות (ברירת-מחדל: דולק)
 handle.flyTo({lat,lng,zoom?,pitch?,bearing?})
 handle.addMarker({id?,lat,lng,label?,color?,group?,onClick?}) → markerId
 handle.clearMarkers(group?)                     // בלי group = הכל

@@ -151,6 +151,7 @@
     var btnStreets = el('button', { class: 'tm-btn active', title: 'מפת רחובות' }, '🗺️ רחובות');
     var btnSat = el('button', { class: 'tm-btn', title: 'תצלום לוויין' }, '🛰️ לוויין');
     var btnStreet = el('button', { class: 'tm-btn', title: 'תצוגת רחוב: הפעל ולחץ על המפה' }, '🚶');
+    var btnLabels = el('button', { class: 'tm-btn active', title: 'שמות רחובות, שכונות וערים + גבולות' }, '🏷️ שמות');
     var btnHelp = el('button', { class: 'tm-btn', title: 'עזרה' }, '❓');
 
     function setActive(on, off) { on.classList.add('active'); off.classList.remove('active'); }
@@ -170,6 +171,13 @@
     btnSat.addEventListener('click', function () {
       if (!_handle) return;
       try { _handle.setBasemap('satellite'); setActive(btnSat, btnStreets); } catch (e) { console.warn(e); }
+    });
+
+    // 🏷️ תוויות: שמות רחובות/שכונות/ערים + גבולות — דולק כברירת-מחדל
+    btnLabels.addEventListener('click', function () {
+      if (!_handle || !_handle.setLabels) return;
+      var on = !btnLabels.classList.contains('active');
+      try { _handle.setLabels(on); btnLabels.classList.toggle('active', on); } catch (e) { console.warn(e); }
     });
 
     // 🚶 מצב "פקק": קליק על המפה פותח תצוגת רחוב שם (TripMapStreet — סוכן B)
@@ -204,6 +212,7 @@
     return el('div', { class: 'tm-toolbar' }, [
       el('div', { class: 'tm-btn-group' }, [btn2d, btn3d]),
       el('div', { class: 'tm-btn-group' }, [btnStreets, btnSat]),
+      el('div', { class: 'tm-btn-group' }, [btnLabels]),
       el('div', { class: 'tm-btn-group' }, [btnStreet, btnHelp]),
       buildSearch()
     ]);

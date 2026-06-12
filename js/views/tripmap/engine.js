@@ -47,8 +47,17 @@
       var base = _base();
       _loadCss(base + C.lib.vendorCss, C.lib.cdnCss);
       var done = function () {
-        if (window.maplibregl) res(window.maplibregl);
-        else fail();
+        if (!window.maplibregl) return fail();
+        // תוסף RTL — חובה לתוויות עברית (אחרת סדר האותיות מתהפך). lazy=true:
+        // maplibre מוריד אותו רק כשנתקל בתווית RTL ראשונה. נרשם פעם אחת בלבד.
+        try {
+          if (typeof maplibregl.setRTLTextPlugin === 'function' &&
+              (typeof maplibregl.getRTLTextPluginStatus !== 'function' ||
+               maplibregl.getRTLTextPluginStatus() === 'unavailable')) {
+            maplibregl.setRTLTextPlugin(_base() + C.lib.vendorRtl, true);
+          }
+        } catch (e) { console.debug('tripmap rtl-plugin:', e); }
+        res(window.maplibregl);
       };
       var fail = function () {
         _libP = null;  // מאפשר ניסיון חוזר כשהרשת תחזור
@@ -66,6 +75,11 @@
   // שמות פנימיים קבועים של מקורות/שכבות (פרטי מימוש — לא חלק מהחוזה)
   var SRC = { sat: 'tm-sat', osm: 'tm-osm', dem: 'tm-dem', vec: 'tm-vec' };
   var LYR = { sat: 'tm-base-sat', osm: 'tm-base-osm', bld: 'tm-buildings-3d' };
+  // שכבות תוויות/גבולות — מודלקות/מכובות יחד דרך handle.setLabels(on)
+  var LBL = ['tm-boundaries', 'tm-street-names', 'tm-hood-labels', 'tm-city-labels'];
+
+  // שם בעברית אם קיים באריח, אחרת השם המקומי (בישראל name הוא ממילא עברית)
+  var NAME_HE = ['coalesce', ['get', 'name:he'], ['get', 'name']];
 
   function _buildStyle(C, basemap, mode) {
     var satVis = basemap === 'satellite' ? 'visible' : 'none';
@@ -77,8 +91,11 @@
     sources[SRC.osm] = { type: 'raster', tiles: s.streets.tiles, tileSize: s.streets.tileSize, maxzoom: s.streets.maxzoom, attribution: s.streets.attribution };
     sources[SRC.dem] = { type: 'raster-dem', tiles: s.terrain.tiles, tileSize: s.terrain.tileSize, maxzoom: s.terrain.maxzoom, encoding: s.terrain.encoding, attribution: s.terrain.attribution };
     sources[SRC.vec] = { type: 'vector', url: s.buildings.url, attribution: s.buildings.attribution };
+    var L = C.labels;
+    var lblVis = 'visible';   // תוויות דולקות כברירת-מחדל; setLabels(false) מכבה
     return {
       version: 8,
+      glyphs: L.glyphs,       // שרת גופנים — חובה לכל שכבת symbol עם טקסט
       sources: sources,
       layers: [
         { id: 'tm-bg', type: 'background', paint: { 'background-color': '#e8e4dc' } },
@@ -99,6 +116,79 @@
             'fill-extrusion-base': ['interpolate', ['linear'], ['zoom'],
               s.buildings.minzoom, 0, s.buildings.minzoom + 1, ['coalesce', ['get', 'render_min_height'], 0]],
             'fill-extrusion-opacity': C.buildings3d.opacity
+          }
+        },
+
+        // ── גבולות מוניציפליים/שכונתיים (admin_level 8-10, לא ימיים) ──
+        {
+          id: 'tm-boundaries', type: 'line', source: SRC.vec, 'source-layer': 'boundary',
+          minzoom: L.boundaries.minzoom,
+          filter: ['all',
+            ['>=', ['get', 'admin_level'], 8], ['<=', ['get', 'admin_level'], 10],
+            ['!=', ['get', 'maritime'], 1]],
+          layout: { visibility: lblVis },
+          paint: {
+            'line-color': L.boundaries.color,
+            'line-opacity': L.boundaries.opacity,
+            'line-width': ['interpolate', ['linear'], ['zoom'], 10, 1, 16, 2.5],
+            'line-dasharray': [2, 2]
+          }
+        },
+
+        // ── שמות רחובות — לאורך קו הרחוב ──
+        {
+          id: 'tm-street-names', type: 'symbol', source: SRC.vec, 'source-layer': 'transportation_name',
+          minzoom: L.streets.minzoom,
+          layout: {
+            visibility: lblVis,
+            'symbol-placement': 'line',
+            'text-field': NAME_HE,
+            'text-font': L.font,
+            'text-size': ['interpolate', ['linear'], ['zoom'], 13, 10.5, 16, 12.5, 19, 15]
+          },
+          paint: {
+            'text-color': L.streets.color,
+            'text-halo-color': L.streets.halo,
+            'text-halo-width': L.streets.haloWidth
+          }
+        },
+
+        // ── שכונות / רובעים ──
+        {
+          id: 'tm-hood-labels', type: 'symbol', source: SRC.vec, 'source-layer': 'place',
+          minzoom: L.hoods.minzoom, maxzoom: L.hoods.maxzoom,
+          filter: ['in', ['get', 'class'], ['literal', ['suburb', 'quarter', 'neighbourhood']]],
+          layout: {
+            visibility: lblVis,
+            'text-field': NAME_HE,
+            'text-font': L.fontBold,
+            'text-size': ['interpolate', ['linear'], ['zoom'], 11, 11.5, 15, 14.5],
+            'text-letter-spacing': 0.04
+          },
+          paint: {
+            'text-color': L.hoods.color,
+            'text-halo-color': L.hoods.halo,
+            'text-halo-width': L.hoods.haloWidth
+          }
+        },
+
+        // ── ערים / עיירות / יישובים (להתמצאות בזום רחוק) ──
+        {
+          id: 'tm-city-labels', type: 'symbol', source: SRC.vec, 'source-layer': 'place',
+          minzoom: L.cities.minzoom, maxzoom: L.cities.maxzoom,
+          filter: ['in', ['get', 'class'], ['literal', ['city', 'town', 'village']]],
+          layout: {
+            visibility: lblVis,
+            'text-field': NAME_HE,
+            'text-font': L.fontBold,
+            'text-size': ['interpolate', ['linear'], ['zoom'],
+              6, ['match', ['get', 'class'], 'city', 13, 'town', 11, 9],
+              13, ['match', ['get', 'class'], 'city', 19, 'town', 15, 13]]
+          },
+          paint: {
+            'text-color': L.cities.color,
+            'text-halo-color': L.cities.halo,
+            'text-halo-width': L.cities.haloWidth
           }
         }
       ]
@@ -166,6 +256,16 @@
         setMode: function (m) {
           if (state.destroyed || (m !== '2d' && m !== '3d') || m === state.mode) return;
           applyMode(m);
+        },
+
+        // הדלקה/כיבוי של כל התוויות והגבולות יחד (רחובות, שכונות, ערים)
+        setLabels: function (on) {
+          if (state.destroyed) return;
+          var vis = on ? 'visible' : 'none';
+          LBL.forEach(function (id) {
+            try { if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', vis); }
+            catch (e) { console.debug('tripmap setLabels:', e); }
+          });
         },
 
         // החלפת לוויין/רחובות ב-visibility בלבד — terrain/markers/routes נשמרים
