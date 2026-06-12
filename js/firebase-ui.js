@@ -79,7 +79,16 @@
       } catch {
         btn.title = 'הענן לא נגיש';
         setStatus('blocked');
-        if (window.App) App.toast('🚫 אין קשר אמיתי לענן מהרשת הזו — השינויים שמורים במכשיר ויעלו ברשת פתוחה');
+        // הפעלת מצב תאימות לרשתות חוסמות (long-polling כפוי) במכשיר הזה
+        // בלבד — ייכנס לתוקף ברענון הבא (firebase-sync קורא את הדגל באתחול).
+        let firstTime = false;
+        try {
+          firstTime = localStorage.getItem('mahberet.forceLP') !== '1';
+          localStorage.setItem('mahberet.forceLP', '1');
+        } catch {}
+        if (window.App) App.toast(firstTime
+          ? '🚫 הענן לא נגיש מהרשת הזו — הופעל מצב תאימות. רענן את הדף (F5) ונסה שוב'
+          : '🚫 אין קשר אמיתי לענן מהרשת הזו — השינויים שמורים במכשיר ויעלו ברשת פתוחה');
       }
       btn.classList.remove('syncing');
       setTimeout(() => { btn.title = 'סנכרן עכשיו'; }, 3000);

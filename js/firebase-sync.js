@@ -53,12 +53,19 @@
       // shown as "synced" but never reaching the server (the "lock" on that
       // device). Auto-detect that and fall back to HTTP long-polling, which
       // gets through such blockers. Must be set before any read/write.
-      // long-polling כפוי (לא רק זיהוי-אוטומטי): רשתות ארגוניות מסוימות
-      // מעבירות את בדיקת-החיבור אבל חונקות את ערוץ ה-WebChannel — נוצר מצב
-      // "זומבי": הממשק מציג נשמר אבל שום דבר לא מגיע לשרת (קרה בפועל במחשב
-      // העבודה של המשתמש, גם עם autoDetect). long-polling = בקשות HTTPS
-      // רגילות שעוברות כל פרוקסי; המחיר: מעט יעילות, הרווח: אמינות בכל רשת.
-      try { db.settings({ experimentalForceLongPolling: true, merge: true }); } catch (e) {}
+      // תחבורה אדפטיבית: ברירת המחדל היא זיהוי-אוטומטי של long-polling
+      // (עובד מצוין ברשתות רגילות). ⚠️ ניסיון לכפות long-polling גלובלית
+      // (commit 031d32c) תקע את האתר ב"טוען נתונים מהענן" בדפדפנים מסוימים —
+      // לכן הכפייה נדלקת רק פר-מכשיר, דרך דגל mahberet.forceLP שמופעל
+      // אוטומטית כש-verifyCloud מאתר רשת חוסמת (מחשב העבודה). שני הדגלים
+      // סותרים — לעולם לא להגדיר את שניהם יחד.
+      try {
+        var forceLP = false;
+        try { forceLP = localStorage.getItem('mahberet.forceLP') === '1'; } catch (e) {}
+        db.settings(forceLP
+          ? { experimentalForceLongPolling: true, merge: true }
+          : { experimentalAutoDetectLongPolling: true, merge: true });
+      } catch (e) {}
       db.enablePersistence({ synchronizeTabs: true }).catch(() => {});
       return true;
     } catch (e) {
@@ -472,8 +479,17 @@
 
       if (window.Store && Store.ready) { try { await Store.ready(); } catch {} }
 
-      await listenToCloud();
-      loader.remove();
+      // המסך לעולם לא נתקע: אם הענן לא ענה תוך 15ש (רשת איטית/חסומה,
+      // תקלת תחבורה) — ממשיכים עם הנתונים המקומיים; המאזינים יתחברו
+      // ברקע כשיצליחו, והנתונים יתמזגו אז.
+      try {
+        await Promise.race([
+          listenToCloud(),
+          new Promise(res => setTimeout(res, 15000))
+        ]);
+      } finally {
+        loader.remove();
+      }
 
       setTimeout(() => { window.FirebaseUI.renderUserBar(user); window.FirebaseUI.renderSyncBtn(); }, 600);
 
