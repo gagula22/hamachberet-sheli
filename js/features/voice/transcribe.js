@@ -174,7 +174,7 @@
         chunks.push({ timestamp: [(ts[0] || 0) + x.off, (ts[1] || ts[0] || 0) + x.off], text: c.text });
       });
     });
-    return { text: text.filter(Boolean).join(' '), chunks: chunks };
+    return { text: text.filter(Boolean).join(' '), chunks: chunks, engine: 'ענן · Whisper-Large-v3' };
   }
 
   // ── תמלול ────────────────────────────────────────────────────────────────
@@ -203,10 +203,11 @@
     if (!result || !(result.text || '').trim()) {
       if (!navigator.onLine && !_lwReady) throw new Error('אין חיבור לאינטרנט (נדרש להורדת מודל התמלול בפעם הראשונה)');
       result = await localWhisperChunked(decoded.pcm, decoded.sampleRate, onProgress);
+      result.engine = 'מקומי · Whisper-small (איכות מופחתת)';
     }
     var text = (result.text || '').trim();
     if (!text) throw new Error('לא זוהה דיבור בהקלטה');
-    return { text: text, chunks: result.chunks || [] };
+    return { text: text, chunks: result.chunks || [], engine: result.engine || 'ענן · Whisper-Large-v3' };
   }
 
   // ── ייצוא Word ───────────────────────────────────────────────────────────
@@ -234,7 +235,7 @@
       'h1 { font-size:16pt; } .meta { color:#777; font-size:9pt; } p { margin:0 0 8pt; line-height:1.5; }</style></head>' +
       '<body><div class="Section1" dir="rtl">' +
       '<h1>🎙️ ' + esc(memo.name) + '</h1>' +
-      '<p class="meta">תמלול הקלטה · ' + dateStr + '</p><hr/>' +
+      '<p class="meta">תמלול הקלטה · ' + dateStr + (memo.engine ? ' · מנוע: ' + esc(memo.engine) : '') + '</p><hr/>' +
       bodyHtml(memo) +
       '</div></body></html>';
     var blob = new Blob(['﻿', html], { type: 'application/msword' });

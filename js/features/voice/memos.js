@@ -66,9 +66,14 @@
       App.toast('הדפדפן לא תומך בהקלטת שמע');
       return;
     }
-    navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+    // איכות מקור = דיוק תמלול: ביטול הד, סינון רעש ו-AGC משפרים משמעותית
+    // את הזיהוי; קצב 128kbps שומר פרטים שהמנוע צריך (עדיין ~1MB לדקה).
+    navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+    }).then(stream => {
       const mime = pickMime();
-      _mr = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+      const opts = mime ? { mimeType: mime, audioBitsPerSecond: 128000 } : { audioBitsPerSecond: 128000 };
+      _mr = new MediaRecorder(stream, opts);
       _chunks = [];
       _t0 = Date.now();
       _mr.ondataavailable = e => { if (e.data && e.data.size) _chunks.push(e.data); };
@@ -178,6 +183,7 @@
       VoiceTranscribe.run(memo, setStatus).then(res => {
         memo.transcript = res.text;
         memo.transcriptChunks = res.chunks;
+        memo.engine = res.engine;
         return putMemo(memo).then(() => {
           App.toast('📝 התמלול מוכן — פותח ב-Word…');
           VoiceTranscribe.openInWord(memo);   // נפתח ישר כ-Word
@@ -197,7 +203,7 @@
       playBtn,
       el('div', { class: 'vm-body' }, [
         name,
-        el('span', { class: 'vm-meta' }, fmtDur(memo.duration) + ' · ' + new Date(memo.createdAt).toLocaleDateString('he-IL'))
+        el('span', { class: 'vm-meta' }, fmtDur(memo.duration) + ' · ' + new Date(memo.createdAt).toLocaleDateString('he-IL') + (memo.engine ? ' · ' + memo.engine : ''))
       ]),
       transBtn,
       wordBtn,
