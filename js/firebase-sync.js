@@ -18,7 +18,7 @@
   const SUBCOL_KEYS    = Object.keys(_SS).filter(k => _SS[k].sync === 'subcol');
   const MAIN_DOC_KEYS  = Object.keys(_SS).filter(k => _SS[k].sync === 'maindoc');
   (function assertKeyClassification() {
-    const sub  = ['notes', 'tasks', 'todos', 'goals', 'transactions', 'customTemplates', 'readingList', 'flashcards'];
+    const sub  = ['notes', 'tasks', 'todos', 'goals', 'transactions', 'customTemplates', 'readingList', 'flashcards', 'trips'];
     const main = ['mood', 'water', 'sleep', 'slots', 'settings', 'habits', 'eisenhower', 'weeklyReviews'];
     const same = (a, b) => a.length === b.length && a.every(x => b.indexOf(x) > -1);
     if (!same(SUBCOL_KEYS, sub) || !same(MAIN_DOC_KEYS, main)) {

@@ -281,3 +281,29 @@ Web Speech he-IL; טקסט סופי דרך `execCommand('insertText')` → שמ�
   נשברים בתוך ה-Worker) ← טקסט לעריכה ← בורר מחברת קיימת/חדשה-בשם ← עמוד-בן חדש (אייקון 📷).
 - **רשימת קריאה** `js/views/readinglist/` (view, מפתח `readingList`) — קישור+כותרת+תגית,
   לשוניות לקריאה/נקראו/הכול.
+
+---
+
+## 9. מפת טיולים (`js/views/tripmap/`, view `tripmap`) — יוני 2026
+
+> מפת ישראל בתלת־מימד + תצוגת רחוב + תכנון מסלולים. נבנה ע"י 3 סוכנים במקביל לפי
+> חוזה ממשקים — **`js/views/tripmap/CONTRACT.md` הוא מקור-האמת לממשקים ולבעלות על
+> הקבצים**; לפני כל שינוי שם — לקרוא אותו. CSS: `css/features/tripmap.css`. מפתח Store:
+> `trips` (subcol, merge by-id).
+
+| רוצה לשנות... | גע רק בקובץ |
+|---|---|
+| ספקי אריחים (לוויין/רחובות/גבהים/מבנים), גבולות, ברירות מחדל | `tripmap/config.js` (`window.TripMapConfig`) |
+| מנוע המפה: 2D/3D, terrain, markers, מסלולים | `tripmap/engine.js` (`window.TripMapEngine`) |
+| תצוגת רחוב (overlay, Google embed, fallback) | `tripmap/street.js` (`window.TripMapStreet`) |
+| ניווט גוף-ראשון במפה (WASD/חצים/Q/E/R/F) | `tripmap/controls.js` (`window.TripMapControls`) |
+| פאנל הטיולים, ייבוא JSON, פרומפט הסקיל | `tripmap/trip-layer.js` (`window.TripLayer`) |
+| פריסת ה-view, סרגל צף, חיפוש Nominatim | `tripmap/index.js` |
+
+הערות מימוש: MapLibre GL v5 מאורז ב-`js/vendor/maplibre/` (טעינה עצלה + fallback CDN);
+לוויין Esri (maxzoom 19), גבהים AWS terrarium, מבנים OpenFreeMap fill-extrusion.
+⚠️ maplibre-gl.css נטען עצלה אחרי tripmap.css וקובע `.maplibregl-map{position:relative}`
+— לכן המפה ממוקמת עם `.tm-view > .tm-map` (ספציפיות גוברת). תצוגת רחוב: Google Maps
+embed ללא מפתח (`/maps/embed?pb=!6m7…`) — ה-endpoint היחיד בלי X-Frame-Options.
+ייבוא טיול מהסקיל trip-planner-metakhnen-tiyulim: פרומפט מוכן + הדבקת JSON
+(סכמה: title/region/days[n,title,stops[name,lat,lng,time?,note?,type?]]).

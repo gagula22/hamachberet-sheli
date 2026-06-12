@@ -1,0 +1,92 @@
+# CONTRACT — מפת טיולים (tripmap) · חוזה ממשקים וחלוקת אחריות
+
+> פיצ'ר חדש: מפת ארץ ישראל ברזולוציה מקסימלית, תצוגת תלת־מימד בסגנון Google Maps,
+> תצוגת רחוב אימרסיבית (ניווט קדימה/אחורה/צדדים), ושילוב עם תכנון טיולים
+> (פורמט הסקיל trip-planner-metakhnen-tiyulim).
+>
+> **כל סוכן נוגע אך ורק בקבצים שבבעלותו.** תקשורת בין מודולים — דרך ה־namespaces
+> המוגדרים כאן בלבד (מוסכמת הפרויקט: ARCHITECTURE.md §3).
+
+## אילוצים גלובליים
+- אתר סטטי (GitHub Pages) + preview מקומי. אין שרת. הכל client-side.
+- אסור לדרוש כרטיס אשראי / מפתח בתשלום. ספקי אריחים/תמונות חינמיים בלבד
+  (מפתח חינמי אופציונלי מותר רק כשדרוג, עם fallback מלא בלעדיו).
+- עברית + RTL בכל ה־UI. סגנון עיצוב לפי tokens.css (משתני CSS קיימים).
+- כל קובץ עובר `node --check`. אפס שגיאות קונסול.
+- ספריות צד-שלישי: עדיפות ל־vendoring תחת `js/vendor/` (כמו pdf-lib/tesseract). אם
+  הקובץ ענק — CDN עם טעינה עצלה + הודעת שגיאה ידידותית כשאין רשת.
+- IIFE + namespace על window. אין modules/bundler.
+
+## בעלות על קבצים (אסור לחרוג!)
+
+| סוכן | קבצים בבעלותו בלבד |
+|---|---|
+| A — מנוע מפה | `js/views/tripmap/config.js`, `js/views/tripmap/engine.js`, `js/vendor/maplibre/*` |
+| B — תצוגת רחוב וניווט | `js/views/tripmap/street.js`, `js/views/tripmap/controls.js` |
+| C — אינטגרציה וטיולים | `js/views/tripmap/index.js`, `js/views/tripmap/trip-layer.js`, `css/features/tripmap.css`, ושורות החיווט: `js/app.js` (שורת SECTIONS אחת), `index.html` (תגיות script/css), `js/store-schema.js` (מפתח `trips`), `js/firebase-sync.js` (עדכון assertion אם נדרש) |
+
+קובץ זה (CONTRACT.md) — לקריאה בלבד לכל הסוכנים.
+
+## ממשק A — `window.TripMapEngine` (engine.js + config.js)
+
+```js
+TripMapEngine.ensureLib() → Promise            // טוען maplibre-gl (vendored/CDN), פעם אחת
+TripMapEngine.create(containerEl, opts?) → Promise<handle>
+// opts: {center:{lat,lng}, zoom, pitch, mode:'2d'|'3d', basemap:'satellite'|'streets'}
+// ברירת מחדל: מרכז ישראל, zoom 7.5, גבולות ישראל (maxBounds רחב), maxZoom גבוה ככל שהאריחים מאפשרים (19+)
+
+handle.map                                      // אובייקט maplibre גולמי (לשימוש B בלבד)
+handle.setMode('2d'|'3d')                       // 3d = terrain + pitch + מבנים extrusion
+handle.setBasemap('satellite'|'streets')
+handle.flyTo({lat,lng,zoom?,pitch?,bearing?})
+handle.addMarker({id?,lat,lng,label?,color?,group?,onClick?}) → markerId
+handle.clearMarkers(group?)                     // בלי group = הכל
+handle.drawRoute(coords /*[[lng,lat],…]*/, {id?,color?,group?})
+handle.clearRoutes(group?)
+handle.onClickMap(cb /*({lat,lng})=>{}*/ )      // להחזיר פונקציית הסרה
+handle.resize() ; handle.destroy()
+```
+
+config.js → `window.TripMapConfig`: כתובות מקורות אריחים (לוויין, רחובות, terrain-RGB,
+vector למבנים), attribution, גבולות ישראל, ברירות מחדל. **רק כאן** משנים ספקים.
+
+## ממשק B — `window.TripMapStreet` + `window.TripMapControls`
+
+```js
+TripMapStreet.open({lat,lng})                   // פותח overlay מסך-מלא של תצוגת רחוב
+                                                // עם ✕ + ESC (מוסכמת המודאלים של הכלים)
+TripMapStreet.enableDropMode(handle, onExit?)   // מצב "פקק": קליק על המפה → open() שם
+TripMapStreet.disableDropMode(handle)
+// בתוך הצופה: ניווט קדימה/אחורה/צדדים והסתכלות עם העכבר — חובה.
+// מחקר: Google Street View ללא מפתח (iframe) / Mapillary (טוקן חינמי) — עם fallback.
+
+TripMapControls.attach(handle)                  // ניווט גוף-ראשון על מפת ה-3D עצמה:
+                                                // חיצים/WASD קדימה־אחורה־צדדים, גרירת עכבר = מבט,
+                                                // גלגלת = גובה/זום. לא דורס את ברירות המחדל של maplibre.
+TripMapControls.detach(handle)
+```
+
+B משתמש רק ב־API הציבורי של handle (כולל handle.map). לא נוגע בקבצי A/C.
+
+## ממשק C — view + שכבת טיולים
+
+- View בשם `tripmap`, כותרת **"מפת טיולים"**, אייקון 🗺️, נרשם `App.register('tripmap', render)`.
+- `trip-layer.js` → `window.TripLayer`: ניהול טיולים על המפה (סימון ימים, מסלולים,
+  קליק על יום → flyTo). מודל נתונים:
+
+```js
+// Store key: 'trips'  (מערך)
+{ id, title, region, createdAt,
+  days: [ { n, title, stops: [ { name, lat, lng, time?, note?, type? } ] } ] }
+```
+
+- ייבוא תוכנית מהסקיל: כפתור "תכנן טיול עם Claude" שמעתיק פרומפט מוכן (כולל סכמת
+  ה-JSON הזו) ללוח + כפתור "ייבוא JSON" שמדביק את תוצאת הסקיל ושומר ל-Store.
+- חיפוש מקום: Nominatim (חינמי, בלי מפתח) עם debounce ו-User-Agent תקין.
+
+## סדר טעינה ב-index.html (באחריות C)
+vendor/maplibre → tripmap/config.js → engine.js → street.js → controls.js → trip-layer.js → index.js
+
+## עמידות (חובה לכולם)
+כל מודול בודק שהתלות שלו קיימת (`if (!window.TripMapEngine) …`) ומציג הודעה ידידותית
+במקום לקרוס. אין רשת → המפה מציגה הודעת "נדרש חיבור אינטרנט למפה" — האפליקציה ממשיכה לעבוד.
