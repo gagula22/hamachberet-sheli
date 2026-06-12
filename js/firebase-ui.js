@@ -79,16 +79,24 @@
       } catch {
         btn.title = 'הענן לא נגיש';
         setStatus('blocked');
-        // הפעלת מצב תאימות לרשתות חוסמות (long-polling כפוי) במכשיר הזה
-        // בלבד — ייכנס לתוקף ברענון הבא (firebase-sync קורא את הדגל באתחול).
-        let firstTime = false;
+        // מצב תאימות (long-polling כפוי) — נדלק רק כשיש אינטרנט אך הענן
+        // לא עונה (רשת חוסמת), פעם אחת. אם הוא כבר דולק ועדיין נכשל —
+        // הוא עצמו עלול להיות הבעיה (שובר תחבורה בדפדפנים מסוימים) → כיבוי.
+        // בלי אינטרנט בכלל — לא נוגעים בדגל (כשל זמני רגיל).
+        let msg = '🚫 אין קשר אמיתי לענן מהרשת הזו — השינויים שמורים במכשיר ויעלו ברשת פתוחה';
         try {
-          firstTime = localStorage.getItem('mahberet.forceLP') !== '1';
-          localStorage.setItem('mahberet.forceLP', '1');
+          const flagOn = localStorage.getItem('mahberet.forceLP') === '1';
+          if (!navigator.onLine) {
+            msg = '📡 אין חיבור לאינטרנט — השינויים שמורים במכשיר ויעלו כשתתחבר';
+          } else if (!flagOn) {
+            localStorage.setItem('mahberet.forceLP', '1');
+            msg = '🚫 הענן לא נגיש מהרשת הזו — הופעל מצב תאימות. רענן את הדף (F5) ונסה שוב';
+          } else {
+            localStorage.removeItem('mahberet.forceLP');
+            msg = '🚫 הענן חסום גם במצב תאימות — הרשת הזו חוסמת את הענן לגמרי. השינויים שמורים במכשיר';
+          }
         } catch {}
-        if (window.App) App.toast(firstTime
-          ? '🚫 הענן לא נגיש מהרשת הזו — הופעל מצב תאימות. רענן את הדף (F5) ונסה שוב'
-          : '🚫 אין קשר אמיתי לענן מהרשת הזו — השינויים שמורים במכשיר ויעלו ברשת פתוחה');
+        if (window.App) App.toast(msg);
       }
       btn.classList.remove('syncing');
       setTimeout(() => { btn.title = 'סנכרן עכשיו'; }, 3000);

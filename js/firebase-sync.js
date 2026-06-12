@@ -479,14 +479,31 @@
 
       if (window.Store && Store.ready) { try { await Store.ready(); } catch {} }
 
-      // המסך לעולם לא נתקע: אם הענן לא ענה תוך 15ש (רשת איטית/חסומה,
-      // תקלת תחבורה) — ממשיכים עם הנתונים המקומיים; המאזינים יתחברו
-      // ברקע כשיצליחו, והנתונים יתמזגו אז.
+      // המסך לעולם לא נתקע: 8ש מקסימום, עם כפתור "המשך בלי להמתין" מיידי.
+      // ריפוי-עצמי: אם הטעינה לא הסתיימה בזמן בעוד דגל ה-forceLP דולק —
+      // הדגל הוא כנראה האשם (תחבורה כפויה ששוברת את הדפדפן הזה) ולכן
+      // מכבים אותו; הרענון הבא חוזר לתחבורה הרגילה.
+      var skipBtn = document.createElement('button');
+      skipBtn.textContent = 'המשך בלי להמתין ←';
+      skipBtn.style.cssText = 'padding:8px 18px;border:1px solid #ddd;border-radius:999px;' +
+        'background:#fff;cursor:pointer;font-family:inherit;font-size:13px;color:#888';
+      loader.appendChild(skipBtn);
       try {
-        await Promise.race([
-          listenToCloud(),
-          new Promise(res => setTimeout(res, 15000))
+        var timedOut = await Promise.race([
+          listenToCloud().then(function () { return false; }),
+          new Promise(function (res) {
+            setTimeout(function () { res(true); }, 8000);
+            skipBtn.addEventListener('click', function () { res(true); });
+          })
         ]);
+        if (timedOut) {
+          try {
+            if (localStorage.getItem('mahberet.forceLP') === '1') {
+              localStorage.removeItem('mahberet.forceLP');
+              console.warn('[sync] cloud load timed out under forceLP — flag cleared, next load uses auto transport');
+            }
+          } catch (e2) {}
+        }
       } finally {
         loader.remove();
       }
