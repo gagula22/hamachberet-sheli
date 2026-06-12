@@ -469,46 +469,40 @@
       userId = user.uid;
       this.enabled = true;
 
-      const loader = document.createElement('div');
-      loader.style.cssText =
-        'position:fixed;inset:0;z-index:9998;background:rgba(255,255,255,.9);' +
-        'display:grid;place-items:center;font-family:Heebo,Arial,sans-serif;' +
-        'direction:rtl;font-size:17px;color:#888;gap:16px';
-      loader.innerHTML = '<div style="font-size:40px">☁️</div><div>טוען נתונים מהענן…</div>';
-      document.body.appendChild(loader);
-
+      // טעינה לא-חוסמת: האתר כבר מוצג מהנתונים המקומיים (IndexedDB) —
+      // אין שום סיבה לחסום אותו במסך "טוען מהענן". מפעילים את המאזינים
+      // ברקע; כשנתוני הענן מגיעים הם מתמזגים אוטומטית (Store._fromCloud →
+      // רינדור מחדש). הרענון מיידי, והענן מתעדכן תוך כדי.
       if (window.Store && Store.ready) { try { await Store.ready(); } catch {} }
 
-      // המסך לעולם לא נתקע: 8ש מקסימום, עם כפתור "המשך בלי להמתין" מיידי.
-      // ריפוי-עצמי: אם הטעינה לא הסתיימה בזמן בעוד דגל ה-forceLP דולק —
-      // הדגל הוא כנראה האשם (תחבורה כפויה ששוברת את הדפדפן הזה) ולכן
-      // מכבים אותו; הרענון הבא חוזר לתחבורה הרגילה.
-      var skipBtn = document.createElement('button');
-      skipBtn.textContent = 'המשך בלי להמתין ←';
-      skipBtn.style.cssText = 'padding:8px 18px;border:1px solid #ddd;border-radius:999px;' +
-        'background:#fff;cursor:pointer;font-family:inherit;font-size:13px;color:#888';
-      loader.appendChild(skipBtn);
-      try {
-        var timedOut = await Promise.race([
-          listenToCloud().then(function () { return false; }),
-          new Promise(function (res) {
-            setTimeout(function () { res(true); }, 8000);
-            skipBtn.addEventListener('click', function () { res(true); });
-          })
-        ]);
-        if (timedOut) {
-          try {
-            if (localStorage.getItem('mahberet.forceLP') === '1') {
-              localStorage.removeItem('mahberet.forceLP');
-              console.warn('[sync] cloud load timed out under forceLP — flag cleared, next load uses auto transport');
-            }
-          } catch (e2) {}
-        }
-      } finally {
-        loader.remove();
-      }
+      // אינדיקטור קטן ולא-חוסם בפינה (נעלם כשהענן מתחבר או אחרי 8ש).
+      var chip = document.createElement('div');
+      chip.style.cssText =
+        'position:fixed;bottom:16px;inset-inline-start:16px;z-index:9996;' +
+        'background:rgba(255,255,255,.95);border:1px solid #eee;border-radius:999px;' +
+        'padding:6px 14px;font-family:Heebo,Arial,sans-serif;direction:rtl;' +
+        'font-size:12px;color:#999;box-shadow:0 2px 10px rgba(0,0,0,.08)';
+      chip.textContent = '☁️ מתחבר לענן…';
+      document.body.appendChild(chip);
+      var chipTimer = setTimeout(function () { if (chip.parentNode) chip.remove(); }, 8000);
 
-      setTimeout(() => { window.FirebaseUI.renderUserBar(user); window.FirebaseUI.renderSyncBtn(); }, 600);
+      // ריפוי-עצמי ברקע: אם הענן לא ענה תוך 8ש בעוד forceLP דולק — הדגל
+      // כנראה האשם (תחבורה כפויה ששוברת את הדפדפן); מכבים, הרענון הבא רגיל.
+      listenToCloud().then(function () {
+        clearTimeout(chipTimer);
+        if (chip.parentNode) chip.remove();
+      }).catch(function () {});
+      setTimeout(function () {
+        try {
+          if (chip.parentNode && localStorage.getItem('mahberet.forceLP') === '1') {
+            localStorage.removeItem('mahberet.forceLP');
+            console.warn('[sync] cloud slow under forceLP — flag cleared, next load uses auto transport');
+          }
+        } catch (e2) {}
+      }, 8000);
+
+      window.FirebaseUI.renderUserBar(user);
+      window.FirebaseUI.renderSyncBtn();
 
       // Flush on page hide / close
       window.addEventListener('pagehide', flushAll);
