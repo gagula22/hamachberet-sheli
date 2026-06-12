@@ -66,6 +66,7 @@
       return lbl;
     }
     const modeEditable = _modeRadio('editable', true,  '📝 טקסט נערך', '(ניתן לעריכה · עיצוב מקורב)');
+    const modeFixed    = _modeRadio('fixed',    false, '📐 שכפול מדויק (נערך)', '(מיקום/גודל/צבע מדויקים · ניתן לעריכה · לא מתפזר)');
     const modeImage    = _modeRadio('image',    false, '🖼️ מראה מדויק כמו המקור', '(תמונות עמוד · עיצוב זהה · לא נערך)');
     function getMode() {
       var checked = document.querySelector('input[name="pdf2word-mode"]:checked');
@@ -79,7 +80,7 @@
         background: 'var(--cream)', borderRadius: 'var(--r-sm)',
         border: '1px solid var(--line)'
       }
-    }, [modeEditable, modeImage]);
+    }, [modeEditable, modeFixed, modeImage]);
 
     // ── Helpers for structure-preserving extraction ──────────────────────
     function _escHtml(s) {
@@ -1227,6 +1228,147 @@
       return _emitPage(lines, images, bodySize, pageWidth, true, rects);
     }
 
+    // ── FIXED-LAYOUT helpers ─────────────────────────────────────────────
+    // Map a PDF font name + script to a loosely-equivalent installed family.
+    // The embedded subset's true family is usually unrecorded/unavailable, so
+    // we approximate by script and by name keywords (documented limitation).
+    function _fixedFontFamily(fontName, hasHebrew) {
+      var n = String(fontName || '').toLowerCase();
+      if (hasHebrew) return "'David','Narkisim','Arial',sans-serif";
+      if (/times|serif|georgia|roman|minion|garamond/.test(n)) return "'Times New Roman',serif";
+      if (/courier|mono|consol/.test(n)) return "'Courier New',monospace";
+      return "Arial,sans-serif";
+    }
+
+    // Build ONE absolutely-positioned, page-anchored, EDITABLE page using VML
+    // text boxes for runs and VML image shapes for images. Coordinates come
+    // straight from PDF user space (1 pt == 1 Word pt, no scale factor).
+    //
+    //   view  = page.view = [x0,y0,x1,y1]; PDF y origin is BOTTOM-left.
+    //   rtl   = visual-Hebrew document → recover text + lay runs RTL.
+    function _buildFixedPageHtml(items, images, view, rtl, hasBreak) {
+      var vx0 = view[0] || 0, vy0 = view[1] || 0;
+      var pageW = (view[2] - view[0]) || 595.3;
+      var pageH = (view[3] - view[1]) || 841.9;
+
+      // Reuse the SAME line model the editable path uses. For visual-Hebrew it
+      // recovers Win-1255 text per item up front and flags visualHebrew so we
+      // can lay runs out right-to-left.
+      var lines = _buildLinesFromItems(items, !!rtl);
+
+      var shapes = '';
+      var SHAPE_CAP = 1500;        // protect Word from runaway shape counts
+      var shapeCount = 0;
+
+      // ── Background images first (z-index 0) ──
+      (images || []).forEach(function (im) {
+        if (shapeCount >= SHAPE_CAP) return;
+        var iw = im.width, ih = im.height;
+        if (!iw || !ih) return;
+        var ix = (im.x - vx0);
+        // im.y is the image's BOTTOM edge (CTM e/f map the unit square's lower
+        // -left corner); flip and subtract height to get the TOP-left in pt.
+        var iy = (pageH - (im.y - vy0)) - ih;
+        shapes +=
+          '<v:shape style="position:absolute;left:' + ix.toFixed(1) + 'pt;top:' + iy.toFixed(1) + 'pt;' +
+            'width:' + iw.toFixed(1) + 'pt;height:' + ih.toFixed(1) + 'pt;' +
+            'mso-position-horizontal-relative:page;mso-position-vertical-relative:page;z-index:0;" stroked="f">' +
+          '<v:imagedata src="' + im.dataUrl + '" o:title=""/>' +
+          '</v:shape>';
+        shapeCount++;
+      });
+
+      // ── Text runs (z-index 1, above images) ──
+      // Within each baseline line, merge adjacent items that share format and
+      // are horizontally close into one positioned run (keeps shape count sane).
+      lines.forEach(function (L) {
+        if (shapeCount >= SHAPE_CAP) return;
+        // Logical order: RTL → X descending; LTR → X ascending.
+        var parts = L.parts.slice().sort(function (a, b) {
+          return rtl ? (b.x - a.x) : (a.x - b.x);
+        });
+
+        var groups = [];
+        var cur = null;
+        var prev = null;
+        for (var pi = 0; pi < parts.length; pi++) {
+          var p = parts[pi];
+          if (!p.str || !/\S/.test(p.str)) { prev = p; continue; }
+          var fs = p.fontSize || L.h || 10;
+          var gapTooBig = false, sameFmt = true, joinSpace = '';
+          if (cur && prev) {
+            if (rtl) {
+              // prev is to the RIGHT of p (larger x)
+              var gapR = prev.x - (p.x + (p.width || 0));
+              gapTooBig = gapR > fs * 1.5;
+              if (gapR > fs * 0.25 && !/\s$/.test(cur.text) && !/^\s/.test(p.str)) joinSpace = ' ';
+            } else {
+              var gapL = p.x - (prev.x + (prev.width || 0));
+              gapTooBig = gapL > fs * 1.5;
+              if (gapL > fs * 0.25 && !/\s$/.test(cur.text) && !/^\s/.test(p.str)) joinSpace = ' ';
+            }
+            sameFmt = _sameFmt(cur.fmt, p) && Math.round(cur.fs) === Math.round(fs);
+          }
+          if (cur && sameFmt && !gapTooBig) {
+            cur.text += joinSpace + p.str;
+            cur.minX = Math.min(cur.minX, p.x);
+            cur.maxX = Math.max(cur.maxX, p.x + (p.width || 0));
+            if (fs > cur.fs) cur.fs = fs;
+          } else {
+            if (cur) groups.push(cur);
+            cur = {
+              text: p.str,
+              fmt: { bold: p.bold, italic: p.italic, color: p.color, bg: p.bg },
+              fs: fs,
+              y: p.y,
+              minX: p.x,
+              maxX: p.x + (p.width || 0)
+            };
+          }
+          prev = p;
+        }
+        if (cur) groups.push(cur);
+
+        groups.forEach(function (g) {
+          if (shapeCount >= SHAPE_CAP) return;
+          if (!/\S/.test(g.text)) return;
+          var fs = g.fs || 10;
+          var left = (g.minX - vx0);
+          // baseline (g.y) distance from page top, then up by cap height (~0.8h)
+          var top = (pageH - (g.y - vy0)) - fs * 0.8;
+          var boxW = Math.max((g.maxX - g.minX) * 1.05, g.text.length * fs * 0.5, fs);
+          var hasHeb = _HEB_RE.test(g.text);
+          var fam = _fixedFontFamily(null, hasHeb || rtl);
+          var col = (g.fmt.color && !_isNearBlack(g.fmt.color)) ? _toHex(g.fmt.color) : '#000000';
+          var runDir = (hasHeb || rtl) ? 'direction:rtl;text-align:right;' : 'direction:ltr;text-align:left;';
+          // optional highlight fill on the shape itself
+          var shapeFill = (g.fmt.bg) ?
+            ('fillcolor="' + _toHex(g.fmt.bg) + '" filled="t"') : 'filled="f"';
+
+          shapes +=
+            '<v:shape style="position:absolute;left:' + left.toFixed(1) + 'pt;top:' + top.toFixed(1) + 'pt;' +
+              'width:' + boxW.toFixed(1) + 'pt;height:' + (fs * 1.6).toFixed(1) + 'pt;' +
+              'mso-position-horizontal-relative:page;mso-position-vertical-relative:page;z-index:1;" ' +
+              shapeFill + ' stroked="f" o:gfxdata="">' +
+            '<v:textbox inset="0,0,0,0" style="mso-fit-shape-to-text:f;">' +
+              '<div style="font-size:' + fs.toFixed(1) + 'pt;line-height:1;white-space:nowrap;' +
+                'color:' + col + ';font-family:' + fam + ';' +
+                (g.fmt.bold ? 'font-weight:bold;' : '') +
+                (g.fmt.italic ? 'font-style:italic;' : '') +
+                runDir +
+                'unicode-bidi:plaintext;mso-line-height-rule:exactly;">' +
+              _escHtml(g.text) +
+              '</div>' +
+            '</v:textbox></v:shape>';
+          shapeCount++;
+        });
+      });
+
+      var brk = hasBreak ? 'page-break-after:always;' : '';
+      return '<div style="position:relative;width:' + pageW.toFixed(1) + 'pt;height:' + pageH.toFixed(1) + 'pt;' +
+        brk + 'overflow:hidden;mso-element:para-border-div;">' + shapes + '</div>';
+    }
+
     async function processFile(file) {
       if (!file) return;
       if (!window.pdfjsLib) { status.textContent = 'ספריית PDF לא נטענה'; return; }
@@ -1283,7 +1425,9 @@
 
         const perPageItems   = new Array(n);
         const perPageImages  = new Array(n);
-        const perPageWidth   = new Array(n);
+        const perPageWidth    = new Array(n);
+        const perPageHeight   = new Array(n);
+        const perPageView     = new Array(n);
         const perPageRects   = new Array(n);
         const CONCURRENCY    = 6;
         let nextPage         = 1;
@@ -1338,6 +1482,8 @@
             perPageItems[myIdx - 1]  = items;
             perPageImages[myIdx - 1] = images;
             perPageWidth[myIdx - 1]  = pageW;
+            perPageHeight[myIdx - 1] = pageH;
+            perPageView[myIdx - 1]   = v;
             perPageRects[myIdx - 1]  = walk ? walk.rects : [];
             donePages++;
             bar.style.width = (5 + (donePages / n) * 50) + '%';
@@ -1363,6 +1509,71 @@
         // Legacy Hebrew (Windows-1255 + visual order) needs a different builder
         // that recovers the real Unicode Hebrew and re-orders it logically.
         const isVisualHebrew = !isImageOnly && _detectVisualHebrew(allItems);
+
+        // ── FIXED-LAYOUT mode: absolutely-positioned, page-anchored, EDITABLE.
+        // Every text run and every image becomes a VML <v:shape> placed at its
+        // exact PDF coordinates inside a page-sized container. Word imports the
+        // shapes as floating, page-relative boxes whose contents stay real and
+        // editable. Reuses every existing helper (operator walk, color
+        // correlation, image resolve, line builder, Win-1255 recovery).
+        if (getMode() === 'fixed') {
+          if (isImageOnly) {
+            // No text layer to position — fixed mode has nothing editable to
+            // place. Fall back to embedding the (already extracted) page images
+            // absolutely so the user still gets a faithful, if non-editable, doc.
+          }
+          let fixedBody = '';
+          // Use the first page's geometry for the @page sheet size; per-page
+          // containers carry their own exact size too (Word tolerates this).
+          const firstView = perPageView[0] || [0, 0, 595.3, 841.9];
+          const sheetW = (firstView[2] - firstView[0]) || 595.3;
+          const sheetH = (firstView[3] - firstView[1]) || 841.9;
+          for (let i = 1; i <= n; i++) {
+            bar.style.width = (55 + (i / n) * 40) + '%';
+            status.textContent = 'בונה עמוד ' + i + ' / ' + n + '…';
+            fixedBody += _buildFixedPageHtml(
+              perPageItems[i - 1] || [],
+              perPageImages[i - 1] || [],
+              perPageView[i - 1] || firstView,
+              isVisualHebrew,
+              i < n
+            );
+          }
+          bar.style.width = '100%';
+          const titleFx = _escHtml(file.name.replace(/\.pdf$/i, ''));
+          const docFx = [
+            "<html xmlns:o='urn:schemas-microsoft-com:office:office'",
+            " xmlns:w='urn:schemas-microsoft-com:office:word'",
+            " xmlns:v='urn:schemas-microsoft-com:vml'",
+            " xmlns='http://www.w3.org/TR/REC-html40'>",
+            "<head><meta charset='utf-8'><title>" + titleFx + "</title>",
+            "<style>",
+            "  v\\:* { behavior:url(#default#VML); }",
+            "  @page Section1 { size:" + sheetW.toFixed(1) + "pt " + sheetH.toFixed(1) + "pt; margin:0; mso-paper-source:0; }",
+            "  div.Section1 { page:Section1; }",
+            "  body { margin:0; padding:0; }",
+            "</style>",
+            "</head><body dir='" + (isVisualHebrew ? 'rtl' : 'ltr') + "'><div class='Section1'>",
+            fixedBody, "</div></body></html>"
+          ].join('');
+          const blobFx = new Blob(['﻿', docFx], { type: 'application/msword' });
+          const urlFx = URL.createObjectURL(blobFx);
+          const aFx = document.createElement('a');
+          aFx.href = urlFx; aFx.download = file.name.replace(/\.pdf$/i, '.doc'); aFx.click();
+          setTimeout(function () { URL.revokeObjectURL(urlFx); }, 2000);
+          if (isImageOnly) {
+            status.innerHTML = 'ℹ️ ל-PDF זה <strong>אין שכבת טקסט</strong> — שוכפלו תמונות העמודים בלבד. ' +
+              'לטקסט נערך השתמש ב"טקסט נערך" על מסמך עם שכבת טקסט.';
+            status.style.color = 'var(--ink)';
+          } else {
+            status.innerHTML = '✓ שוכפלו ' + n + ' עמודים במיקום מדויק וניתן לעריכה' +
+              (isVisualHebrew ? ' (כולל שחזור עברית Windows-1255)' : '') +
+              ' — הורד ' + _escHtml(file.name.replace(/\.pdf$/i, '.doc')) +
+              '. <span style="color:var(--ink-mute);">הערה: כל שורה היא תיבה צפה עצמאית — אפשר לערוך כל תיבה, אך הטקסט אינו זורם בין שורות. הגופן מקורב (עברית→David, Serif→Times) וגרפיקה וקטורית (קווים/טבלאות) אינה משוחזרת.</span>';
+            status.style.color = 'var(--sage-deep)';
+          }
+          return;
+        }
 
         status.textContent = 'בונה את מסמך ה-Word…';
         for (let i = 1; i <= n; i++) {
@@ -1461,7 +1672,7 @@
       ]),
       fileInput, zone, optsRow, status, bar,
       App.el('p', { style: { fontSize: '12px', color: 'var(--ink-mute)', margin: '10px 0 0', lineHeight: '1.6' } },
-        '✨ בחר מצב: "טקסט נערך" — מחלץ טקסט לעריכה (כולל שחזור עברית מקודדת ישנה Windows-1255), עם שמירת מבנה: יישור פסקאות, כותרות, הדגשות, וטבלאות לשורות דו-טוריות. "מראה מדויק" — כל עמוד כתמונה, עיצוב זהה ל-100% למקור, אך לא ניתן לעריכה. לעיצוב רשמי מדויק בחר "מראה מדויק"; לעריכת תוכן בחר "טקסט נערך".')
+        '✨ בחר מצב: "טקסט נערך" — מחלץ טקסט זורם לעריכה (כולל שחזור עברית מקודדת ישנה Windows-1255), עם שמירת מבנה: יישור פסקאות, כותרות, הדגשות, וטבלאות לשורות דו-טוריות. "שכפול מדויק (נערך)" — משחזר כל שורה במיקום, בגודל ובצבע המדויקים שלה כתיבה צפה — נראה כמו המקור וגם ניתן לעריכה, אך הטקסט אינו זורם בין שורות, הגופן מקורב, וגרפיקה וקטורית (קווים/טבלאות מצוירות) אינה משוחזרת. "מראה מדויק" — כל עמוד כתמונה, עיצוב זהה ל-100% למקור, אך לא ניתן לעריכה. להמלצה: עריכת תוכן → "טקסט נערך"; "נראה כמו המקור ורוצה לתקן מילה" → "שכפול מדויק"; עותק קפוא מדויק → "מראה מדויק".')
     ]);
   }
   window.Tools = window.Tools || {};

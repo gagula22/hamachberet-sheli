@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ניתוח Wyckoff+PA — BTCUSDT.P — 2026-06-10 20:06</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Heebo', 'Arial', sans-serif;
+    direction: rtl;
+    text-align: right;
+    line-height: 1.7;
+    color: #1a1a1a;
+    background: #f7f8fa;
+    margin: 0;
+    padding: 20px;
+    max-width: 1100px;
+    margin-inline: auto;
+  }
+  h1 { font-size: 1.8rem; border-bottom: 3px solid #2563eb; padding-bottom: 8px; }
+  h2 { font-size: 1.4rem; margin-top: 36px; color: #1e40af; }
+  h3 { font-size: 1.15rem; color: #334155; margin-top: 24px; }
+  .ltr { direction: ltr; unicode-bidi: embed; display: inline-block; }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; background: #fff; }
+  th, td { padding: 10px 12px; border: 1px solid #e5e7eb; text-align: right; }
+  th { background: #f1f5f9; font-weight: 600; }
+  .box {
+    background: #fff;
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin: 16px 0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    border-right: 4px solid #2563eb;
+  }
+  .box.tr-box { border-color: #0891b2; background: #ecfeff; }
+  .box.consciousness { border-color: #f59e0b; background: #fffbeb; }
+  .box.volume { border-color: #7c3aed; }
+  .box.effort { border-color: #ec4899; }
+  .box.conflict { border-color: #dc2626; background: #fef2f2; }
+  .box.checklist { border-color: #059669; background: #ecfdf5; }
+  .box.co-thesis { border-color: #0d9488; background: #f0fdfa; }
+  .badge {
+    display: inline-block;
+    padding: 3px 12px;
+    border-radius: 12px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin: 0 4px;
+  }
+  .badge.bullish { background: #dcfce7; color: #166534; }
+  .badge.bearish { background: #fee2e2; color: #991b1b; }
+  .badge.neutral { background: #f3f4f6; color: #374151; }
+  .badge.high-conf { background: #2563eb; color: #fff; }
+  .badge.medium-conf { background: #d97706; color: #fff; }
+  .badge.low-conf { background: #6b7280; color: #fff; }
+  .badge.validation { background: #14b8a6; color: #fff; }
+  .badge.anomaly { background: #dc2626; color: #fff; }
+  .scenario { padding: 14px 18px; border-radius: 8px; margin: 12px 0; }
+  .scenario.primary { background: #ecfdf5; border-right: 4px solid #059669; }
+  .scenario.alt { background: #fff7ed; border-right: 4px solid #ea580c; }
+  .scenario.invalid { background: #fef2f2; border-right: 4px solid #dc2626; }
+  .check-list { list-style: none; padding: 0; }
+  .check-list li { padding: 4px 0; }
+  .check-list li.done::before { content: "✅ "; }
+  .check-list li.missing::before { content: "❌ "; }
+  .check-list li.partial::before { content: "⚠️ "; }
+  code, .level { font-family: 'Consolas', monospace; background: #f1f5f9; padding: 2px 6px; border-radius: 3px; font-size: 0.95rem; }
+  img.chart { max-width: 100%; border-radius: 6px; margin: 12px 0; display: block; }
+  .meta { font-size: 0.9rem; color: #64748b; }
+  .hint { font-size: 0.88rem; color: #6b7280; font-style: italic; }
+  /* Yellow key/summary box (matches existing system style) */
+  .key-box { background: #fffde6; padding: 10px 16px; border-right: 4px solid #d97706; margin: 10px 0; border-radius: 4px; font-size: 0.96rem; }
+  .key-box strong { color: #92400e; }
+  /* Wyckoff generic scenarios box per TF */
+  .wyckoff-scenarios { border-color: #6366f1; background: #eef2ff; }
+
+/* === Tooltip on hover for technical terms === */
+.term {
+  border-bottom: 1px dotted #2563eb;
+  cursor: help;
+  position: relative;
+  display: inline-block;
+}
+.term:hover::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 50%;
+  transform: translateX(50%);
+  background: #1e293b;
+  color: #fff;
+  padding: 8px 12px;
+  border-radius: 6px;
+  white-space: normal;
+  width: max-content;
+  max-width: 340px;
+  font-size: 0.82rem;
+  font-weight: normal;
+  line-height: 1.5;
+  z-index: 100;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.18);
+  direction: rtl;
+  text-align: right;
+}
+.term:hover::before {
+  content: "";
+  position: absolute;
+  bottom: 100%;
+  right: 50%;
+  transform: translateX(50%);
+  border: 6px solid transparent;
+  border-top-color: #1e293b;
+  z-index: 100;
+}
+</style>
+</head>
+<body>
+
+<h1>🎯 ניתוח Wyckoff + Price Action — BTCUSDT.P</h1>
+<p class="meta">תאריך/שעה: <span class="ltr">2026-06-10 20:06</span> | אנליסט: Claude (Wyckoff-PA Skill v3.4)</p>
+
+<!-- ============================================== -->
+<!-- 1. שורה תחתונה — קצרצרה -->
+<!-- ============================================== -->
+<div class="box co-thesis">
+  <h2>📌 שורה תחתונה</h2>
+  <p><strong>השוק נמצא כרגע בטווח דשדוש (TR) ב-1D, עם סימנים של חולשה דובית ב-4H ו-1H. אין כרגע סיגנל כניסה חזק, נדרשת המתנה להתפתחות נוספת.</strong></p>
+  <p><strong>כסף חכם</strong>: <span class="badge bearish">מוכרים שולטים</span> — הכסף החכם ממשיך לדחוף את המחיר כלפי מטה בטווח, ללא סימן ברור לאקומולציה.</p>
+  <p><strong>פעולה מומלצת</strong>: <span class="badge neutral">המתנה / סבלנות</span></p>
+</div>
+
+<!-- ============================================== -->
+<!-- 2. תיבת סתירה (אם יש בין טווחי זמן) -->
+<!-- ============================================== -->
+<div class="box conflict">
+  <h2>⚠️ סתירה בין טווחי זמן זוהתה</h2>
+  <p>בעוד שה-Daily מראה דשדוש כללי, ה-4H וה-1H מראים סימנים של לחץ דובי עם ירידות ווליום נמוך, מה שמרמז על פוטנציאל להמשך ירידה מתוך הטווח. אין סתירה מהותית המונעת ניתוח, אך יש להביא בחשבון את הלחץ הדובי בטווחי הזמן הנמוכים יותר.</p>
+  <p><strong>החלטה</strong>: להמשיך בניתוח תוך התחשבות בלחץ הדובי ב-4H/1H, אך ללא פעולה מיידית עד לפריצת הטווח.</p>
+</div>
+
+<!-- ============================================== -->
+<!-- 3. יומי (1D) — תודעה מלאה -->
+<!-- ============================================== -->
+<h2>🗓️ יומי — Primary Bias</h2>
+<img class="chart" src="chart-1d.png" alt="1D Chart">
+
+<div class="box tr-box">
+  <p><strong><span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span> מזוהה</strong>: <span class="level">59428.7</span> (<span class="term" data-tooltip="Selling Climax — פניקת מכירה סופית. נר ירידה ענקי עם וליום קלימקטי.">SC</span>) → <span class="level">64250</span> (<span class="term" data-tooltip="Automatic Rally/Reaction — תנועה אוטומטית אחרי climax. מגדירה את גג/תחתית ה-<span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span>.">AR</span>)</p>
+  <p><strong>מבנה</strong>: <span class="badge">Trading Range</span> — השוק נע בטווח אופקי ללא מגמה ברורה.</p>
+  <p><strong>פאזה כללית</strong>: Phase B <span class="hint">(הסבר טקסטואלי בלבד — לא מסומן על הגרף)</span></p>
+</div>
+
+<div class="box consciousness">
+  <h3>💡 תודעה</h3>
+  <p><strong>קריאה</strong>: <span class="badge neutral">Neutral</span> × <span class="badge medium-conf">בינוני</span></p>
+</div>
+
+<div class="box volume">
+  <h3>📊 ניתוח ווליום</h3>
+  <ul>
+    <li>ה-SC בתאריך 2026-06-06 הראה ווליום גבוה (V/1% 300319.7), אך לא קלימקטי ביחס לטווח הרחב.</li>
+    <li>ה-AR בתאריך 2026-06-07 היה בעל ווליום גבוה (V/1% 26889.4) אך ללא המשכיות ברורה, מה שמצביע על חוסר החלטיות.</li>
+    <li>הירידה האחרונה (2026-06-10) הראתה ווליום נמוך יחסית (V/1% 80693.1), מה שמצביע על חוסר עניין דובי משמעותי.</li>
+  </ul>
+  <p><strong><span class="term" data-tooltip="Volume per 1% move — ווליום נר ÷ אחוז שינוי. מאפשר השוואה הוגנת בין נרות. ערך גבוה מאוד = climactic.">V/1%</span> baseline</strong>: 39830.7</p>
+
+  <h4 style="margin-top: 18px;">📋 טבלת V/1% — הנרות הגדולים ביומי</h4>
+  <table>
+    <thead><tr><th>תאריך</th><th>סוג נר</th><th>V/1%</th><th>יחס ל-baseline</th><th>משמעות</th></tr></thead>
+    <tbody>
+      <tr><td>2026-06-06</td><td>SC</td><td>300319.7</td><td>7.54x</td><td>גבוה משמעותית, אך לא קלימקטי.</td></tr>
+      <tr><td>2026-06-07</td><td>AR</td><td>26889.4</td><td>0.68x</td><td>נמוך, תקין ל-Phase B.</td></tr>
+      <tr><td>2026-06-08</td><td>נר ירידה</td><td>213289.4</td><td>5.35x</td><td>גבוה משמעותית, אך ללא טווח רחב.</td></tr>
+      <tr><td>2026-06-09</td><td>נר ירידה</td><td>47727.6</td><td>1.20x</td><td>גבוה, תקין.</td></tr>
+      <tr><td>2026-06-10</td><td>נר עליה (נוכחי)</td><td>80693.1</td><td>2.03x</td><td>גבוה משמעותית, סימן לפעילות.</td></tr>
+    </tbody>
+  </table>
+  <p class="hint">📌 baseline = V/1% של ה-BC daily. נרות &gt; פי 2 מ-baseline = climactic.</p>
+</div>
+
+<div class="box effort">
+  <h3>⚖️ מאמץ מול תוצאה — גל אחרון</h3>
+  <p>הגל האחרון (2026-06-09 עד 2026-06-10) מראה ירידה קלה עם ווליום נמוך יחסית (V/1% 80693.1), מה שמעיד על חוסר עניין דובי משמעותי.</p>
+  <p><strong>אבחנה</strong>: <span class="badge validation">Validation</span></p>
+</div>
+
+<div class="box">
+  <p><strong>📝 מסקנה יומי</strong>: השוק נמצא ב-Phase B של דשדוש, עם לחץ דובי מתון אך ללא אישור ברור להמשך ירידה. נדרשת המתנה לפריצת הטווח.</p>
+</div>
+
+<!-- ============================================== -->
+<!-- 4. 4H — Stage / אישור -->
+<!-- ============================================== -->
+<h2>🕓 4H — Stage</h2>
+<img class="chart" src="chart-4h.png" alt="4H Chart">
+
+<div class="box tr-box">
+  <p><strong><span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span> (אם שונה מ-יומי)</strong>: <span class="level">60614.5</span> → <span class="level">64250</span></p>
+  <p><strong>תאימות ל-יומי</strong>: הטווח ב-4H תואם את הטווח היומי, עם תנודתיות גבוהה יותר.</p>
+</div>
+
+<div class="box consciousness">
+  <h3>💡 תודעה</h3>
+  <p><strong>קריאה</strong>: <span class="badge bearish">Bearish</span> × <span class="badge medium-conf">בינוני</span></p>
+</div>
+
+<div class="box volume">
+  <h3>📊 ווליום + David Weis Waves</h3>
+  <ul>
+    <li>הווליום ב-4H מראה תנודתיות גבוהה, עם ספייקים בירידות (2026-06-10 08:00, V/1% 13343.2) וגם בעליות (2026-06-10 12:00, V/1% 11245.9).</li>
+    <li>נראה כי ישנם ניסיונות דחיפה בשני הכיוונים, אך ללא הצלחה משמעותית.</li>
+  </ul>
+  <p><strong>גל עליה אחרון vs גל ירידה אחרון</strong>: גל העלייה האחרון (מ-60998 ל-62606) הראה ווליום גבוה יותר (V/1% 11245.9) מגל הירידה שקדם לו (מ-61655 ל-60998, V/1% 13343.2), מה שמרמז על קונים פעילים יותר, אך לא מספיק כדי לשבור את הטווח.</p>
+
+  <h4 style="margin-top: 18px;">📋 טבלת V/1% — הנרות הגדולים ב-4H</h4>
+  <table>
+    <thead><tr><th>תאריך/שעה</th><th>סוג נר</th><th>V/1%</th><th>יחס ל-baseline</th><th>משמעות</th></tr></thead>
+    <tbody>
+      <tr><td>2026-06-10T00:00</td><td>נר ירידה</td><td>30729.7</td><td>0.77x</td><td>נמוך, תקין.</td></tr>
+      <tr><td>2026-06-10T04:00</td><td>נר ירידה</td><td>39732.2</td><td>1.00x</td><td>תקין.</td></tr>
+      <tr><td>2026-06-10T08:00</td><td>נר ירידה</td><td>13343.2</td><td>0.33x</td><td>נמוך מאוד, No Demand?</td></tr>
+      <tr><td>2026-06-10T12:00</td><td>נר עליה</td><td>11245.9</td><td>0.28x</td><td>נמוך מאוד, No Supply?</td></tr>
+      <tr><td>2026-06-10T16:00</td><td>נר עליה</td><td>9222.6</td><td>0.23x</td><td>נמוך מאוד, תקין ל-Phase B.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box effort">
+  <h3>⚖️ מאמץ מול תוצאה</h3>
+  <p>הנרות האחרונים ב-4H מראים ווליום נמוך מאוד (V/1% סביב 0.23x-0.33x), מה שמעיד על חוסר עניין משמעותי מצד המוכרים או הקונים. זהו סימן לחוסר החלטיות.</p>
+  <p><strong>אבחנה</strong>: <span class="badge anomaly">Anomaly</span></p>
+</div>
+
+<div class="box">
+  <p><strong>📝 מסקנה 4H</strong>: טווח הדשדוש ב-4H מראה חוסר החלטיות עם ווליום נמוך, מה שמחזק את התמונה של Phase B. הלחץ הדובי מה-1H לא מקבל אישור בווליום גבוה, אך גם לא נבלם.</p>
+</div>
+
+<!-- ============================================== -->
+<!-- 5. 1H — Structure / Current Event -->
+<!-- ============================================== -->
+<h2>⏱️ 1H — Structure & Event</h2>
+<img class="chart" src="chart-1h.png" alt="1H Chart">
+
+<div class="box">
+  <p><strong>אירוע נוכחי</strong>: <span class="term" data-tooltip="Phase B — בניית הסיבה. סדרת מבחנים פנימיים בתוך ה-<span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span>.">Phase B</span> מתקדמת, עם מבנה של ירידות קלות וניסיונות התאוששות.</p>
+  <p><strong>Significant Bar אחרון</strong>: נר הירידה מ-2026-06-10T14:00 (טווח 62120.8-61779.8, V/1% 62991.2) הראה ירידה משמעותית עם ווליום גבוה יחסית, אך לא הצליח לשבור רמות תמיכה קריטיות.</p>
+  <p><strong>SMC structure</strong>: <span class="term" data-tooltip="Change of Character — השבירה הראשונה נגד המגמה. סיגנל היפוך פוטנציאלי.">CHOCH</span> אחרון — דובי, עם יצירת <span class="term" data-tooltip="Bearish Order Block — נר עולה אחרון לפני תנועה דובית חזקה. אזור התנגדות.">Bearish OB</span> באזור 62171.7.</p>
+</div>
+
+<div class="box consciousness">
+  <h3>💡 תודעה</h3>
+  <p><strong>קריאה</strong>: <span class="badge bearish">Bearish</span> × <span class="badge medium-conf">בינוני</span></p>
+</div>
+
+<div class="box volume">
+  <h3>📊 ווליום</h3>
+  <ul>
+    <li>הווליום ב-1H מראה תנודתיות, עם עלייה משמעותית בנר הירידה מ-2026-06-10T14:00 (V/1% 62991.2).</li>
+    <li>הנרות האחרונים מראים ווליום נמוך יותר, מה שמצביע על חוסר החלטיות או המתנה.</li>
+  </ul>
+
+  <h4 style="margin-top: 18px;">📋 טבלת V/1% — הנרות הגדולים ב-1H</h4>
+  <table>
+    <thead><tr><th>תאריך/שעה</th><th>סוג נר</th><th>V/1%</th><th>יחס ל-baseline</th><th>משמעות</th></tr></thead>
+    <tbody>
+      <tr><td>2026-06-10T13:00</td><td>נר עליה</td><td>8641.1</td><td>1.07x</td><td>גבוה, תקין.</td></tr>
+      <tr><td>2026-06-10T14:00</td><td>נר ירידה</td><td>62991.2</td><td>7.87x</td><td>גבוה משמעותית, סימן ללחץ דובי.</td></tr>
+      <tr><td>2026-06-10T15:00</td><td>נר עליה</td><td>12068.2</td><td>1.50x</td><td>גבוה משמעותית, התאוששות.</td></tr>
+      <tr><td>2026-06-10T16:00</td><td>נר עליה</td><td>7452.7</td><td>0.93x</td><td>תקין.</td></tr>
+      <tr><td>2026-06-10T17:00</td><td>נר עליה (נוכחי)</td><td>9305.8</td><td>1.16x</td><td>גבוה, תקין.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="box effort">
+  <h3>⚖️ אישור או אנומליה?</h3>
+  <p>הגל האחרון (ירידה מ-62171.7 ל-61893.6) הראה ווליום גבוה יחסית (V/1% 62991.2), אך התוצאה (טווח הנר) לא הייתה דרמטית. לאחר מכן, היתה התאוששות עם ווליום נמוך יותר.</p>
+  <p><strong>אבחנה</strong>: <span class="badge validation">Validation</span></p>
+</div>
+
+<div class="box">
+  <p><strong>📝 מסקנה 1H</strong>: ה-1H מראה לחץ דובי מתון, עם יצירת <span class="term" data-tooltip="Bearish Order Block — נר עולה אחרון לפני תנועה דובית חזקה. אזור התנגדות.">Bearish OB</span> באזור 62171.7. ללא שבירת רמות תמיכה משמעותיות, המגמה עדיין בתוך הטווח.</p>
+</div>
+
+<!-- ============================================== -->
+<!-- 6. 15m — נקודת כניסה -->
+<!-- ============================================== -->
+<h2>⚡ 15m — נקודת כניסה</h2>
+<img class="chart" src="chart-15m.png" alt="15m Chart">
+
+<div class="box co-thesis">
+  <p><strong>סטאפ type</strong>: <span class="badge neutral">חכה / אין כניסה</span></p>
+  <p><strong>QM Pattern</strong>: לא מזוהה QM ברור ב-15m.</p>
+  <p><strong><span class="term" data-tooltip="Mid-Point Level — רמת supply/demand על קו ה-<span class="term" data-tooltip="Quasimodo Line — קו אופקי מה-Left Shoulder. רמת supply/demand מרכזית בתבנית QM.">QML</span>.">MPL</span> level</strong>: לא רלוונטי כרגע.</p>
+</div>
+
+<div class="box checklist">
+  <h3>✓ Checklist 8 צעדים ל-Entry Primary</h3>
+  <ul class="check-list">
+    <li class="missing">טווח גבוה Wyckoff signal מאומת: ❌ אין סיגנל ברור ב-1D/4H/1H.</li>
+    <li class="missing">QM נוצר ב-15m (HH+LL ברורים): ❌ לא מזוהה.</li>
+    <li class="missing"><span class="term" data-tooltip="Mid-Point Level — רמת supply/demand על קו ה-<span class="term" data-tooltip="Quasimodo Line — קו אופקי מה-Left Shoulder. רמת supply/demand מרכזית בתבנית QM.">MPL</span>.">MPL</span> מזוהה על <span class="term" data-tooltip="Quasimodo Line — קו אופקי מה-Left Shoulder. רמת supply/demand מרכזית בתבנית QM.">QML</span>: ❌ לא רלוונטי.</li>
+    <li class="missing">First Break של S/R ב-<span class="term" data-tooltip="Mid-Point Level — רמת supply/demand על קו ה-<span class="term" data-tooltip="Quasimodo Line — קו אופקי מה-Left Shoulder. רמת supply/demand מרכזית בתבנית QM.">QML</span>.">MPL</span>: ❌ לא רלוונטי.</li>
+    <li class="missing">Engulfing Marubozu + נר המשך: ❌ לא נצפה.</li>
+    <li class="missing">VSA: ספרד-נפח מאמת: ❌ לא ניתן לאמת ללא סיגנל ברור.</li>
+    <li class="missing">Retest קודם של ה-<span class="term" data-tooltip="Sign of Strength — פריצת גג ה-<span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">SOS</span> בוליום גבוה. מגמת עלייה מתחילה.">SOS</span> היה וליום נמוך: ❌ לא רלוונטי.</li>
+    <li class="missing"><span class="term" data-tooltip="Risk:Reward ratio — יחס סיכון לרווח. מינימום 1:2 לכניסה.">R:R</span> ≥ 2.0: ❌ לא ניתן לחשב ללא נקודת כניסה.</li>
+  </ul>
+  <p><strong>סה"כ</strong>: 0/8 → <span class="badge low-conf">אין כניסה</span></p>
+</div>
+
+<!-- 3 תרחישים -->
+<h3>📋 3 תרחישים</h3>
+
+<div class="scenario alt">
+  <h4>🥈 Alternative — אם Primary לא יפעל</h4>
+  <p><strong>תנאי הפעלה</strong>: אם המחיר יצליח לשבור את ה-TR כלפי מטה עם ווליום משמעותי, ואז יבצע ריטסט של אזור ההתנגדות (למשל, ה-<span class="term" data-tooltip="Bearish Order Block — נר עולה אחרון לפני תנועה דובית חזקה. אזור התנגדות.">Bearish OB</span> ב-1H באזור 62171.7) עם ווליום נמוך.</p>
+  <p><strong>Entry / SL / TP</strong>: כניסה שורט לאחר ריטסט מוצלח, SL מעל אזור ההתנגדות, TP באזור התחתון של ה-TR (סביב 60614.5).</p>
+  <img class="chart" src="chart-15m.png" alt="15m Chart — Alternative scenario annotated">
+</div>
+
+<div class="scenario invalid">
+  <h4>🚫 Invalidation — תנאי ביטול</h4>
+  <p>הניתוח מבוטל אם:</p>
+  <ul>
+    <li>המחיר יפרוץ את גג ה-TR (64250) באופן משמעותי עם ווליום גבוה.</li>
+    <li>המחיר ישבור את תחתית ה-TR (59428.7) עם ווליום נמוך מאוד, מה שיצביע על חוסר עניין דובי.</li>
+    <li>ה-15m יראה סיגנל כניסה לונג חזק בניגוד ל-1H/4H/1D.</li>
+  </ul>
+  <img class="chart" src="chart-15m.png" alt="15m Chart — Invalidation scenario annotated">
+</div>
+
+<!-- ============================================== -->
+<!-- 7. כסף חכם Thesis — סיכום -->
+<!-- ============================================== -->
+<div class="box co-thesis">
+  <h2>🧠 כסף חכם Thesis</h2>
+  <p><strong>מה ה-<span class="term" data-tooltip="הכסף החכם (Composite Operator) — המקצוענים שפועלים יחד כיחידה אחת מאחורי הקלעים.">הכסף החכם</span> עושה כרגע</strong>: <span class="badge bearish">מוכרים שולטים</span></p>
+  <p><strong>ראיות</strong>:</p>
+  <ol>
+    <li>ה-1H מראה יצירת <span class="term" data-tooltip="Bearish Order Block — נר עולה אחרון לפני תנועה דובית חזקה. אזור התנגדות.">Bearish OB</span> באזור 62171.7 לאחר נר ירידה עם ווליום גבוה.</li>
+    <li>ה-4H מראה ווליום נמוך מאוד בנרות האחרונים, מה שמעיד על חוסר עניין מצד הקונים.</li>
+    <li>ה-Daily מראה דשדוש, אך הלחץ הדובי המתון בטווחי הזמן הנמוכים יותר מצביע על כך שהמוכרים עדיין שומרים על שליטה מסוימת.</li>
+  </ol>
+  <p><strong>מה ה-<span class="term" data-tooltip="הכסף החכם (Composite Operator) — המקצוענים שפועלים יחד כיחידה אחת מאחורי הקלעים.">הכסף החכם</span> ינסה לעשות הלאה</strong>: ינסה כנראה לדחוף את המחיר כלפי מטה כדי לבדוק את תחתית הטווח (סביב 60614.5), תוך חיפוש הזדמנות כניסה שורט אם יתממש תרחיש האלטרנטיבה.</p>
+</div>
+
+<hr style="margin-top: 40px;">
+<p class="meta">דוח נוצר ע"י skill <code>wyckoff-pa-analyst</code> v3.0 | תיוג מינימלי (<span class="term" data-tooltip="Selling Climax — פניקת מכירה סופית. נר ירידה ענקי עם וליום קלימקטי.">SC</span>+<span class="term" data-tooltip="Automatic Rally/Reaction — תנועה אוטומטית אחרי climax. מגדירה את גג/תחתית ה-<span class="term" data-tooltip="Trading Range — טווח מסחר אופקי בין SC לבין AR/BC.">TR</span>.">AR</span>) + תודעה לפי TF + 15m סטאפ decision</p>
+
+</body>
+</html>

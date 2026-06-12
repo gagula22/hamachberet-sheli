@@ -6,9 +6,10 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="theme-color" content="#FAF6F0" />
-  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-  <meta http-equiv="Pragma" content="no-cache" />
-  <meta http-equiv="Expires" content="0" />
+  <meta name="apple-mobile-web-app-title" content="מחברת" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
   <title>המחברת שלי</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -102,7 +103,7 @@
   <script src="js/views/notebook/media.js?v=47"></script>
   <script src="js/views/notebook/index.js?v=46"></script>
   <script src="js/views/notebook/export.js?v=52"></script>
-  <script src="js/views/notebook/editor.js?v=46"></script>
+  <script src="js/views/notebook/editor.js?v=47"></script>
   <script src="js/views/daily.js?v=16"></script>
   <script src="js/views/weekly.js?v=16"></script>
   <script src="js/views/monthly.js?v=16"></script>
@@ -156,6 +157,16 @@
           if (ok && !editing) App.render();
         })
         .catch(function (e) { console.warn('Firebase setup error:', e); });
+    }
+
+    // רישום ה-Service Worker (PWA): מאפשר התקנה למסך הבית, טעינה מיידית,
+    // ועבודה אופליין (הצגת הגרסה האחרונה שנשמרה). רץ אחרי טעינת העמוד.
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('sw.js').catch(function (e) {
+          console.warn('SW registration failed:', e);
+        });
+      });
     }
   </script>
 </body>

@@ -52,6 +52,25 @@
     }
     const save = Editable.debounce(saveImmediate, 500);
 
+    // כפתור מאוחד "שמור לענן": שומר מקומית מיד ואז דוחף לענן (Firestore).
+    // אם אין רשת/חיבור — נשמר מקומית ויעלה אוטומטית כשהרשת חוזרת.
+    async function saveToCloud(btn) {
+      if (btn && btn.dataset.saving) return;
+      if (btn) { btn.dataset.saving = '1'; btn.classList.add('syncing'); }
+      saveImmediate();
+      try {
+        if (window.FirebaseSync && FirebaseSync.enabled && FirebaseSync.flush) {
+          await FirebaseSync.flush();
+          App.toast('☁️ נשמר בענן');
+        } else {
+          App.toast('✓ נשמר (יסונכרן כשתתחבר)');
+        }
+      } catch (e) {
+        App.toast('⚠️ נשמר מקומית — יעלה לענן כשתהיה רשת');
+      }
+      if (btn) { delete btn.dataset.saving; btn.classList.remove('syncing'); }
+    }
+
     // ── Undo / Redo stack ───────────────────────────────────────────────────
     const _undoStack = [];
     let _undoPtr    = -1;
@@ -105,6 +124,8 @@
       if (!mod) return;
       if (e.key === 'z' && !e.shiftKey) {
         e.preventDefault(); e.stopPropagation(); doUndo();
+      } else if (e.key === 's') {
+        e.preventDefault(); e.stopPropagation(); saveToCloud();
       } else if (e.key === 'y' || (e.key === 'z' && e.shiftKey)) {
         e.preventDefault(); e.stopPropagation(); doRedo();
       } else if (e.shiftKey && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) {
@@ -695,7 +716,7 @@
       // Row 1: save/undo | block-style | font/size | B/I/U/S | colors | direction
       App.el('div', { class: 'nb-ribbon-row' }, [
         grp(
-          tbBtn('💾', 'שמור (Ctrl+S)', () => { saveImmediate(); App.toast('✓ נשמר'); }),
+          tbBtn('💾', 'שמור לענן (Ctrl+S)', (e) => saveToCloud(e && e.currentTarget)),
           tbBtn('↩', 'בטל (Ctrl+Z)',   () => editor._doUndo?.()),
           tbBtn('↪', 'שחזר (Ctrl+Y)', () => editor._doRedo?.())
         ),
@@ -703,21 +724,7 @@
         grp(fontSelR, sizeSelR),
         grp(boldBtn, italicBtn, ulBtn, strikeBtn),
         grp(colorInputR, hilightInputR),
-        grp(dirBtn),
-        grp((() => {
-          const syncBtn = tbBtn('☁️', 'סנכרן עכשיו עם Firebase', async () => {
-            if (syncBtn.dataset.syncing) return;
-            syncBtn.dataset.syncing = '1';
-            syncBtn.title = 'מסנכרן…';
-            try {
-              if (window.FirebaseSync) await FirebaseSync.flush();
-              App.toast('☁️ סנכרון הושלם');
-            } catch { App.toast('⚠️ סנכרון נכשל'); }
-            delete syncBtn.dataset.syncing;
-            syncBtn.title = 'סנכרן עכשיו עם Firebase';
-          });
-          return syncBtn;
-        })())
+        grp(dirBtn)
       ]),
       // Row 2: align | lists | indent | insert | actions/export
       App.el('div', { class: 'nb-ribbon-row' }, [
