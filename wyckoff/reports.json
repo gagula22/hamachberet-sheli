@@ -1,15 +1,6 @@
 {
   "reports": [
     {
-      "file": "report-2026-05-30_1304.html",
-      "symbol": "BYBIT:BTCUSDT.P",
-      "date": "2026-05-30",
-      "time": "13:04",
-      "datetime": "2026-05-30T13:04:00+03:00",
-      "ts": 1780135440,
-      "title": "BTCUSDT — 30 במאי 2026"
-    },
-    {
       "file": "report-2026-05-30_1424.html",
       "symbol": "BYBIT:BTCUSDT.P",
       "date": "2026-05-30",
@@ -179,6 +170,15 @@
       "datetime": "2026-06-10T20:31:00+03:00",
       "ts": 1781112660,
       "title": "BTCUSDT — 10 ביוני 2026"
+    },
+    {
+      "file": "report-2026-06-12_1205.html",
+      "symbol": "BYBIT:BTCUSDT.P",
+      "date": "2026-06-12",
+      "time": "12:05",
+      "datetime": "2026-06-12T12:05:00+03:00",
+      "ts": 1781255100,
+      "title": "BTCUSDT — 12 ביוני 2026"
     }
   ]
 }
