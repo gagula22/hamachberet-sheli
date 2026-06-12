@@ -282,6 +282,19 @@
         savedRange = sel.getRangeAt(0).cloneRange();
     });
 
+    // One combined toolbar-state refresh instead of two separate keyup/mouseup
+    // listener pairs (block-style + B/I/U/S). Same synchronous timing as before,
+    // half the listeners and a single getSelection per event.
+    // syncBlockStyle / syncFormatState are hoisted declarations defined below.
+    function _syncToolbarState() { syncBlockStyle(); syncFormatState(); }
+
+    // Small trailing debounce (setTimeout — fires even in background tabs, unlike
+    // rAF). Used to coalesce the reflow-heavy word-count recompute during typing.
+    function _debounceTrailing(fn, ms) {
+      let t = null;
+      return function () { clearTimeout(t); t = setTimeout(fn, ms); };
+    }
+
     function applyToSelection(styleFn) {
       editor.focus();
       const sel = window.getSelection();
@@ -446,9 +459,9 @@
       }
       blockStyleSel.value = 'p';
     }
-    editor.addEventListener('keyup',    syncBlockStyle);
-    editor.addEventListener('mouseup',  syncBlockStyle);
-    editor.addEventListener('focus',    syncBlockStyle);
+    editor.addEventListener('keyup',    _syncToolbarState);
+    editor.addEventListener('mouseup',  _syncToolbarState);
+    editor.addEventListener('focus',    _syncToolbarState);
 
     // ── Ribbon font / size selects with new classes ──────────────────────
     const fontSelR = App.el('select', {
@@ -709,8 +722,7 @@
       ulBtn.classList.toggle(   'nb-tb-active', document.queryCommandState('underline'));
       strikeBtn.classList.toggle('nb-tb-active', document.queryCommandState('strikeThrough'));
     }
-    editor.addEventListener('keyup',   syncFormatState);
-    editor.addEventListener('mouseup', syncFormatState);
+    // keyup/mouseup refresh of B/I/U/S is handled by _syncToolbarState (rAF-coalesced) above.
 
     const ribbon = App.el('div', { class: 'nb-ribbon' }, [
       // Row 1: save/undo | block-style | font/size | B/I/U/S | colors | direction
@@ -931,7 +943,9 @@
       readTimeEl.textContent  = '~' + mins + ' דק׳ קריאה';
     }
     updateWordCount();
-    editor.addEventListener('input', updateWordCount);
+    // innerText forces a reflow + split on every keystroke — debounce so it runs
+    // ~120ms after typing pauses instead of on every key. Display-only; end value identical.
+    editor.addEventListener('input', _debounceTrailing(updateWordCount, 120));
 
     // ── Status bar ────────────────────────────────────────────────────────
     const saveDot = App.el('span', { class: 'nb-save-dot' });

@@ -25,6 +25,7 @@
         t('📝', 'Word → PDF', '#FADADD,#F3B7BD', 'ממיר מסמך Word (.doc/.docx) ל-PDF — הורדה אוטומטית, התמונות נשמרות.', function () { return window.Tools.wordToPdf(); }),
         t('📄', 'PDF → Word', '#E6DDF4,#C9B8E3', 'ממיר PDF ל-Word נערך (כולל שחזור עברית מקודדת), או למראה מדויק כתמונות.', function () { return window.Tools.pdfToWord(); }),
         t('🔍', 'PDF סרוק ל-Word', '#E2DCF0,#B9A9D8', 'PDF סרוק/תמונה (בלי טקסט) → Word נערך, באמצעות OCR עברית+אנגלית מקומי.', function () { return window.Tools.pdfOcr(); }),
+        t('📷', 'סרוק מסמך למחברת', '#D9E8F5,#A9CEEE', 'צלם/בחר תמונה של מסמך — הטקסט מזוהה מקומית (OCR עברי) ונשמר כעמוד חדש במחברת שתבחר.', function () { return window.Tools.docScan(); }),
         t('🌐', 'תרגום PDF', '#FFF3C4,#F5DF8C', 'מחלץ טקסט מ-PDF ומתרגם אותו לשפה שתבחרי.', function () { return window.Tools.pdfTranslator(); }),
         t('🎬', 'תמלול וידאו', '#CFE4F7,#A9CEEE', 'מתמלל וידאו/אודיו בעברית למסמך Word, עם צילומי מסך מהסרטון.', function () { return window.Tools.videoTranscriber(); })
       ] },

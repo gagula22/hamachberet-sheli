@@ -8,7 +8,7 @@
  *    הדפדפן והתמשכות ה-IndexedDB של Firestore מטפלים בנתונים בעצמם.
  *  הנתונים שלך נשמרים בענן (Firestore) — ה-SW שומר רק את *קוד* האפליקציה.
  */
-const CACHE = "mahberet-shell-v1";
+const CACHE = "mahberet-shell-v2";
 const SHELL = [
   "./",
   "./index.html",

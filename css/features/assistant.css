@@ -1,0 +1,133 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   העוזר החכם — עיצוב בלבד (אחריות עצמאית). אין כאן לוגיקה.
+   נשען על משתני הצבע ב-tokens.css.
+   ───────────────────────────────────────────────────────────────────────── */
+
+/* כפתור צף */
+.asst-fab {
+  position: fixed;
+  inset-inline-start: 22px;   /* בצד שמאל ב-RTL */
+  bottom: 22px;
+  width: 58px; height: 58px;
+  border-radius: 50%;
+  background: linear-gradient(145deg, var(--lavender-deep), var(--blush-deep));
+  color: #fff;
+  font-size: 26px;
+  line-height: 58px;
+  text-align: center;
+  box-shadow: var(--shadow-lg);
+  z-index: 9990;
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+.asst-fab:hover { transform: translateY(-2px) scale(1.05); }
+.asst-fab.open { transform: scale(.92); opacity: .85; }
+
+/* פאנל הצ׳אט הצף */
+.asst-panel {
+  position: fixed;
+  inset-inline-start: 22px;
+  bottom: 92px;
+  width: 380px;
+  max-width: calc(100vw - 44px);
+  height: 560px;
+  max-height: calc(100vh - 130px);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-lg);
+  z-index: 9992;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: asstIn .18s ease;
+}
+@keyframes asstIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+
+.asst-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px;
+  background: linear-gradient(135deg, var(--lavender), var(--blush));
+  border-bottom: 1px solid var(--line);
+}
+.asst-head-title { font-family: var(--font-head); font-weight: 600; color: var(--ink); }
+.asst-head-x { font-size: 18px; color: var(--ink-soft); padding: 4px 8px; border-radius: 8px; }
+.asst-head-x:hover { background: rgba(0,0,0,.06); }
+
+/* גוף הצ׳אט (משותף לפאנל ול-view) */
+.asst-chat { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.asst-msgs { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.asst-msg { display: flex; }
+.asst-msg.asst-user { justify-content: flex-start; }   /* המשתמש בצד ימין ב-RTL */
+.asst-msg.asst-bot  { justify-content: flex-end; }
+.asst-bubble {
+  max-width: 84%;
+  padding: 10px 13px;
+  border-radius: 16px;
+  font-size: 14px; line-height: 1.6;
+  white-space: pre-wrap; word-break: break-word;
+}
+.asst-user .asst-bubble { background: var(--lavender); color: var(--nb-text-1, var(--ink)); border-bottom-inline-start: 4px solid var(--lavender-deep); }
+.asst-bot  .asst-bubble { background: var(--cream); color: var(--ink); border: 1px solid var(--line); }
+
+/* תוצאות / קישורים */
+.asst-results { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; max-width: 92%; }
+.asst-msg.asst-bot .asst-results { margin-inline-start: auto; }
+.asst-result {
+  display: flex; align-items: center; gap: 10px;
+  text-align: start;
+  padding: 8px 10px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  transition: background .12s ease, border-color .12s ease;
+}
+.asst-result:hover { background: var(--cream); border-color: var(--lavender-deep); }
+.asst-result-icon { font-size: 18px; flex: none; }
+.asst-result-body { display: flex; flex-direction: column; min-width: 0; }
+.asst-result-title { font-size: 13.5px; font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.asst-result-sub { font-size: 12px; color: var(--ink-mute); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* הצעות מהירות */
+.asst-suggest { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; max-width: 92%; margin-inline-start: auto; }
+.asst-sugg {
+  font-size: 12.5px;
+  padding: 6px 11px;
+  background: var(--lavender);
+  color: var(--ink);
+  border-radius: 999px;
+  transition: background .12s ease;
+}
+.asst-sugg:hover { background: var(--lavender-deep); color: #fff; }
+
+/* שורת קלט */
+.asst-inputbar { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--line); background: var(--paper); }
+.asst-input {
+  flex: 1; min-width: 0;
+  padding: 10px 13px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--cream);
+  font-size: 14px;
+}
+.asst-input:focus { outline: none; border-color: var(--lavender-deep); background: var(--paper); }
+.asst-send {
+  flex: none;
+  padding: 0 18px;
+  border-radius: 999px;
+  background: var(--lavender-deep);
+  color: #fff;
+  font-weight: 600; font-size: 14px;
+}
+.asst-send:hover { filter: brightness(1.05); }
+
+/* view מלא */
+.asst-view-card { display: flex; flex-direction: column; height: calc(100vh - var(--topbar-h) - 80px); min-height: 420px; }
+.asst-view-title { margin-bottom: 4px; }
+.asst-view-sub { color: var(--ink-soft); font-size: 14px; margin-bottom: 12px; }
+.asst-view-card .asst-chat { border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; }
+
+/* מובייל: לפנות מקום לסרגל הניווט התחתון */
+@media (max-width: 900px) {
+  .asst-fab { bottom: 78px; inset-inline-start: 16px; }
+  .asst-panel { bottom: 142px; inset-inline-start: 16px; height: calc(100vh - 200px); }
+}

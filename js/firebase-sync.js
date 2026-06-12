@@ -18,8 +18,8 @@
   const SUBCOL_KEYS    = Object.keys(_SS).filter(k => _SS[k].sync === 'subcol');
   const MAIN_DOC_KEYS  = Object.keys(_SS).filter(k => _SS[k].sync === 'maindoc');
   (function assertKeyClassification() {
-    const sub  = ['notes', 'tasks', 'todos', 'goals', 'transactions', 'customTemplates'];
-    const main = ['mood', 'water', 'sleep', 'slots', 'settings', 'habits'];
+    const sub  = ['notes', 'tasks', 'todos', 'goals', 'transactions', 'customTemplates', 'readingList', 'flashcards'];
+    const main = ['mood', 'water', 'sleep', 'slots', 'settings', 'habits', 'eisenhower', 'weeklyReviews'];
     const same = (a, b) => a.length === b.length && a.every(x => b.indexOf(x) > -1);
     if (!same(SUBCOL_KEYS, sub) || !same(MAIN_DOC_KEYS, main)) {
       throw new Error('[firebase-sync] StoreSchema key classification mismatch — aborting to protect data.');
@@ -33,6 +33,10 @@
   // ── Initialisation ────────────────────────────────────────────────────────
 
   function isConfigured() {
+    // "אתר משופר" sandbox: a local copy served over HTTP would otherwise sync to
+    // the SAME live Firestore project. When this flag is set we run 100% locally
+    // (IndexedDB/localStorage only) so testing the copy never touches live data.
+    if (window.IMPROVED_SITE_SANDBOX) return false;
     if (!window.FIREBASE_CONFIG || !window.FIREBASE_CONFIG.apiKey) return false;
     if (location.protocol === 'file:') return false;
     return true;
@@ -443,6 +447,8 @@
     enabled: false,
 
     async setup() {
+      // "אתר משופר" sandbox: stay fully local — no banner, no login prompt.
+      if (window.IMPROVED_SITE_SANDBOX) return false;
       if (!initSDK()) { setTimeout(window.FirebaseUI.showOfflineBanner, 1500); return false; }
 
       try { await auth.getRedirectResult(); } catch {}

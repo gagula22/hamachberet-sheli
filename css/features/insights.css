@@ -1,0 +1,47 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   לוח תובנות — גיליון האחריות (טוקנים בלבד).
+   ───────────────────────────────────────────────────────────────────────── */
+
+.ins-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  gap: var(--sp-4);
+  align-items: start;
+}
+@media (max-width: 600px) {
+  .ins-grid { grid-template-columns: 1fr; }
+}
+
+.ins-title { font-size: 17px; margin-bottom: var(--sp-3); }
+
+.ins-canvas-wrap {
+  position: relative;
+  height: 260px;
+}
+
+.ins-loading {
+  padding: var(--sp-5);
+  color: var(--ink-mute);
+  font-size: 14px;
+}
+
+.ins-empty {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  align-items: flex-start;
+  padding: var(--sp-4) 0;
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.6;
+}
+.ins-empty-btn {
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: var(--lavender);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 160ms;
+}
+.ins-empty-btn:hover { background: var(--lavender-deep); }

@@ -82,6 +82,10 @@
 │       │       ├── ui-toast.js      התראות צפות          → window.VT_TOAST
 │       │       └── index.js         main UI + whisper (מחזיק whisper state)
 │       │
+│       ├── assistant/              ⭐ העוזר החכם — אחריות עצמאית, 100% מקומי (אפס רשת/כתיבה)
+│       │   ├── knowledge.js         ידע-עזרה סטטי על כל פיצ'ר/כפתור        → window.AsstKnowledge
+│       │   ├── engine.js            טוקנייזר עברי + אינדוקס Store + חיפוש מדורג + תשובות מחושבות → window.AsstEngine
+│       │   └── ui.js                כפתור צף + פאנל צ'אט + view 'assistant'  → window.Assistant
 │       ├── stickers.js              מעטפת "כלים": hero + רשת אריחים לפי קטגוריה; כל אריח פותח את הכלי ב-MODAL מוקפץ (✕/ESC/רקע). הכרטיסים נבנים lazily ונשמרים. קורא ל-window.Tools.*
 │       ├── calendar.js              ניתוב יומן → daily/weekly/monthly
 │       ├── daily.js weekly.js monthly.js   תצוגות יומן
@@ -117,6 +121,9 @@
 | מודל הנתונים — default/סיווג-סנכרון לכל key | `store-schema.js` |
 | אחסון מקומי / לוגיקת מיזוג בענן | `store.js` · `firebase-sync.js` |
 | UI של הסנכרון (באנר, סטטוס, כפתור, סרגל משתמש) | `firebase-ui.js` |
+| העוזר החכם — ידע/הסברי-עזרה | `js/views/assistant/knowledge.js` |
+| העוזר החכם — חיפוש/דירוג/תשובות מחושבות | `js/views/assistant/engine.js` |
+| העוזר החכם — כפתור צף / פאנל / view / עיצוב | `js/views/assistant/ui.js` · `css/features/assistant.css` |
 
 ---
 
@@ -193,3 +200,84 @@
 ⚠️ **זיהוי-אוטומטי:** PDF ללא שכבת טקסט (סרוק/מבוסס-תמונה, כמו ייצוא-PDF של המחברת) → לא ניתן לחלץ ממנו
 טקסט; הכלי מזהה (`totalTextChars<12`), מטמיע את תמונות העמודים, ומציג הודעה ברורה שמפנה ל"ייצוא ל-Word"
 של המחברת. *(נבנה ע"י workflow רב-סוכנים — מימוש מנצח שנבחר ע"י judge; ראה memory.)*
+
+---
+
+## 7. אחריויות חדשות (תוספות Fable 5) — כל אחת תיקייה עצמאית
+
+> חמש אחריויות שנוספו ביוני 2026. כל אחת חיה בתיקייה משלה + CSS משלה + namespace משלה,
+> והנגיעות היחידות בקבצים קיימים: שורת SECTIONS ב-app.js ותגיות ב-index.html.
+> מנגנוני הרחבה רכים: `window.DASHBOARD_WIDGETS` (קיים) ו-`window.SETTINGS_CARDS` (חדש).
+
+**ערכת נושא (`js/features/theme/`, `window.Theme`):** `boot.js` רץ סינכרונית ב-`<head>` לפני
+ה-CSS — קורא מראה מ-`localStorage('mahberet.theme')` ומחיל `data-theme`/`data-fs` על `<html>`
+לפני הציור הראשון (אפס הבזק). `index.js` — API (`set`/`setFontSize`), סנכרון דו-כיווני עם
+`Store.settings` (Store מנצח אחרי `ready()` — מכסה ייבוא/שחזור), מצב `auto` שעוקב אחרי
+`prefers-color-scheme`, עדכון `<meta theme-color>` ואירוע `themechange`. **כל ההתאמות לכהה
+רק ב-`css/features/theme-dark.css`** — דריסת טוקנים תחת `[data-theme=dark]` + דריסות נקודתיות
+לצבעים קשיחים של layout/components (אסור לערוך אותם). ⚠️ החלטת עיצוב: דף העורך וגוף ההערה
+נשארים בהירים גם בכהה (טקסט שהמשתמש צבע חייב להישאר קריא).
+
+**מסך הגדרות (`js/views/settings/index.js`, view `settings`):** שם משתמש (מזין את הברכה
+הקיימת — `app.js` כבר קרא `settings.userName`), בורר ערכה, גודל טקסט. חושף את
+**`window.SETTINGS_CARDS`** — מערך פונקציות-רינדור שמודולים אחרים דוחפים אליו כרטיס
+(מקביל ל-DASHBOARD_WIDGETS, עם try/catch סביב כל כרטיס).
+
+**לוח תובנות (`js/views/insights/`, view `insights`):** `charts.js` — 5 בוני גרפים קריאה-בלבד
+(מצב רוח 30 יום, התמדה בהרגלים 8 שבועות, הוצאות לפי קטגוריה, הכנסות/הוצאות 6 חודשים, מים+שינה);
+צבעים/פונט נקראים מטוקני CSS בזמן בנייה → כהה נכון אוטומטית. `index.js` — טעינה עצלה של
+**Chart.js 4.4.3 (MIT, `js/vendor/chart.umd.min.js`, לעולם לא ב-index.html)**, וניהול חיים בלי
+unmount-hook: הריסת גרפים בכל רינדור + `Store.subscribe` שבודק `document.contains` ומתנתק לבד
++ בנייה מחדש ב-`themechange`.
+
+**חיפוש מהיר (`js/features/palette/index.js`, `window.Palette`):** לא view — אין שינוי ב-app.js.
+Ctrl/Cmd+K ב-capture מכל מקום (העורך מיירט רק z/s/y/חצים — אין התנגשות); `/` רק מחוץ לשדות.
+שלושה מקורות קריאה-בלבד: `App.sections` החי, `AsstEngine.searchContent` (מיחזור מנוע הבוט,
+מדולג בשקט אם חסר), ופעולות מהירות. Esc סוגר עם stopPropagation (לא מפעיל יציאה ממצב מיקוד).
+
+**קול (`js/features/voice/`):** `dictation.js` (`window.VoiceDictation`) — כפתור 🎤 מוזרק לסרגל
+המחברת **בלי לערוך את המחברת**: MutationObserver על `#view` מאתר `.nb-ribbon:not([data-voice])`
+בכל בנייה-מחדש ומוסיף קבוצה משלו (אידמפוטנטי; אם הסרגל ישתנה — הפיצ׳ר פשוט לא יופיע).
+Web Speech he-IL; טקסט סופי דרך `execCommand('insertText')` → שמירה/undo של העורך בחינם;
+ביניים בבועה צפה בלבד. `memos.js` (view `voice`, `window.VoiceMemos`) — MediaRecorder
+(webm/opus→mp4 fallback), בלובים ב-**IndexedDB משלו (`hamachberet-voice`)** — אפס נגיעה
+ב-Store/סכימה כדי שאודיו לא ינפח localStorage/סנכרון.
+
+**גיבוי אוטומטי (`js/features/autobackup/index.js`, `window.AutoBackup`):** צילום יומי מלא של
+`Store.get()` ל-IndexedDB משלו (`hamachberet-backups`), שמירת 14; שחזור = צילום-בטיחות ←
+`Store.importJSON(File)` (המסלול המוכח של data-transfer) ← reload. UI = כרטיס ב-SETTINGS_CARDS
+(תלות רכה — הגיבוי רץ גם בלי מסך ההגדרות).
+
+---
+
+## 8. עשר התוספות (יוני 2026) — אחריות נפרדת לכל אחת
+
+> CSS של כולן ב-`css/features/extras.css` (בלוק נפרד לכל אחריות). עוזר משותף חדש:
+> `js/components/topic-open.js` (`window.TopicOpen.open(tid)`) — פותח נושא מחברת מכל מקום
+> דרך `window._nbWikiClick` שהמחברת חושפת. מפתחות Store חדשים (store-schema +
+> עדכון האסרציה ב-firebase-sync): `readingList`/`flashcards` (subcol), `eisenhower`/`weeklyReviews` (maindoc).
+
+- **קישורים-חוזרים** `js/features/backlinks/` — פאנל "מי מקשר לכאן" מוזרק ל-`.nb-stage` דרך
+  MutationObserver (אפס עריכה במחברת); קישורים מפורשים (data-tid) + אזכורי-שם. הנושא הפעיל
+  מזוהה מ-`.nb-topic.active` + `nbTree`.
+- **מפת קשרים** `js/views/graph/` (view `graph`) — SVG ידני: פריסת-כוחות, צמתים=נושאים,
+  קשתות=ויקי+היררכיה, זום/הזזה דרך viewBox, לחיצה → TopicOpen.
+- **"ביום הזה לפני…"** `js/features/onthisday/` — כרטיס DASHBOARD_WIDGETS: מצב רוח/הערות/נושאים
+  מלפני שבוע/חודש/שנה (השוואת updatedAt מקומית).
+- **סקירה שבועית** `js/views/weekly-review/` (view, מפתח `weeklyReviews`) — סיכום שבוע, רפלקציה,
+  העברת משימות-יומן פתוחות +7 ימים (עיגון T12:00 — dateKey הוא UTC!). כתיבה ל-tasks = פעולת
+  משתמש מפורשת (חריגה מתועדת).
+- **מטריצת אייזנהאואר** `js/views/eisenhower/` (view, מפתח `eisenhower` = map todoId→רבע) —
+  4 רבעים + מגירה, גרירה; סימון-בוצע כותב ל-todos (פעולת משתמש מפורשת).
+- **לוח שרטוט** `js/views/sketch/` (view `sketch`) — Canvas API נקי (עט/קו/חץ/מלבן/עיגול/מחק,
+  undo 30); "הוסף למחברת" = בורר נושא/מחברת-חדשה ← מוסיף `figure.nb-img` ל-body (התנהגויות
+  התמונה של העורך נדבקות אוטומטית בפתיחה).
+- **כרטיסיות זיכרון** `js/views/flashcards/` (view, מפתח `flashcards`) — חזרה מרווחת פשוטה:
+  כישלון→מחר, הצלחה→המדרגה הבאה ב-[1,3,7,15,30,60,120].
+- **מרכז הדגשות** `js/views/highlights/` (view) — DOMParser על topics+notes, חילוץ אלמנטים עם
+  background-color אינליין (לא לבן), קיבוץ לפי מקור, קפיצה דרך TopicOpen/openNoteId.
+- **סריקת מסמך** `js/views/tools/doc-scan/` (אריח בכלים, `window.Tools.docScan`) — מצלמה/קובץ ←
+  Tesseract heb+eng מקומי (⚠️ נתיבי vendor חייבים להיות מוחלטים — `location.origin+…` — יחסיים
+  נשברים בתוך ה-Worker) ← טקסט לעריכה ← בורר מחברת קיימת/חדשה-בשם ← עמוד-בן חדש (אייקון 📷).
+- **רשימת קריאה** `js/views/readinglist/` (view, מפתח `readingList`) — קישור+כותרת+תגית,
+  לשוניות לקריאה/נקראו/הכול.

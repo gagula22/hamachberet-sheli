@@ -17,6 +17,8 @@
     goals:        { default: [],                               sync: 'subcol',  merge: 'by-id' },
     transactions: { default: [],                               sync: 'subcol',  merge: 'by-id' },
     customTemplates: { default: [],                            sync: 'subcol',  merge: 'by-id' },
+    readingList:  { default: [],                               sync: 'subcol',  merge: 'by-id' },
+    flashcards:   { default: [],                               sync: 'subcol',  merge: 'by-id' },
     mood:         { default: {},                               sync: 'maindoc', merge: 'cloud-wins' },
     water:        { default: {},                               sync: 'maindoc', merge: 'cloud-wins' },
     sleep:        { default: {},                               sync: 'maindoc', merge: 'cloud-wins' },
@@ -27,6 +29,8 @@
                       { id: 'h2', name: 'פעילות גופנית', color: 'blush',    log: {} },
                       { id: 'h3', name: 'מדיטציה',       color: 'lavender', log: {} }
                     ],                                          sync: 'maindoc', merge: 'log-deep-merge' },
+    eisenhower:   { default: {},                               sync: 'maindoc', merge: 'shallow' },
+    weeklyReviews:{ default: {},                               sync: 'maindoc', merge: 'shallow' },
     topics:       { default: [],                               sync: 'topics',  merge: 'by-id' }
   };
 })();

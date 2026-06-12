@@ -1,0 +1,36 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   מסך הגדרות — גיליון האחריות (משתמש רק בטוקנים מ-tokens.css).
+   ───────────────────────────────────────────────────────────────────────── */
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: var(--sp-4);
+  align-items: start;
+}
+
+.settings-card-title { font-size: 18px; margin-bottom: 4px; }
+.settings-card-sub { font-size: 12px; color: var(--ink-mute); margin-bottom: var(--sp-3); }
+
+.settings-name-input { width: 100%; max-width: 320px; }
+
+.settings-options { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
+.settings-opt {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--cream);
+  font-size: 13px;
+  color: var(--ink-soft);
+  transition: all 160ms;
+}
+.settings-opt:hover { border-color: var(--lavender-deep); color: var(--ink); }
+.settings-opt.active {
+  background: var(--lavender);
+  border-color: var(--lavender-deep);
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow: var(--shadow-sm);
+}
+.settings-opt-icon { font-size: 15px; line-height: 1; }

@@ -1,0 +1,83 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   חיפוש מהיר (Ctrl+K) — גיליון האחריות (טוקנים בלבד).
+   ───────────────────────────────────────────────────────────────────────── */
+
+.plt-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  display: none;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+  background: rgba(20, 16, 12, .45);
+  backdrop-filter: blur(2px);
+}
+
+.plt-box {
+  width: min(560px, 92vw);
+  max-height: 64vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+.plt-inputbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--line);
+}
+.plt-k {
+  font-size: 10px;
+  padding: 3px 7px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  color: var(--ink-mute);
+  direction: ltr;
+}
+.plt-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 16px;
+  color: var(--ink);
+  text-align: start;
+}
+
+.plt-list { overflow-y: auto; padding: var(--sp-2); }
+.plt-group {
+  font-size: 11px;
+  color: var(--ink-mute);
+  letter-spacing: .05em;
+  padding: 8px 12px 4px;
+}
+.plt-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  text-align: start;
+  transition: background 120ms;
+}
+.plt-item.sel { background: var(--lavender); }
+.plt-icon { font-size: 18px; flex-shrink: 0; }
+.plt-body { display: flex; flex-direction: column; min-width: 0; }
+.plt-title { font-size: 14px; font-weight: 500; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.plt-sub { font-size: 12px; color: var(--ink-mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.plt-none { padding: var(--sp-5); color: var(--ink-mute); font-size: 14px; text-align: center; }
+.plt-hint {
+  padding: 8px var(--sp-4);
+  border-top: 1px solid var(--line);
+  font-size: 11px;
+  color: var(--ink-mute);
+}

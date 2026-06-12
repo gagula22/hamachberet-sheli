@@ -1,0 +1,106 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   קול — גיליון האחריות: הכתבה (בועה+כפתור סרגל) והערות קול (view).
+   ───────────────────────────────────────────────────────────────────────── */
+
+/* ── הכתבה ── */
+.voice-dict-btn.voice-recording {
+  background: var(--blush) !important;
+  animation: voicePulse 1.2s ease-in-out infinite;
+}
+@keyframes voicePulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(243, 183, 189, .7); }
+  50% { box-shadow: 0 0 0 6px rgba(243, 183, 189, 0); }
+}
+.voice-pill {
+  position: fixed;
+  bottom: 24px;
+  inset-inline-start: 50%;
+  transform: translateX(50%);
+  z-index: 350;
+  display: none;
+  max-width: min(480px, 86vw);
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: var(--paper);
+  border: 1px solid var(--blush-deep);
+  box-shadow: var(--shadow-lg);
+  color: var(--ink);
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── הערות קול ── */
+.vm-card { max-width: 680px; }
+.vm-sub { font-size: 13px; color: var(--ink-soft); margin: 4px 0 var(--sp-4); line-height: 1.6; }
+
+.vm-controls { display: flex; align-items: center; gap: var(--sp-3); margin-bottom: var(--sp-4); }
+.vm-rec-btn {
+  padding: 12px 24px;
+  border-radius: 999px;
+  background: var(--blush);
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+  transition: all 160ms;
+  box-shadow: var(--shadow-sm);
+}
+.vm-rec-btn:hover { background: var(--blush-deep); }
+.vm-rec-btn.recording {
+  background: var(--blush-deep);
+  animation: voicePulse 1.2s ease-in-out infinite;
+}
+.vm-timer { font-size: 16px; font-weight: 600; color: var(--ink-soft); direction: ltr; display: none; }
+
+.vm-list { display: flex; flex-direction: column; gap: var(--sp-2); }
+.vm-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  background: var(--cream);
+  border: 1px solid var(--line);
+}
+.vm-play {
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  background: var(--sky);
+  font-size: 14px;
+  flex-shrink: 0;
+  transition: all 160ms;
+}
+.vm-play:hover { background: var(--sky-deep); }
+.vm-play.playing { background: var(--sky-deep); }
+.vm-body { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.vm-name { font-size: 14px; font-weight: 500; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vm-name:hover { text-decoration: underline dotted; }
+.vm-rename { max-width: 280px; }
+.vm-meta { font-size: 12px; color: var(--ink-mute); direction: ltr; text-align: end; }
+.vm-act {
+  width: 30px; height: 30px;
+  border-radius: 8px;
+  color: var(--ink-mute);
+  font-size: 13px;
+  flex-shrink: 0;
+  transition: all 160ms;
+}
+.vm-act:hover { background: var(--paper); color: var(--ink); }
+.vm-del:hover { color: #B3455A; }
+
+.vm-row { flex-wrap: wrap; }
+.vm-status {
+  flex-basis: 100%;
+  font-size: 11px;
+  color: var(--ink-mute);
+  padding-top: 4px;
+  direction: rtl;
+}
+.vm-trans.done { background: var(--sage); }
+.vm-trans.busy { animation: vmBusy 1s linear infinite; cursor: progress; }
+@keyframes vmBusy { 50% { opacity: .45; } }
+.vm-word { background: var(--sky); }
+.vm-word:hover { background: var(--sky-deep); }
+
+.vm-empty { padding: var(--sp-4) 0; color: var(--ink-soft); font-size: 14px; line-height: 1.6; }

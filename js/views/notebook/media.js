@@ -1,19 +1,8 @@
 (function () {
   // Notebook media: images, file attachments, table resizers, mood blocks.
   // Pure leaf — only uses App / Editable / DOM and the save callback. No tree/state.
-  function _unused_insertImageFromFile(file, editor, save) {
-    if (!file.type.startsWith('image/')) return;
-    if (file.size > 3 * 1024 * 1024) {
-      App.toast('תמונה גדולה מדי (מעל 3MB) — בחר תמונה קטנה יותר');
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      insertImage(String(reader.result), editor);
-      save();
-    };
-    reader.readAsDataURL(file);
-  }
+  // (insertImage is the canonical impl; the old _unused_insertImageFromFile helper
+  //  was dead code — image insertion routes through Editable/this insertImage.)
 
   function insertImage(dataUrl, editor) {
     editor.focus();

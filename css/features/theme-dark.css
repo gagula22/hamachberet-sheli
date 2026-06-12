@@ -1,0 +1,106 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   ערכת נושא — גיליון האחריות של מצב כהה + סולם גודל טקסט.
+   כל ההתאמות לכהה חיות רק כאן: דריסת טוקני :root תחת [data-theme=dark]
+   ודריסות נקודתיות לצבעים קשיחים בקבצי הבסיס (שלא נערכים — SoC).
+   החלטת עיצוב: דף העורך של המחברת וגוף ההערה נשארים בהירים גם בכהה
+   (כמו נייר) — טקסט שהמשתמש צבע ידנית חייב להישאר קריא.
+   ───────────────────────────────────────────────────────────────────────── */
+
+/* ── סולם גודל טקסט (חל בכל הערכות) ── */
+html[data-fs="s"] body { zoom: 0.92; }
+html[data-fs="l"] body { zoom: 1.1; }
+
+/* ── טוקנים כהים ── */
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --blush: #573B40;    --blush-deep: #8A5560;
+  --sage: #3C4F36;     --sage-deep: #5F7F53;
+  --sky: #344657;      --sky-deep: #527A9C;
+  --butter: #575030;   --butter-deep: #8C7F49;
+  --lavender: #463D57; --lavender-deep: #6F5F94;
+  --peach: #5C4633;
+  --mint: #2F4F44;
+
+  --cream: #181512;
+  --paper: #242020;
+  --line: #3A352F;
+  --ink: #EDE8E2;
+  --ink-soft: #B8B1A9;
+  --ink-mute: #837D75;
+
+  --shadow-sm: 0 1px 3px rgba(0,0,0,.35);
+  --shadow: 0 4px 18px rgba(0,0,0,.5);
+  --shadow-lg: 0 12px 40px rgba(0,0,0,.65);
+
+  /* סרגל המחברת — פלטת ספר חמה, מוכהית */
+  --nb-bg-page:    #211C16;
+  --nb-bg-card:    #262119;
+  --nb-bg-soft:    #2E2820;
+  --nb-bg-hover:   #353028;
+  --nb-bg-active:  #403A2E;
+  --nb-bg-toolbar: #262119;
+  --nb-bg-tag:     #322A24;
+  --nb-border-soft:#403A30;
+  --nb-border-mid: #4E4638;
+  --nb-border-str: #6B604C;
+  --nb-text-1:     #EFE7DA;
+  --nb-text-2:     #C9BBA4;
+  --nb-text-3:     #A4977F;
+  --nb-text-4:     #82765F;
+  --nb-accent:     #D99A4E;
+  --nb-accent-str: #C97B52;
+  --nb-accent-sft: #A06B55;
+  --nb-success:    #5FBF85;
+}
+
+/* ── דריסות לצבעים קשיחים: layout.css ── */
+[data-theme="dark"] .sidebar { background: linear-gradient(180deg, #221E1A 0%, #252031 100%); }
+[data-theme="dark"] .nav-item:hover { background: rgba(255,255,255,.07); }
+[data-theme="dark"] .nav-item.active { background: var(--paper); }
+[data-theme="dark"] .sidebar-footer { background: rgba(255,255,255,.05); }
+[data-theme="dark"] .sync-now-btn { background: var(--paper); }
+[data-theme="dark"] .search { background: var(--paper); }
+[data-theme="dark"] .menu-toggle { background: var(--paper); }
+[data-theme="dark"] .bottom-nav { background: var(--paper); box-shadow: 0 -2px 12px rgba(0,0,0,.5); }
+
+/* ── דריסות לצבעים קשיחים: components.css ── */
+[data-theme="dark"] .input:focus,
+[data-theme="dark"] .textarea:focus { background: #2B2622; }
+[data-theme="dark"] .tab.active { background: var(--paper); }
+[data-theme="dark"] .section-card { background: var(--paper); }
+[data-theme="dark"] .list-item:hover { background: #2E2925; }
+[data-theme="dark"] .checkbox { background: var(--paper); }
+[data-theme="dark"] .time-slot .slot-input:focus { background: #2B2622; }
+[data-theme="dark"] .day-col { background: var(--paper); }
+[data-theme="dark"] .day-col.today { background: #2E2226; }
+[data-theme="dark"] .day-col.drag-over { background: #3A2E22; }
+[data-theme="dark"] .cal-cell { background: var(--paper); }
+[data-theme="dark"] .note-card { background: var(--paper); }
+[data-theme="dark"] .day-detail { background: var(--paper); }
+[data-theme="dark"] .goal-row { background: var(--paper); }
+[data-theme="dark"] .habit-cell { background: var(--paper); }
+[data-theme="dark"] .glass { background: var(--paper); }
+[data-theme="dark"] .editable-text:focus { background: rgba(255,255,255,.08); }
+[data-theme="dark"] .tx-amt.inc { color: #6FCF94; }
+[data-theme="dark"] .tx-amt.exp { color: #F08DA0; }
+
+/* עץ הנושאים וסרגל הכלים של המחברת (מסביב לדף — מוכהים) */
+[data-theme="dark"] .nb-topic { background: var(--nb-bg-card); }
+[data-theme="dark"] .nb-topic .t-action:hover { background: rgba(255,255,255,.1); }
+[data-theme="dark"] .nb-toolbar { background: #221E19; }
+[data-theme="dark"] .nb-tool:hover { background: var(--nb-bg-hover); }
+[data-theme="dark"] .nb-select:hover,
+[data-theme="dark"] .nb-select:focus { background: var(--nb-bg-hover); }
+[data-theme="dark"] .nb-color-btn { background: var(--nb-bg-card); }
+[data-theme="dark"] .nb-color-palette { background: var(--nb-bg-card); }
+[data-theme="dark"] .pill-del:hover { background: rgba(255,255,255,.12); }
+
+/* דף הכתיבה נשאר נייר בהיר — מקבעים גם את צבע הטקסט הכהה המקורי,
+   כי body כבר ירש דיו בהיר. חל על עורך המחברת וגוף ההערה. */
+[data-theme="dark"] .nb-editor,
+[data-theme="dark"] .note-body {
+  color: #3B3A3A;
+}
+[data-theme="dark"] .nb-editor { background-color: #F7F2E9; }
+[data-theme="dark"] .note-body { background-color: #FBF7EC; }

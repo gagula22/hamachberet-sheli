@@ -1,0 +1,40 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   גיבוי אוטומטי — גיליון האחריות (טוקנים בלבד).
+   ───────────────────────────────────────────────────────────────────────── */
+
+.ab-now {
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: var(--sage);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: var(--sp-3);
+  transition: all 160ms;
+}
+.ab-now:hover { background: var(--sage-deep); }
+
+.ab-list { display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow-y: auto; }
+.ab-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+  background: var(--cream);
+  border: 1px solid var(--line);
+  font-size: 13px;
+}
+.ab-date { flex: 1; color: var(--ink); }
+.ab-size { color: var(--ink-mute); font-size: 12px; direction: ltr; }
+.ab-restore {
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--sky);
+  font-size: 12px;
+  font-weight: 500;
+  transition: all 160ms;
+}
+.ab-restore:hover { background: var(--sky-deep); }
+
+.ab-empty { color: var(--ink-soft); font-size: 13px; padding: var(--sp-2) 0; }

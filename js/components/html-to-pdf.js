@@ -47,7 +47,6 @@
     const CW = PW - M * 2;         // usable content width (pt)
     const usableH = PH - M * 2;    // usable content height (pt)
     const HOST_W = 680;            // render width (px) — matches A4 content area
-    const SCALE = 2;               // 2× for crisp output
     const dir = opts.dir || 'rtl';
 
     const host = document.createElement('div');
@@ -75,6 +74,9 @@
       host.querySelectorAll('.nb-img-del,.nb-img-move').forEach(el => el.remove());
 
       const totalDomH = host.scrollHeight;
+      // איכות: 3× כשאפשר (טקסט ותמונות חדים משמעותית), 2× למסמכים ארוכים
+      // מאוד — תקרת גובה canvas בדפדפן היא ~32,767px ואסור לחרוג ממנה.
+      const SCALE = totalDomH * 3 <= 30000 ? 3 : 2;
       const canvas = await window.html2canvas(host, {
         scale: SCALE, backgroundColor: '#ffffff', useCORS: true, logging: false,
         width: HOST_W, windowWidth: HOST_W, windowHeight: totalDomH
@@ -116,7 +118,7 @@
         ctx.drawImage(canvas, 0, srcY, canvas.width, srcH, 0, 0, slice.width, srcH);
 
         if (!first) pdf.addPage();
-        pdf.addImage(slice.toDataURL('image/jpeg', 0.92), 'JPEG', M, M, CW, (srcH / SCALE) * ptPerPx);
+        pdf.addImage(slice.toDataURL('image/jpeg', 0.95), 'JPEG', M, M, CW, (srcH / SCALE) * ptPerPx);
         first = false;
         startY = endY;
       }

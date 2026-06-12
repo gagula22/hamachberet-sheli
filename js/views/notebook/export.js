@@ -565,7 +565,7 @@ ${gratitude ? `<div>
           const c = document.createElement('canvas');
           c.width = tmp.naturalWidth; c.height = tmp.naturalHeight;
           c.getContext('2d').drawImage(tmp, 0, 0);
-          resolve(c.toDataURL('image/jpeg', 0.85));
+          resolve(c.toDataURL('image/jpeg', 0.95));
         } catch { resolve(img.src); }
       };
       tmp.onerror = () => resolve(img.src);
