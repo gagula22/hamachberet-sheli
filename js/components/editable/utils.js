@@ -8,28 +8,31 @@
     };
   }
 
-  // דחיסת תמונה לשמירה — מכוונת איכות (תוקן לפי משוב: הדבקות יצאו מטושטשות).
-  // עקרונות:
-  //   • אין הקטנה מתחת ל-2560px — צילומי מסך רגילים (גם רטינה) נשארים חדים.
-  //   • תמונה שלא צריכה הקטנה וקטנה מ-~2MB נשמרת כמו שהיא — אפס איבוד איכות
-  //     (קריטי לצילומי מסך עם טקסט: קידוד-מחדש ל-JPEG מטשטש אותם).
-  //   • כשכן מקודדים: WebP באיכות 0.92 (חד וקטן; אם הדפדפן לא מקודד WebP —
-  //     toDataURL מחזיר PNG וניפול ל-JPEG 0.92).
-  //   • לעולם לא מחזירים תוצאה גדולה מהמקור.
+  // דחיסת תמונה לשמירה — איכות קודמת לגודל (תוקן יסודית לפי משוב חוזר).
+  // ⚠️ הבאג שהיה: צילום מסך של גרף ב-PNG עובר בקלות 2.8MB → קודד מחדש
+  // ל-WebP/JPEG מאבד → קווים דקים וטקסט זעיר הצטטשו.
+  // העיקרון החדש:
+  //   • אם התמונה לא חורגת ב-מימדים מ-3000px — נשמרת מדויקת בית-בבית,
+  //     בכל גודל קובץ. אפס קידוד-מחדש = אפס איבוד (קריטי לגרפים/טקסט).
+  //   • רק תמונת-ענק (>3000px) מוקטנת ל-3000px ומקודדת ב-WebP 0.95
+  //     (כמעט-lossless) עם נפילה ל-JPEG 0.95. הקטנת-מימדים שומרת חדות.
+  //   • לעולם לא מחזירים תוצאה גדולה/גרועה מהמקור.
+  // הערה: תמונות-ענק נשמרות מקומית במלואן; firebase-sync._sizeSafeTopic
+  // מגן על סנכרון הענן (מסיר base64 ענק מהדוק לפני שליחה, שומר מקומית).
   function compressImage(dataUrl, maxW, quality) {
-    maxW = maxW || 2560;
-    quality = quality || 0.92;
+    maxW = maxW || 3000;
+    quality = quality || 0.95;
     return new Promise(function (resolve) {
       const img = new Image();
       img.onload = function () {
-        const needScale = img.naturalWidth > maxW;
-        if (!needScale && dataUrl.length <= 2.8 * 1024 * 1024) { resolve(dataUrl); return; }
-        const scale = Math.min(1, maxW / img.naturalWidth);
+        if (img.naturalWidth <= maxW) { resolve(dataUrl); return; }   // ← אין הקטנה = נשמר מדויק, בכל גודל
+        const scale = maxW / img.naturalWidth;
         const w = Math.round(img.naturalWidth * scale);
         const h = Math.round(img.naturalHeight * scale);
         const canvas = document.createElement('canvas');
         canvas.width = w; canvas.height = h;
         const ctx = canvas.getContext('2d');
+        ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
         ctx.drawImage(img, 0, 0, w, h);
         let out = canvas.toDataURL('image/webp', quality);
