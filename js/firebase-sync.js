@@ -53,7 +53,12 @@
       // shown as "synced" but never reaching the server (the "lock" on that
       // device). Auto-detect that and fall back to HTTP long-polling, which
       // gets through such blockers. Must be set before any read/write.
-      try { db.settings({ experimentalAutoDetectLongPolling: true }); } catch (e) {}
+      // long-polling כפוי (לא רק זיהוי-אוטומטי): רשתות ארגוניות מסוימות
+      // מעבירות את בדיקת-החיבור אבל חונקות את ערוץ ה-WebChannel — נוצר מצב
+      // "זומבי": הממשק מציג נשמר אבל שום דבר לא מגיע לשרת (קרה בפועל במחשב
+      // העבודה של המשתמש, גם עם autoDetect). long-polling = בקשות HTTPS
+      // רגילות שעוברות כל פרוקסי; המחיר: מעט יעילות, הרווח: אמינות בכל רשת.
+      try { db.settings({ experimentalForceLongPolling: true, merge: true }); } catch (e) {}
       db.enablePersistence({ synchronizeTabs: true }).catch(() => {});
       return true;
     } catch (e) {
@@ -506,6 +511,19 @@
       const ALL = [...MAIN_DOC_KEYS, ...SUBCOL_KEYS, 'topics'];
       ALL.forEach(k => { const v = Store.get(k); if (v !== undefined) schedulePush(k, v); });
       return flushAll();
+    },
+
+    // אימות אמיתי מול הענן: קריאה שמחויבת להגיע מהשרת (source:'server' —
+    // עוקפת את המטמון המקומי). אם הרשת חונקת את התקשורת — זה ייכשל,
+    // בניגוד לכתיבות שנבלעות בתור ההתמדה המקומי ונראות כ"נשמרו".
+    async verifyCloud(timeoutMs) {
+      if (!db || !userId) throw new Error('not-connected');
+      const probe = db.doc(`users/${userId}/data/main`).get({ source: 'server' });
+      await Promise.race([
+        probe,
+        new Promise((_, rej) => setTimeout(() => rej(new Error('cloud-unreachable')), timeoutMs || 12000))
+      ]);
+      return true;
     }
   };
 })();

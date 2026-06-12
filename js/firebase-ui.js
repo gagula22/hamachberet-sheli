@@ -37,10 +37,12 @@
         el.textContent = '✏️ שומר…'; el.style.color = 'var(--ink-mute)';
       } else if (state === 'saved') {
         const t = new Date();
-        el.textContent = `✓ נשמר • ${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`;
+        el.textContent = `☁️ מחובר ✓ נשמר • ${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`;
         el.style.color = '';
       } else if (state === 'error') {
         el.textContent = '⚠️ לא הצליח לסנכרן'; el.style.color = '#e53e3e';
+      } else if (state === 'blocked') {
+        el.textContent = '🚫 מחובר, אך הרשת חוסמת את הענן'; el.style.color = '#e53e3e';
       }
     }
     if (window._nbSyncHook) { try { window._nbSyncHook(state); } catch {} }
@@ -66,12 +68,18 @@
       btn.classList.add('syncing');
       btn.title = 'מסנכרן…';
       try {
+        // שלב 1: דחיפה (עם תקרת זמן). שלב 2: אימות אמיתי מול השרת —
+        // ברשת חוסמת, כתיבות נבלעות בתור המקומי ונראות כהצלחה; רק קריאה
+        // עם source:'server' חושפת את האמת (verifyCloud ב-firebase-sync).
         await Promise.race([window.FirebaseSync.syncAll(), new Promise(r => setTimeout(r, 8000))]);
-        btn.title = 'סונכרן ✓';
-        if (window.App) App.toast('☁️ סנכרון הושלם');
+        await window.FirebaseSync.verifyCloud(12000);
+        btn.title = 'סונכרן ואומת ✓';
+        setStatus('saved');
+        if (window.App) App.toast('☁️ הסנכרון אומת מול הענן ✓');
       } catch {
-        btn.title = 'שגיאת סנכרון';
-        if (window.App) App.toast('⚠️ סנכרון נכשל');
+        btn.title = 'הענן לא נגיש';
+        setStatus('blocked');
+        if (window.App) App.toast('🚫 אין קשר אמיתי לענן מהרשת הזו — השינויים שמורים במכשיר ויעלו ברשת פתוחה');
       }
       btn.classList.remove('syncing');
       setTimeout(() => { btn.title = 'סנכרן עכשיו'; }, 3000);
@@ -101,10 +109,11 @@
     document.getElementById('fb-sync-status').addEventListener('click', async () => {
       setStatus('saving');
       try {
-        await window.FirebaseSync.syncAll();
+        await Promise.race([window.FirebaseSync.syncAll(), new Promise(r => setTimeout(r, 8000))]);
+        await window.FirebaseSync.verifyCloud(12000);
         setStatus('saved');
-        if (window.App) App.toast('סנכרון הושלם ✓');
-      } catch { setStatus('error'); }
+        if (window.App) App.toast('☁️ הסנכרון אומת מול הענן ✓');
+      } catch { setStatus('blocked'); }
     });
 
     document.getElementById('fb-signout').addEventListener('click', () => {
