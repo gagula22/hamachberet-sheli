@@ -34,6 +34,13 @@
       const key = Store.dateKey(date);
       const dayTasks = tasks.filter(t => t.date === key);
       const dayName = DAY_SHORT[date.getDay()];
+      // תוויות משימות אמיתיות בתא (כמו ביומן חודשי רגיל) — עד 3, ואז "+N".
+      const chips = dayTasks.slice(0, 3).map(t => App.el('div', {
+        class: 'cal-task' + (t.done ? ' done' : ''),
+        title: t.text
+      }, t.text));
+      if (dayTasks.length > 3) chips.push(App.el('div', { class: 'cal-task-more' }, '+' + (dayTasks.length - 3) + ' נוספות'));
+
       const cell = App.el('div', {
         class: 'cal-cell' + (key === todayKey ? ' today' : '') + (key === selectedDay ? ' active' : ''),
         style: key === selectedDay ? { boxShadow: '0 0 0 2px var(--lavender-deep)' } : {},
@@ -41,7 +48,7 @@
       }, [
         App.el('div', { class: 'day-name-mini' }, dayName),
         App.el('div', { class: 'day-num' }, String(d)),
-        App.el('div', { class: 'dots' }, dayTasks.slice(0, 5).map(() => App.el('div', { class: 'dot-m' })))
+        App.el('div', { class: 'cal-tasks' }, chips)
       ]);
       cells.push(cell);
     }

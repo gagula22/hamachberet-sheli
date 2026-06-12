@@ -27,7 +27,8 @@
   <link rel="stylesheet" href="css/features/palette.css?v=1" />
   <link rel="stylesheet" href="css/features/voice.css?v=3" />
   <link rel="stylesheet" href="css/features/autobackup.css?v=1" />
-  <link rel="stylesheet" href="css/features/extras.css?v=5" />
+  <link rel="stylesheet" href="css/features/extras.css?v=11" />
+  <link rel="stylesheet" href="css/features/hub.css?v=3" />
   <!-- Vendor scripts: deferred so they never block first render.
        html2pdf / mammoth / pdfjs are only needed when the user clicks Export. -->
   <script defer src="js/vendor/html2pdf.bundle.min.js"></script>
@@ -92,14 +93,14 @@
     </div>
     <div id="sidebarUserBar" style="display:none;align-items:center;gap:10px;padding:10px 12px;background:rgba(255,255,255,.55);border-radius:12px;margin-top:8px"></div>
   </aside>
-
-  <script src="js/store-schema.js?v=2"></script>
+    <script src="js/store-schema.js?v=2"></script>
   <script src="js/firebase-config.js?v=16"></script>
-  <script src="js/store.js?v=16"></script>
-  <script src="js/app.js?v=22"></script>
+  <script src="js/store.js?v=17"></script>
+  <script src="js/app.js?v=25"></script>
   <script src="js/firebase-ui.js?v=5"></script>
   <script src="js/firebase-sync.js?v=26"></script>
-  <script src="js/components/sidebar.js?v=17"></script>
+  <script src="js/features/navmode/index.js?v=3"></script>
+  <script src="js/components/sidebar.js?v=19"></script>
   <script src="js/components/data-transfer.js?v=1"></script>
   <script src="js/components/html-to-pdf.js?v=2"></script>
   <script src="js/components/editable/utils.js?v=20"></script>
@@ -117,9 +118,9 @@
   <script src="js/views/notebook/editor.js?v=48"></script>
   <script src="js/views/daily.js?v=16"></script>
   <script src="js/views/weekly.js?v=16"></script>
-  <script src="js/views/monthly.js?v=16"></script>
-  <script src="js/views/calendar.js?v=16"></script>
-  <script src="js/views/notes.js?v=16"></script>
+  <script src="js/views/monthly.js?v=17"></script>
+  <script src="js/views/calendar.js?v=18"></script>
+  <script src="js/views/notes.js?v=17"></script>
   <script src="js/views/todos.js?v=16"></script>
   <script src="js/views/habits.js?v=16"></script>
   <script src="js/views/mood.js?v=16"></script>
@@ -151,12 +152,14 @@
   <script src="js/views/tools/pdf-ops/ocr.js?v=1"></script>
   <script src="js/views/stickers.js?v=35"></script>
   <!-- העוזר החכם (אחריות עצמאית, 100% מקומי): ידע → מנוע → ממשק -->
-  <script src="js/views/assistant/knowledge.js?v=10"></script>
+  <script src="js/views/assistant/knowledge.js?v=13"></script>
   <script src="js/views/assistant/engine.js?v=5"></script>
   <script src="js/views/assistant/ui.js?v=4"></script>
   <!-- ערכת נושא + מסך הגדרות (אחריויות עצמאיות) -->
   <script src="js/features/theme/index.js?v=1"></script>
   <script src="js/views/settings/index.js?v=1"></script>
+  <!-- המרכז היומי: עמוד-מרכז עם לשוניות (אפשרות ב) -->
+  <script src="js/views/hub/index.js?v=2"></script>
   <!-- לוח תובנות (אחריות עצמאית; Chart.js נטען עצל מ-vendor) -->
   <script src="js/views/insights/charts.js?v=1"></script>
   <script src="js/views/insights/index.js?v=1"></script>
@@ -174,7 +177,7 @@
   <script src="js/features/backlinks/index.js?v=1"></script>
   <script src="js/views/highlights/index.js?v=2"></script>
   <script src="js/views/readinglist/index.js?v=1"></script>
-  <script src="js/views/eisenhower/index.js?v=1"></script>
+  <script src="js/views/eisenhower/index.js?v=2"></script>
   <script src="js/views/flashcards/index.js?v=1"></script>
   <script src="js/views/weekly-review/index.js?v=5"></script>
   <script src="js/views/sketch/index.js?v=1"></script>

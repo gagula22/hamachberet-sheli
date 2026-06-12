@@ -4,24 +4,31 @@
     { id: 'notebook',  title: 'מחברת',           icon: '📓', color: 'lavender', desc: 'כתיבה חופשית עם נושאים ותמונות' },
     { id: 'graph',     title: 'מפת קשרים',       icon: '🕸️', color: 'sky',      desc: 'כל הנושאים והקישורים ביניהם' },
     { id: 'highlights',title: 'מרכז הדגשות',     icon: '🖍️', color: 'butter',   desc: 'כל מה שסימנת במרקר, במקום אחד' },
-    { id: 'calendar',  title: 'יומן',            icon: '📅', color: 'butter',   desc: 'יומי, שבועי, חודשי' },
+    { id: 'calendar',  title: 'יומן',            icon: '📅', color: 'butter',   desc: 'יומי, שבועי, חודשי', group: 'daily' },
     { id: 'weekly-review', title: 'סקירה שבועית', icon: '🧭', color: 'sage',    desc: 'מה הלך טוב, מה לשפר, ומה עובר הלאה' },
-    { id: 'notes',     title: 'הערות',           icon: '📝', color: 'lavender', desc: 'לכל רעיון ומחשבה' },
+    { id: 'notes',     title: 'הערות',           icon: '📝', color: 'lavender', desc: 'לכל רעיון ומחשבה', group: 'daily' },
     { id: 'voice',     title: 'הערות קול',       icon: '🎙️', color: 'blush',    desc: 'תזכירים קוליים — נשמרים רק במחשב' },
     { id: 'sketch',    title: 'לוח שרטוט',       icon: '✏️', color: 'lavender', desc: 'ציור חופשי — ומשם ישר למחברת' },
-    { id: 'flashcards',title: 'כרטיסיות זיכרון', icon: '🧠', color: 'sage',     desc: 'חזרה מרווחת — לזכור לטווח ארוך' },
+    { id: 'flashcards',title: 'כרטיסיות זיכרון', icon: '🧠', color: 'sage',     desc: 'חזרה מרווחת — לזכור לטווח ארוך', group: 'daily' },
     { id: 'readinglist', title: 'רשימת קריאה',   icon: '🔖', color: 'sky',      desc: 'קישורים שנשמרו לקריאה אחר-כך' },
-    { id: 'todos',     title: 'משימות',          icon: '✅', color: 'blush',    desc: 'לסיים את העניינים' },
-    { id: 'eisenhower',title: 'מטריצת סדר יום',  icon: '🎯', color: 'butter',   desc: 'דחוף/חשוב — ארבעה רבעים' },
-    { id: 'habits',    title: 'מעקב הרגלים',     icon: '🌱', color: 'sage',     desc: 'צור רצף של הצלחה' },
-    { id: 'mood',      title: 'יומן מצב רוח',    icon: '💭', color: 'lavender', desc: 'תעצור רגע להקשיב לעצמך' },
-    { id: 'water',     title: 'שתייה ושינה',     icon: '💧', color: 'sky',      desc: 'שתייה ומנוחה' },
+    { id: 'todos',     title: 'משימות',          icon: '✅', color: 'blush',    desc: 'לסיים את העניינים', group: 'daily' },
+    { id: 'eisenhower',title: 'מטריצת סדר יום',  icon: '🎯', color: 'butter',   desc: 'דחוף/חשוב — ארבעה רבעים', group: 'daily' },
+    { id: 'habits',    title: 'מעקב הרגלים',     icon: '🌱', color: 'sage',     desc: 'צור רצף של הצלחה', group: 'daily' },
+    { id: 'mood',      title: 'יומן מצב רוח',    icon: '💭', color: 'lavender', desc: 'תעצור רגע להקשיב לעצמך', group: 'daily' },
+    { id: 'water',     title: 'שתייה ושינה',     icon: '💧', color: 'sky',      desc: 'שתייה ומנוחה', group: 'daily' },
     { id: 'budget',    title: 'תקציב',           icon: '💰', color: 'butter',   desc: 'עקוב אחרי הכסף' },
     { id: 'goals',     title: 'מטרות',           icon: '🎯', color: 'blush',    desc: 'לחלום, להגשים' },
     { id: 'insights',  title: 'תובנות',          icon: '📊', color: 'sage',     desc: 'גרפים ומגמות מהנתונים שלך' },
     { id: 'stickers',  title: 'כלים',             icon: '🛠️', color: 'lavender', desc: 'כלים שימושיים' },
     { id: 'assistant', title: 'עוזר חכם',         icon: '🤖', color: 'sage',     desc: 'שאל אותי כל דבר על האתר ועל התוכן שלך' },
-    { id: 'settings',  title: 'הגדרות',           icon: '⚙️', color: 'sky',      desc: 'שם, ערכת נושא וגודל טקסט' }
+    { id: 'settings',  title: 'הגדרות',           icon: '⚙️', color: 'sky',      desc: 'שם, ערכת נושא וגודל טקסט' },
+    // עמוד-המרכז (אפשרות ב) — מנותב כ-#/hub/<כלי>. navHidden: לא מוצג כפריט
+    // רגיל בסרגל; הסרגל מסנתז אותו בעצמו במצב 'hub'. כאן רק כדי ש-render
+    // יזהה את הנתיב ויציג כותרת.
+    { id: 'hub',       title: 'המרכז היומי',      icon: '🗓️', color: 'sky',      desc: 'כל הכלים היומיים במקום אחד', navHidden: true },
+    // עמוד-צרור (משימות / מעקב יומי / ידע וזיכרון) — נתיב #/bundle/<id>.
+    // navHidden: לא פריט בסרגל; הכותרת נקבעת דינמית בתוך ה-view.
+    { id: 'bundle',    title: 'המרכז היומי',      icon: '🗓️', color: 'sky',      desc: 'צרור כלים', navHidden: true }
   ];
 
   const LEGACY_REDIRECTS = { daily: 'calendar/daily', weekly: 'calendar/weekly', monthly: 'calendar/monthly' };
@@ -34,8 +41,14 @@
     '"התקדמות, לא שלמות."'
   ];
 
+  // הגדרת קבוצת "המרכז היומי" — מאחדת את 7 הכלים המסומנים group:'daily'.
+  // אחריות הניווט (sidebar.js + js/features/navmode + js/views/hub) קוראת
+  // ממנה; ה-views עצמם לא יודעים שהם מקובצים.
+  const DAILY_GROUP = { id: 'daily', title: 'המרכז היומי', icon: '🗓️', color: 'sky', desc: 'כל הכלים היומיים במקום אחד' };
+
   const App = {
     sections: SECTIONS,
+    dailyGroup: DAILY_GROUP,
     _routes: {},
 
     register(id, renderFn) { this._routes[id] = renderFn; },

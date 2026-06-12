@@ -25,13 +25,22 @@
         .forEach(n => listEl.appendChild(noteCard(n)));
     }
 
+    // תצוגה מקדימה: גוף ההערה נשמר כ-HTML — מחלצים טקסט נקי (בלי תגיות)
+    // לפני החיתוך, אחרת מוצגות תגיות כמו <div> במקום התוכן.
+    function plainPreview(html) {
+      var d = document.createElement('div');
+      d.innerHTML = html || '';
+      var txt = (d.textContent || '').replace(/\s+/g, ' ').trim();
+      return txt ? (txt.length > 120 ? txt.slice(0, 120) + '…' : txt) : 'הערה ריקה';
+    }
+
     function noteCard(n) {
       return App.el('div', {
         class: 'note-card' + (n.id === activeId ? ' active' : ''),
         onClick: () => { activeId = n.id; document.getElementById('view').innerHTML = ''; render(document.getElementById('view')); }
       }, [
         App.el('div', { class: 't' }, n.title || 'ללא כותרת'),
-        App.el('div', { class: 'p' }, (n.body || '').slice(0, 120) || 'הערה ריקה')
+        App.el('div', { class: 'p' }, plainPreview(n.body))
       ]);
     }
 

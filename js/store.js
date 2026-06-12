@@ -134,11 +134,15 @@
 
     uid() { return Math.random().toString(36).slice(2, 10); },
 
-    todayKey() {
-      const d = new Date();
-      return d.toISOString().slice(0, 10);
+    // מפתח תאריך לפי הזמן המקומי — ולא UTC. ⚠️ באג קודם: toISOString() מחזיר
+    // UTC, כך שתאריך שנבנה בחצות מקומית (כמו בתצוגה החודשית) התגלגל יום
+    // אחורה באזורי-זמן חיוביים (ישראל), בעוד תאריך שנבנה עם שעת-יום (השבועי)
+    // לא — מה שגרם לאי-התאמה בין התצוגות. רכיבים מקומיים = עקבי בכל מקום.
+    dateKey(d) {
+      var p = function (n) { return (n < 10 ? '0' : '') + n; };
+      return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
     },
-    dateKey(d) { return d.toISOString().slice(0, 10); },
+    todayKey() { return this.dateKey(new Date()); },
 
     reset() {
       state = structuredClone(DEFAULTS);

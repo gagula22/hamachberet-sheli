@@ -90,11 +90,28 @@
       });
 
       var unassigned = todos.filter(function (t) { return !a[t.id]; });
+
+      // הוספה מהירה — שדה ליצירת משימה ישירות מהמטריצה (כתיבה ל-todos,
+      // פעולת משתמש מפורשת). פותר את "אין מה לגרור" כשהרשימה ריקה.
+      var addInput = el('input', { class: 'input eh-add-input', type: 'text', placeholder: 'הוסף משימה חדשה ולחץ Enter…' });
+      function addTask() {
+        var txt = addInput.value.trim();
+        if (!txt) return;
+        Store.update('todos', function (list) {
+          return [{ id: Store.uid(), text: txt, done: false }].concat(list || []);
+        });
+        addInput.value = '';
+        rerender();
+        setTimeout(function () { var i = document.querySelector('.eh-add-input'); if (i) i.focus(); }, 50);
+      }
+      addInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') addTask(); });
+
       var tray = el('div', { class: 'card eh-tray' }, [
         el('div', { class: 'eh-tray-head' }, '📥 משימות ללא שיוך (' + unassigned.length + ') — גרור אותן לרבע המתאים'),
+        el('div', { class: 'eh-add-row' }, [addInput, el('button', { class: 'eh-add-btn', onClick: addTask }, '+ הוסף')]),
         el('div', { class: 'eh-tray-body' },
           unassigned.length ? unassigned.map(function (t) { return pill(t, rerender); })
-            : [el('div', { class: 'eh-hint' }, doneTodos.length || todos.length ? 'כל המשימות הפתוחות שויכו 🎯' : 'אין משימות פתוחות — הוסף במסך המשימות')])
+            : [el('div', { class: 'eh-hint' }, doneTodos.length || todos.length ? 'כל המשימות הפתוחות שויכו 🎯' : 'הוסף משימה למעלה — והיא תופיע כאן לגרירה לרבעים')])
       ]);
       dropZone(tray, null, rerender);
 
