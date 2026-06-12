@@ -165,6 +165,9 @@
 .wr-preview-text { font-size: 13px; color: var(--ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .wr-week.editing { border-color: var(--lavender-deep); background: var(--paper); }
 .wr-card-actions { display: flex; gap: var(--sp-2); align-items: center; margin-top: var(--sp-2); }
+.wr-save-row { display: flex; align-items: center; gap: var(--sp-3); margin-top: var(--sp-3); }
+.wr-autosave { font-size: 12px; color: var(--nb-success, #2D8C4F); opacity: 0; transition: opacity 300ms; }
+.wr-autosave.show { opacity: 1; }
 
 /* ── לוח שרטוט (js/views/sketch) ── */
 .sk-card { max-width: 1160px; }

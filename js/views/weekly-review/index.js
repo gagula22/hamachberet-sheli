@@ -68,19 +68,22 @@
   }
 
   // ── שדה רפלקציה עשיר ─────────────────────────────────────────────────────
-  function richField(def, initial) {
+  // onChange (אופציונלי): נקרא בכל הקלדה/הדבקת-תמונה — מזין את השמירה האוטומטית.
+  function richField(def, initial, onChange) {
     var ed = el('div', { class: 'wr-rich', contenteditable: 'true', 'data-placeholder': 'כתוב כאן… (אפשר להדביק תמונות עם Ctrl+V)' });
     if (initial) {
       if (/<[a-z][\s\S]*>/i.test(initial)) ed.innerHTML = initial;
       else ed.textContent = initial;
     }
+    var notify = onChange || function () {};
+    ed.addEventListener('input', notify);
     if (window.Editable && Editable.attachImageBehaviors) {
-      Editable.attachImageBehaviors(ed, function () {});
+      Editable.attachImageBehaviors(ed, notify);
     }
     var file = el('input', { type: 'file', accept: 'image/*', multiple: true, style: { display: 'none' } });
     file.addEventListener('change', function (e) {
       Array.from(e.target.files || []).forEach(function (f) {
-        if (window.Editable && Editable.insertImageFromFile) Editable.insertImageFromFile(f, ed, function () {});
+        if (window.Editable && Editable.insertImageFromFile) Editable.insertImageFromFile(f, ed, notify);
       });
       file.value = '';
     });
@@ -89,6 +92,29 @@
       el('button', { class: 'wr-img-btn', title: 'הוסף תמונה', onClick: function () { file.click(); } }, '🖼️')
     ]);
     return { wrap: el('div', { class: 'wr-field' }, [head, ed, file]), editor: ed };
+  }
+
+  // ── שמירה אוטומטית ────────────────────────────────────────────────────────
+  // כל הקלדה/הדבקה בשדות נשמרת לבד אחרי 0.7 שניות שקט (כמו במחברת) —
+  // כפתור "שמור סקירה" נשאר לאישור מפורש ולרענון הארכיון.
+  function makeAutosave(weekKeyStr, editors, statusEl) {
+    function doSave() {
+      var all = Object.assign({}, reviews());
+      all[weekKeyStr] = {
+        good: editors.good.innerHTML,
+        bad: editors.bad.innerHTML,
+        improve: editors.improve.innerHTML,
+        savedAt: Date.now()
+      };
+      Store.set('weeklyReviews', all);
+      if (statusEl) {
+        statusEl.textContent = '✓ נשמר אוטומטית';
+        statusEl.classList.add('show');
+        clearTimeout(statusEl._t);
+        statusEl._t = setTimeout(function () { statusEl.classList.remove('show'); }, 1800);
+      }
+    }
+    return (window.EditableUtils && EditableUtils.debounce) ? EditableUtils.debounce(doSave, 700) : doSave;
   }
 
   // ── מסך ───────────────────────────────────────────────────────────────────
@@ -127,26 +153,31 @@
         saved.savedAt ? el('div', { class: 'wr-saved-note' }, '✓ הסקירה של השבוע נשמרה — מופיעה בארכיון למטה. אפשר לערוך ולשמור שוב.') : null
       ]));
 
-      // ── 2. רפלקציה (שלושה שדות עשירים) ──
+      // ── 2. רפלקציה (שלושה שדות עשירים, שמירה אוטומטית) ──
       var editors = {};
+      var autoStatus = el('span', { class: 'wr-autosave' });
+      var autosave = makeAutosave(key, editors, autoStatus);
       var refCard = el('div', { class: 'card' }, [el('h2', { class: 'wr-h' }, '✍️ רפלקציה')]);
       FIELDS.forEach(function (def) {
-        var f = richField(def, saved[def.key]);
+        var f = richField(def, saved[def.key], autosave);
         editors[def.key] = f.editor;
         refCard.appendChild(f.wrap);
       });
-      refCard.appendChild(el('button', { class: 'wr-save', onClick: function () {
-        var all = Object.assign({}, reviews());
-        all[key] = {
-          good: editors.good.innerHTML,
-          bad: editors.bad.innerHTML,
-          improve: editors.improve.innerHTML,
-          savedAt: Date.now()
-        };
-        Store.set('weeklyReviews', all);
-        App.toast('🧭 הסקירה נשמרה — נוספה לארכיון');
-        rerender();
-      } }, '💾 שמור סקירה'));
+      refCard.appendChild(el('div', { class: 'wr-save-row' }, [
+        el('button', { class: 'wr-save', onClick: function () {
+          var all = Object.assign({}, reviews());
+          all[key] = {
+            good: editors.good.innerHTML,
+            bad: editors.bad.innerHTML,
+            improve: editors.improve.innerHTML,
+            savedAt: Date.now()
+          };
+          Store.set('weeklyReviews', all);
+          App.toast('🧭 הסקירה נשמרה — נוספה לארכיון');
+          rerender();
+        } }, '💾 שמור סקירה'),
+        autoStatus
+      ]));
       root.appendChild(refCard);
 
       // ── 3. משימות פתוחות → שבוע הבא ──
@@ -216,14 +247,16 @@
           var isCur = k === key;
           var title = '📅 שבוע ' + fmtRangeFromKey(k) + (isCur ? ' (השבוע הנוכחי)' : '');
 
-          // ── מצב עריכה ──
+          // ── מצב עריכה (עם שמירה אוטומטית) ──
           if (_editing === k) {
             var editors = {};
+            var autoStatus = el('span', { class: 'wr-autosave' });
+            var autosave = makeAutosave(k, editors, autoStatus);
             var block = el('div', { class: 'wr-week editing' + (isCur ? ' current' : '') }, [
               el('div', { class: 'wr-week-title' }, '✏️ עריכת ' + title)
             ]);
             FIELDS.forEach(function (def) {
-              var f = richField(def, r[def.key]);
+              var f = richField(def, r[def.key], autosave);
               editors[def.key] = f.editor;
               block.appendChild(f.wrap);
             });
@@ -235,8 +268,9 @@
                 _editing = null;
                 App.toast('💾 השבוע עודכן');
                 rerenderAll();
-              } }, '💾 שמור'),
-              el('button', { class: 'wr-mini-btn', onClick: function () { _editing = null; drawArchive(); } }, 'ביטול')
+              } }, '💾 שמור וסגור'),
+              el('button', { class: 'wr-mini-btn', onClick: function () { _editing = null; drawArchive(); } }, 'סגור'),
+              autoStatus
             ]));
             return block;
           }
