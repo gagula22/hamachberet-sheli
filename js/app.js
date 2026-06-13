@@ -43,14 +43,12 @@
     '"התקדמות, לא שלמות."'
   ];
 
-  // הגדרת קבוצת "המרכז היומי" — מאחדת את 7 הכלים המסומנים group:'daily'.
-  // אחריות הניווט (sidebar.js + js/features/navmode + js/views/hub) קוראת
-  // ממנה; ה-views עצמם לא יודעים שהם מקובצים.
-  const DAILY_GROUP = { id: 'daily', title: 'המרכז היומי', icon: '🗓️', color: 'sky', desc: 'כל הכלים היומיים במקום אחד' };
+  // הקיבוץ של הכלים לקבוצות ("המרכז היומי" ו"ידע ולכידה") מוגדר כולו
+  // ב-js/features/navmode (window.NavMode), שקורא את שדה group של ה-SECTIONS.
+  // sidebar.js + js/views/hub קוראים מ-NavMode; ה-views עצמם לא יודעים שהם מקובצים.
 
   const App = {
     sections: SECTIONS,
-    dailyGroup: DAILY_GROUP,
     _routes: {},
 
     register(id, renderFn) { this._routes[id] = renderFn; },

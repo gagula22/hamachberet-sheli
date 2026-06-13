@@ -348,3 +348,24 @@ embed ללא מפתח (`/maps/embed?pb=!6m7…`) — ה-endpoint היחיד בל
 גלובלי — ממוקד תחת `.wk-report` בתצוגה החיה, ולא-ממוקד ב-EXPORT_CSS לקובץ העצמאי.
 נגיעות משותפות: SECTIONS ב-app.js, מיון `fn.order` ב-dashboard/index.js, tooltip+order
 בכרטיס הישן. ⚠️ אסור לכתוב לתיקיית `wyckoff/` (של הכלי הישן).
+
+## 11. קיבוץ הניווט (`js/features/navmode/` + `js/components/sidebar.js` + `js/views/hub/`) — יוני 2026
+
+מאגד את הכלים לשתי **קבוצות** לפי נושא, מבלי לשנות אף `view`. אפס שינוי בקוד ה-views —
+הקיבוץ נגזר משדה `group` של ה-SECTIONS ב-app.js בלבד.
+
+- **`js/features/navmode/index.js` (`window.NavMode`)** — מקור-האמת לקבוצות. מגדיר
+  `GROUPS` (כיום שתיים) ו-`BUNDLES` (כלי-אב עם לשוניות-משנה):
+  - 🗓️ **המרכז היומי** (`daily`): יומן · צרור *משימות* (רשימה + מטריצת סדר יום) ·
+    צרור *מעקב יומי* (מצב רוח + שתייה ושינה + הרגלים) · מטרות.
+  - 📚 **ידע ולכידה** (`knowledge`): הערות · לוח שרטוט · מרכז הדגשות · כרטיסיות זיכרון · הערות קול.
+  - API: `groups()`, `groupById(id)`, `groupChildren(id)`, `groupOf(sectionId)`,
+    `bundles()`, `bundleById(id)`, `get()/set()`. מצב נשמר ב-`localStorage` (`mahberet.navMode`).
+- **`sidebar.js`** — מרנדר N קבוצות לפי `NavMode.get()`: `flat` (כל כלי בנפרד) /
+  `group` (קבוצה מתקפלת, מצב פתוח לכל קבוצה ב-`mahberet.open.<groupId>`) /
+  `hub` (פריט אחד → עמוד-מרכז). `setActive` מודע לנתיבי `#/bundle/<id>` ו-`#/hub/<groupId>`.
+- **`js/views/hub/index.js`** — שני נתיבים נסתרים (navHidden): `#/hub/<groupId>/<child?>/<member?>`
+  (עמוד-מרכז עם לשוניות לכל קבוצה; צרור → לשוניות-משנה) ו-`#/bundle/<id>/<member?>` (צרור בודד).
+  מארח את ה-views הקיימים דרך `App._routes[id]` — רינדור עצל של הלשונית הפעילה בלבד (אפס עלות ביצועים).
+- **שליטת משתמש:** כרטיס "🧭 סגנון התפריט" בהגדרות (נרשם דרך `window.SETTINGS_CARDS`).
+- **כדי להוסיף/לשנות קבוצה:** עורכים `GROUPS` ב-navmode ומסמנים `group:'<id>'` ב-SECTIONS. זהו.
