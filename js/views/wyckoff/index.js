@@ -46,10 +46,10 @@
     try { WyckoffChart.draw(cv, candles, { marks: marks, sup: tf && tf.sup, res: tf && tf.res, take: take || undefined, levels: levels }); return cv.toDataURL('image/png'); }
     catch (e) { return ''; }
   }
-  function scenLevels(s, M) {
-    return [{ price: s.entry, color: '#2faa6a', label: 'כניסה ' + M(s.entry) },
-      { price: s.sl, color: '#e06a62', label: 'SL ' + M(s.sl) },
-      { price: s.tp2, color: '#4f7fd1', label: 'יעד ' + M(s.tp2) }];
+  // גרף תרחיש סכמטי (מסלול צפוי לפי וויקוף) — ייחוס נרות 4H
+  function scenarioImg(h4, sc, M) {
+    var cv = document.createElement('canvas'); cv.width = 1000; cv.height = 340;
+    try { WyckoffChart.scenario(cv, h4, sc, M); return cv.toDataURL('image/png'); } catch (e) { return ''; }
   }
 
   // ── בלוק מטבע יחיד (coinbar + sections) ──
@@ -179,7 +179,7 @@
         var imgs = {
           d: chartImg(b.d, r.tfs.d), h4: chartImg(b.h4, r.tfs.h4, 60), h1: chartImg(b.h1, r.tfs.h1, 50),
           m15: chartImg(b.m15, { scIdx: -1, arIdx: -1, sup: null, res: null }, 0, null, 300),
-          scen: r.scenarios.map(function (s) { return chartImg(b.d, r.tfs.d, 0, scenLevels(s, r.money), 300); })
+          scen: r.scenarios.map(function (s) { return scenarioImg(b.h4, s, r.money); })
         };
         return { coin: c, r: r, bundle: b, imgs: imgs };
       });
