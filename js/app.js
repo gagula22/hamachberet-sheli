@@ -23,6 +23,7 @@
     { id: 'wyckoff',   title: 'ניתוח לפי וויקוף', icon: '📈', color: 'sage',     desc: 'ניתוח קריפטו חי לפי וויקוף — ללא תוכנת טריידינג, רץ דרך הרשת מנתוני Binance' },
     { id: 'stickers',  title: 'כלים',             icon: '🛠️', color: 'lavender', desc: 'כלים שימושיים' },
     { id: 'assistant', title: 'עוזר חכם',         icon: '🤖', color: 'sage',     desc: 'שאל אותי כל דבר על האתר ועל התוכן שלך' },
+    { id: 'prompts',   title: 'פרומטים',          icon: '📋', color: 'lavender', desc: 'פרומטים לשימוש חוזר — להעתקה' },
     { id: 'settings',  title: 'הגדרות',           icon: '⚙️', color: 'sky',      desc: 'שם, ערכת נושא וגודל טקסט' },
     // עמוד-המרכז (אפשרות ב) — מנותב כ-#/hub/<כלי>. navHidden: לא מוצג כפריט
     // רגיל בסרגל; הסרגל מסנתז אותו בעצמו במצב 'hub'. כאן רק כדי ש-render
