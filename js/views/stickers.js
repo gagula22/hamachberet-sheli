@@ -27,6 +27,7 @@
         t('🔍', 'PDF סרוק ל-Word', '#E2DCF0,#B9A9D8', 'PDF סרוק/תמונה (בלי טקסט) → Word נערך, באמצעות OCR עברית+אנגלית מקומי.', function () { return window.Tools.pdfOcr(); }),
         t('📷', 'סרוק מסמך למחברת', '#D9E8F5,#A9CEEE', 'צלם/בחר תמונה של מסמך — הטקסט מזוהה מקומית (OCR עברי) ונשמר כעמוד חדש במחברת שתבחר.', function () { return window.Tools.docScan(); }),
         t('🌐', 'תרגום PDF', '#FFF3C4,#F5DF8C', 'מחלץ טקסט מ-PDF ומתרגם אותו לשפה שתבחרי.', function () { return window.Tools.pdfTranslator(); }),
+        t('📚', 'תרגום ספרי PDF (על התמונה)', '#FCEFC7,#E8C766', 'מתרגם ספר PDF לעברית ומצייר את התרגום ישירות על העמוד (overlay) — OCR מקומי + תרגום, ושמירה לתיקייה שתבחר.', function () { return window.Tools.pdfBookTranslator(); }),
         t('🎬', 'תמלול וידאו', '#CFE4F7,#A9CEEE', 'מתמלל וידאו/אודיו בעברית למסמך Word, עם צילומי מסך מהסרטון.', function () { return window.Tools.videoTranscriber(); })
       ] },
       { title: '📑 פעולות על דפים', tools: [

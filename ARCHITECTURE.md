@@ -369,3 +369,34 @@ embed ללא מפתח (`/maps/embed?pb=!6m7…`) — ה-endpoint היחיד בל
   מארח את ה-views הקיימים דרך `App._routes[id]` — רינדור עצל של הלשונית הפעילה בלבד (אפס עלות ביצועים).
 - **שליטת משתמש:** כרטיס "🧭 סגנון התפריט" בהגדרות (נרשם דרך `window.SETTINGS_CARDS`).
 - **כדי להוסיף/לשנות קבוצה:** עורכים `GROUPS` ב-navmode ומסמנים `group:'<id>'` ב-SECTIONS. זהו.
+
+---
+
+## 12. תרגום ספרי PDF על גבי התמונה (`js/views/tools/pdf-book-translator/`) — יוני 2026
+
+> כלי עצמאי לחלוטין שמשחזר בדפדפן את הסקיל `hebrew-image-overlay-translation` —
+> **אפס Claude, אפס מפתח Store, אפס CSS משותף** (סגנונות inline). הנגיעות היחידות
+> בקבצים קיימים: אריח ב-`stickers.js`, שתי תגיות `<script>` ב-`index.html`, ורשומת
+> HELP ב-`assistant/knowledge.js` (`tool-book-translate`).
+
+| רוצה לשנות... | גע רק בקובץ |
+|---|---|
+| הצנרת: רינדור עמוד, OCR+תיבות-גבול, תרגום, ציור overlay, הרכבת PDF | `pdf-book-translator/engine.js` (`window.PBT_ENGINE`) |
+| ה-UI, טווח עמודים, התקדמות/ביטול, בורר-תיקייה ושמירה | `pdf-book-translator/index.js` (`window.Tools.pdfBookTranslator`) |
+
+**הצנרת (עצמאית, מקומית):** כל עמוד מרונדר ל-canvas (pdf.js) → OCR מקומי עם תיבת-גבול
+לכל פסקה (Tesseract.js v5 המאורז ב-`js/vendor/tesseract`, שפת `eng`) → תרגום EN→HE של כל
+פסקה דרך **MyMemory** (אותו שירות של כלי "תרגום PDF") → כיסוי הטקסט האנגלי במלבן בצבע-רקע
+**נדגם מהתמונה** וציור העברית מעליו ב-RTL, עם **התאמת גודל פונט וריווח-שורות כדי למלא את
+מסגרת הבלוק** (מקביל ל-`fill_column` בסקיל) → הרכבת כל העמודים ל-PDF (pdf-lib המאורז).
+מספרים/מחירים/תאריכים/סמלים מדולגים (`shouldSkip`) ונשמרים כמו במקור.
+
+**שמירה:** התוצאה נשמרת לתיקייה שהמשתמש בוחר דרך **File System Access API**
+(`showDirectoryPicker`); דפדפן בלי תמיכה → נפילה להורדה רגילה לתיקיית ההורדות.
+
+**קריטי:** ⚠️ נתיבי Tesseract חייבים להיות מוחלטים — המנוע מחשב `appBase()` מ-`location.href`
+(תומך בתת-נתיב כמו `/hamachberet-sheli/`), לא `location.origin` (שנשבר בתת-נתיב). RTL על
+canvas דרך `ctx.direction='rtl'` + `textAlign='right'` — **בלי** היפוך-ידני (הדפדפן עושה bidi,
+כמו ש-raqm עושה ב-PIL; היפוך-כפול היה הופך את העברית). ⚠️ אומת חי: צינור OCR→תרגום→ציור→PDF
+עובד מקצה-לקצה (Tesseract קרא נכון, MyMemory תרגם ושימר מספרים, pdf-lib הפיק `%PDF-`).
+רינדור pdf.js עצמו זהה לכלי `pdf-translator`/`pdf-to-jpg` המוכחים.
