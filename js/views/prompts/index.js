@@ -1,15 +1,17 @@
 (function () {
   'use strict';
   // ─────────────────────────────────────────────────────────────────────────
-  // עמוד "פרומטים" — אחריות עצמאית, קריאה בלבד. אוסף פרומטים לשימוש חוזר,
-  // כל אחד עם כפתור העתקה ללוח. אפס נתונים אישיים, אפס תלות חיצונית, אפס Store.
-  // להוספת פרומט חדש: עוד איבר במערך PROMPTS. אין שינוי בסכימה.
+  // עמוד "פרומטים" — אקורדיון מתקפל, מעוצב, מוכן לגדול. קריאה בלבד.
+  // כל פרומט: { id, skill, title, body }. להוספת פרומט: עוד איבר ב-PROMPTS.
+  // אפס נתונים אישיים, אפס תלות חיצונית, אפס שינוי סכימה/Store.
   // ─────────────────────────────────────────────────────────────────────────
 
   function el(t, a, k) { return App.el(t, a || {}, k || []); }
 
   var PROMPTS = [
     {
+      id: 'onboarding-skill',
+      skill: 'קיבוץ הניווט — שתי קבוצות ("המרכז היומי" + "ידע ולכידה") · navmode',
       title: 'להמשך עבודה להטמעה של סקיל',
       body: [
         'אני עובד על אפליקציית PWA בעברית (RTL) בשם "המחברת שלי" (gagula22.github.io/hamachberet-sheli).',
@@ -63,32 +65,64 @@
     }
   }
 
-  function promptCard(p) {
-    var ta = el('textarea', {
-      readonly: 'readonly', dir: 'auto', spellcheck: 'false',
-      style: {
-        width: '100%', minHeight: '340px', resize: 'vertical',
-        fontFamily: 'ui-monospace, Menlo, Consolas, monospace',
-        fontSize: '13px', lineHeight: '1.7', padding: '14px', marginTop: '12px',
-        borderRadius: '14px', border: '1px solid var(--line)',
-        background: 'var(--paper)', color: 'var(--ink)', whiteSpace: 'pre-wrap'
-      }
-    });
+  function buildItem(p, open) {
+    var ta = el('textarea', { class: 'prompt-text', readonly: 'readonly', dir: 'auto', spellcheck: 'false' });
     ta.value = p.body;
-    var copyBtn = el('button', { class: 'btn', onClick: function () { copyText(p.body); } }, '📋 העתק פרומט');
-    return el('div', { class: 'card' }, [
-      el('div', { class: 'row row-between' }, [ el('h3', {}, p.title), copyBtn ]),
-      ta
+
+    var bodyCopy = el('button', { class: 'btn', onClick: function (e) { e.stopPropagation(); copyText(p.body); } }, '📋 העתק פרומט');
+    var body = el('div', { class: 'prompt-body' }, [
+      el('div', { class: 'prompt-body-inner' }, [ ta, el('div', { class: 'prompt-body-actions' }, [ bodyCopy ]) ])
     ]);
+
+    var caret = el('span', { class: 'prompt-caret' }, '▾');
+    var skillTag = el('span', { class: 'tag' }); skillTag.textContent = p.skill || 'כללי';
+    var titles = el('div', { class: 'prompt-titles' }, [
+      el('div', { class: 'prompt-title' }, p.title),
+      el('div', { class: 'prompt-skill' }, [ document.createTextNode('סקיל:'), skillTag ])
+    ]);
+    var topCopy = el('button', { class: 'btn prompt-copy', onClick: function (e) { e.stopPropagation(); copyText(p.body); } }, 'העתק');
+
+    var item = el('div', { class: 'prompt-item' + (open ? ' open' : '') });
+    var head = el('button', { class: 'prompt-head', onClick: function () { item.classList.toggle('open'); } }, [ caret, titles, topCopy ]);
+    item.append(head, body);
+    item._match = function (q) {
+      var hay = (p.title + ' ' + (p.skill || '') + ' ' + p.body).toLowerCase();
+      return !q || hay.indexOf(q) !== -1;
+    };
+    return item;
   }
 
   function render(root) {
-    var head = el('div', { class: 'card' }, [
-      el('h2', {}, '📋 פרומטים'),
-      el('div', { style: { marginTop: '6px', color: 'var(--ink-soft)', fontSize: '14px' } },
-        'פרומטים מוכנים לשימוש חוזר — לחץ "העתק פרומט" והדבק בשיחה חדשה עם הסוכן.')
+    var items = PROMPTS.map(function (p, i) { return buildItem(p, i === 0); });
+    var list = el('div', { class: 'prompts-list' }, items);
+    var empty = el('div', { class: 'prompts-empty hidden' }, 'לא נמצאו פרומטים תואמים.');
+
+    var search = el('input', { type: 'search', placeholder: 'חיפוש לפי שם סקיל, כותרת או תוכן…' });
+    search.addEventListener('input', function () {
+      var q = search.value.trim().toLowerCase();
+      var shown = 0;
+      items.forEach(function (it) { var ok = it._match(q); it.classList.toggle('hidden', !ok); if (ok) shown++; });
+      empty.classList.toggle('hidden', shown !== 0);
+    });
+
+    var openAll = el('button', { class: 'btn', onClick: function () { items.forEach(function (it) { if (!it.classList.contains('hidden')) it.classList.add('open'); }); } }, 'פתח הכל');
+    var closeAll = el('button', { class: 'btn', onClick: function () { items.forEach(function (it) { it.classList.remove('open'); }); } }, 'כווץ הכל');
+
+    var hero = el('div', { class: 'card' }, [
+      el('div', { class: 'prompts-hero' }, [
+        el('div', {}, [
+          el('h2', {}, [ document.createTextNode('📋 פרומטים') ]),
+          el('p', {}, 'אוסף פרומטים לשימוש חוזר. לחץ על כותרת כדי לפתוח, או "העתק" כדי להעתיק ללוח ולהדביק בשיחה חדשה.')
+        ]),
+        el('span', { class: 'prompts-count' }, PROMPTS.length === 1 ? 'פרומט אחד' : PROMPTS.length + ' פרומטים')
+      ]),
+      el('div', { class: 'prompts-toolbar' }, [
+        el('div', { class: 'prompts-search' }, [ search ]),
+        el('div', { class: 'prompts-bulk' }, [ openAll, closeAll ])
+      ])
     ]);
-    root.append(el('div', { class: 'stack stack-lg' }, [head].concat(PROMPTS.map(promptCard))));
+
+    root.append(el('div', { class: 'prompts-wrap' }, [ hero, list, empty ]));
   }
 
   App.register('prompts', render);

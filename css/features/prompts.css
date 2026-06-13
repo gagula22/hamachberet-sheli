@@ -1,0 +1,59 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   עמוד "פרומטים" — אקורדיון מתקפל, מעוצב, מוכן לגדול להרבה פרומטים.
+   אחריות עיצוב עצמאית; משתמש בטוקנים הגלובליים → תומך אוטומטית במצב כהה.
+   ───────────────────────────────────────────────────────────────────────── */
+
+.prompts-wrap { max-width: 940px; margin-inline: auto; }
+
+/* כותרת + מונה */
+.prompts-hero { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.prompts-hero h2 { margin: 0; display: flex; align-items: center; gap: 8px; }
+.prompts-hero p { margin: 6px 0 0; color: var(--ink-soft); font-size: 14px; }
+.prompts-count { font-size: 13px; font-weight: 600; color: var(--ink-soft);
+  background: var(--cream); border: 1px solid var(--line); padding: 5px 12px; border-radius: 999px; white-space: nowrap; }
+
+/* סרגל כלים: חיפוש + פתח/כווץ הכל */
+.prompts-toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 16px; }
+.prompts-search { position: relative; flex: 1; min-width: 220px; }
+.prompts-search input { width: 100%; padding: 10px 38px 10px 14px; border-radius: 12px;
+  border: 1px solid var(--line); background: var(--paper); color: var(--ink); font: inherit; }
+.prompts-search input:focus { outline: none; border-color: var(--lavender); box-shadow: 0 0 0 3px color-mix(in srgb, var(--lavender) 35%, transparent); }
+.prompts-search::before { content: "🔎"; position: absolute; inset-inline-end: 12px; top: 50%; transform: translateY(-50%); font-size: 14px; opacity: .6; pointer-events: none; }
+.prompts-bulk { display: flex; gap: 6px; }
+.prompts-bulk .btn { padding: 9px 14px; font-size: 13px; }
+
+/* רשימת הפריטים */
+.prompts-list { margin-top: 18px; display: flex; flex-direction: column; gap: 12px; }
+
+/* פריט מתקפל */
+.prompt-item { border: 1px solid var(--line); border-inline-start: 4px solid var(--lavender);
+  border-radius: 16px; background: var(--paper); overflow: hidden;
+  transition: box-shadow .2s ease, border-color .2s ease; }
+.prompt-item:hover { box-shadow: 0 6px 20px rgba(0,0,0,.07); }
+.prompt-item.open { box-shadow: 0 8px 26px rgba(0,0,0,.09); }
+.prompt-item.hidden { display: none; }
+
+/* כותרת לחיצה */
+.prompt-head { width: 100%; display: flex; align-items: center; gap: 12px;
+  padding: 14px 16px; background: transparent; border: 0; cursor: pointer; text-align: start; font: inherit; color: var(--ink); }
+.prompt-caret { width: 28px; height: 28px; flex: 0 0 auto; display: grid; place-items: center;
+  border-radius: 50%; background: var(--cream); color: var(--ink-soft); font-size: 12px; transition: transform .25s ease; }
+.prompt-item.open .prompt-caret { transform: rotate(180deg); }
+.prompt-titles { flex: 1; min-width: 0; }
+.prompt-title { font-weight: 700; font-size: 15px; line-height: 1.3;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prompt-skill { margin-top: 5px; font-size: 12.5px; color: var(--ink-soft); display: inline-flex; align-items: center; gap: 6px; }
+.prompt-skill .tag { background: var(--lavender); color: #3b3a3a; font-weight: 600;
+  padding: 2px 9px; border-radius: 999px; font-size: 12px; }
+.prompt-copy { flex: 0 0 auto; padding: 8px 14px !important; font-size: 13px !important; }
+
+/* גוף נפתח/נסגר */
+.prompt-body { max-height: 0; overflow: hidden; transition: max-height .32s ease; }
+.prompt-item.open .prompt-body { max-height: 1600px; }
+.prompt-body-inner { padding: 0 16px 16px; }
+.prompt-text { width: 100%; min-height: 320px; resize: vertical; box-sizing: border-box;
+  font-family: ui-monospace, Menlo, Consolas, "Courier New", monospace; font-size: 13px; line-height: 1.7;
+  padding: 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--cream); color: var(--ink); white-space: pre-wrap; }
+.prompt-body-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+
+.prompts-empty { text-align: center; color: var(--ink-soft); padding: 36px 12px; }
