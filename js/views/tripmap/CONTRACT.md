@@ -40,9 +40,15 @@ handle.setMode('2d'|'3d')                       // 3d = terrain + pitch + מבנ
 handle.setBasemap('satellite'|'streets')
 handle.setLabels(on)                            // שמות רחובות/שכונות/ערים + גבולות (ברירת-מחדל: דולק)
 handle.flyTo({lat,lng,zoom?,pitch?,bearing?})
+handle.fitBounds(points /*[[lng,lat],…]*/, {padding?,maxZoom?,duration?,pitch?})  // מיקוד שכל הנקודות ייכנסו
 handle.addMarker({id?,lat,lng,label?,color?,group?,onClick?}) → markerId
 handle.clearMarkers(group?)                     // בלי group = הכל
-handle.drawRoute(coords /*[[lng,lat],…]*/, {id?,color?,group?})
+handle.drawRoute(coords /*[[lng,lat],…]*/, {id?,color?,group?,width?,opacity?,dash?})
+
+// ניתוב נסיעה אמיתי (routing.js → window.TripRouting) — מסלול לפי כבישים כמו Waze
+TripRouting.route(coords /*[[lng,lat],…] ≥2*/) → Promise<{ok, routes:[{coords,distanceKm,durationMin,roads:[…]}]}>
+// routes[0]=ראשי, routes[1]=חלופה. נכשל (רשת/שרת) → reject; הקורא נופל לקו אווירי.
+TripRouting.durHuman(min) → "1 ש' 35 דק'"
 handle.clearRoutes(group?)
 handle.onClickMap(cb /*({lat,lng})=>{}*/ )      // להחזיר פונקציית הסרה
 handle.resize() ; handle.destroy()

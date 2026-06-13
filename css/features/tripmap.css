@@ -211,6 +211,21 @@
 .tm-stop-pop-close { color: var(--ink-mute); flex-shrink: 0; }
 .tm-stop-pop-close:hover { color: var(--ink); }
 
+/* בועת סיכום מסלול נסיעה (מרחק/זמן/כבישים + חלופה) */
+.tm-route-info {
+  position: absolute; bottom: var(--sp-3); inset-inline-start: 50%; transform: translateX(50%);
+  z-index: 11; max-width: min(460px, calc(100% - 32px));
+  padding: 10px 14px; border-radius: var(--r-md);
+  background: var(--paper); border: 1px solid var(--line); box-shadow: var(--shadow-lg);
+  animation: tmPopIn 180ms ease-out; font-size: 12.5px; line-height: 1.6;
+}
+.tm-route-info-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  font-weight: 700; font-size: 12.5px; color: var(--ink); margin-bottom: 4px;
+}
+.tm-route-main { color: var(--ink); font-weight: 600; }
+.tm-route-alt { color: var(--ink-soft); margin-top: 2px; }
+
 /* ── מודאלים (עזרה / Claude / ייבוא) ── */
 .tm-modal-overlay {
   position: fixed; inset: 0; z-index: 9999;

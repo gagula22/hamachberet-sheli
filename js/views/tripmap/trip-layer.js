@@ -48,9 +48,15 @@
     closePop();
   }
 
+  var _drawToken = 0;          // מבטל ציורי-מסלול אסינכרוניים ישנים בהחלפת טיול
+  var _dayRoutes = {};         // n היום → { primary, alt } (לתצוגת סיכום בקליק על יום)
+
   function showTripOnMap(trip) {
     clearMap();
+    _dayRoutes = {};
     if (!_handle || !trip) return;
+    var token = ++_drawToken;
+    var allPts = [];
     (trip.days || []).forEach(function (day, i) {
       var color = dayColor(i);
       var coords = [];
@@ -64,25 +70,77 @@
           });
         } catch (e) { console.warn('triplayer: marker failed', e); }
         coords.push([stop.lng, stop.lat]);
+        allPts.push([stop.lng, stop.lat]);
       });
-      if (coords.length > 1) {
-        try { _handle.drawRoute(coords, { color: color, group: 'trip' }); } catch (e) { console.warn('triplayer: route failed', e); }
-      }
+      if (coords.length > 1) drawDayRoute(day, coords, color, token);
     });
+    // מיקוד המפה על כל עצירות הטיול (במקום מבט-על של כל הארץ)
+    if (allPts.length) {
+      try { _handle.fitBounds(allPts, { maxZoom: 13 }); } catch (e) {}
+    }
   }
 
-  // flyTo שמקיף את עצירות היום: מרכז ה-bbox + zoom לפי המתיחה (אין fitBounds בחוזה)
+  // מצייר מסלול נסיעה אמיתי ליום (לפי כבישים) + חלופה; נכשל → קו אווירי ישר.
+  function drawDayRoute(day, coords, color, token) {
+    var straight = function () {
+      if (token !== _drawToken) return;
+      try { _handle.drawRoute(coords, { id: 'd' + day.n + '-air', color: color, group: 'trip', dash: [1.5, 1.2], opacity: 0.7 }); }
+      catch (e) { console.warn('triplayer: route failed', e); }
+    };
+    if (!window.TripRouting || !TripRouting.route) { straight(); return; }
+    TripRouting.route(coords).then(function (res) {
+      if (token !== _drawToken) return;                 // טיול אחר כבר מצויר
+      if (!res || !res.ok || !res.routes.length) { straight(); return; }
+      var C = (window.TripMapConfig && TripMapConfig.routing) || {};
+      // חלופה ראשון (מתחת), אחר כך הראשי (מעל) — לפי סדר addLayer
+      res.routes.slice(1).forEach(function (alt, k) {
+        try {
+          _handle.drawRoute(alt.coords, {
+            id: 'd' + day.n + '-alt' + k, group: 'trip',
+            color: C.altColor || '#9aa6b8', width: 3.5, opacity: 0.75, dash: C.altDash || [2, 1.6]
+          });
+        } catch (e) {}
+      });
+      try { _handle.drawRoute(res.routes[0].coords, { id: 'd' + day.n + '-main', color: color, group: 'trip' }); }
+      catch (e) {}
+      _dayRoutes[day.n] = { primary: res.routes[0], alt: res.routes[1] || null };
+    }).catch(function () { straight(); });   // רשת/שרת נפלו → קו אווירי
+  }
+
+  // מיקוד המפה על עצירות היום (fitBounds) + סיכום מסלול אם כבר חושב
   function flyToDay(day) {
-    var stops = (day.stops || []).filter(function (s) { return isFinite(s.lat) && isFinite(s.lng); });
-    if (!stops.length || !_handle) return;
-    var minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity;
-    stops.forEach(function (s) {
-      minLat = Math.min(minLat, s.lat); maxLat = Math.max(maxLat, s.lat);
-      minLng = Math.min(minLng, s.lng); maxLng = Math.max(maxLng, s.lng);
-    });
-    var span = Math.max(maxLat - minLat, maxLng - minLng, 0.002);
-    var zoom = Math.max(8, Math.min(15, Math.floor(Math.log(360 / (span * 2.2)) / Math.LN2)));
-    try { _handle.flyTo({ lat: (minLat + maxLat) / 2, lng: (minLng + maxLng) / 2, zoom: zoom }); } catch (e) {}
+    var pts = (day.stops || [])
+      .filter(function (s) { return isFinite(s.lat) && isFinite(s.lng); })
+      .map(function (s) { return [s.lng, s.lat]; });
+    if (!pts.length || !_handle) return;
+    try { _handle.fitBounds(pts, { maxZoom: 14 }); } catch (e) {}
+    showRouteInfo(day);
+  }
+
+  // בועת סיכום מסלול ליום: מרחק/זמן/כבישים + חלופה (כמו Waze)
+  function showRouteInfo(day) {
+    closePop();
+    var info = _dayRoutes[day.n];
+    if (!info || !info.primary) return;
+    var host = _sideEl && _sideEl.closest('.tm-view');
+    if (!host) return;
+    var dh = (window.TripRouting && TripRouting.durHuman) ? TripRouting.durHuman : function (m) { return m + ' דק\''; };
+    var p = info.primary;
+    var lines = [
+      el('div', { class: 'tm-route-main' }, '🚗 ' + p.distanceKm + ' ק"מ · ' + dh(p.durationMin) +
+        (p.roads && p.roads.length ? ' · כבישים ' + p.roads.slice(0, 5).join(', ') : ''))
+    ];
+    if (info.alt) {
+      lines.push(el('div', { class: 'tm-route-alt' }, '↪ חלופה: ' + info.alt.distanceKm + ' ק"מ · ' + dh(info.alt.durationMin) +
+        (info.alt.roads && info.alt.roads.length ? ' · ' + info.alt.roads.slice(0, 4).join(', ') : '')));
+    }
+    _pop = el('div', { class: 'tm-route-info' }, [
+      el('div', { class: 'tm-route-info-head' }, [
+        el('span', {}, 'יום ' + (day.n != null ? day.n : '?') + ' — מסלול נסיעה'),
+        el('button', { class: 'tm-stop-pop-close', title: 'סגירה', onClick: closePop }, '✕')
+      ])
+    ].concat(lines));
+    host.appendChild(_pop);
   }
 
   // ── בועת מידע לעצירה (תחליף popup — אין popup ב-API של המנוע) ──

@@ -121,6 +121,17 @@
 
     // צבעי ברירת-מחדל לסימונים על המפה
     markerColor: '#c0564e',
-    routeColor: '#5a78c7'
+    routeColor: '#5a78c7',
+
+    // ── ניתוב נסיעה אמיתי (מסלול לפי כבישים, כמו Waze) ──────────────────────
+    // OSRM הציבורי (חינמי, בלי מפתח, CORS '*'). מחזיר גאומטריה לפי כבישים,
+    // משך/מרחק, מספרי-כבישים (steps[].ref), ועד 2 חלופות (alternatives=true).
+    routing: {
+      osrm: 'https://router.project-osrm.org/route/v1/driving/',
+      alternatives: true,           // לבקש מסלול חלופי (סה"כ עד 2)
+      maxAlternatives: 1,           // כמה חלופות לצייר מעבר למסלול הראשי
+      altColor: '#9aa6b8',          // צבע המסלול החלופי (אפור עמום)
+      altDash: [2, 1.6]             // קו מקווקו לחלופה
+    }
   };
 })();

@@ -285,6 +285,28 @@
           map.flyTo(t);
         },
 
+        // מיקוד המפה כך שכל הנקודות ייכנסו למסך. points = [[lng,lat], …]
+        fitBounds: function (points, o) {
+          if (state.destroyed || !points || !points.length) return;
+          o = o || {};
+          var w = Infinity, s = Infinity, e = -Infinity, n = -Infinity;
+          points.forEach(function (p) {
+            var lng = p[0], lat = p[1];
+            if (!isFinite(lng) || !isFinite(lat)) return;
+            if (lng < w) w = lng; if (lng > e) e = lng;
+            if (lat < s) s = lat; if (lat > n) n = lat;
+          });
+          if (!isFinite(w) || !isFinite(s)) return;
+          try {
+            map.fitBounds([[w, s], [e, n]], {
+              padding: o.padding != null ? o.padding : 70,
+              maxZoom: o.maxZoom != null ? o.maxZoom : 15,
+              duration: o.duration != null ? o.duration : 900,
+              pitch: state.mode === '3d' ? (o.pitch != null ? o.pitch : 45) : 0
+            });
+          } catch (err) { console.debug('tripmap fitBounds:', err); }
+        },
+
         // מחזיר markerId. label → popup (עברית, dir=rtl). onClick({id,lat,lng}).
         addMarker: function (o) {
           if (state.destroyed || !o) return null;
@@ -328,14 +350,20 @@
             type: 'geojson',
             data: { type: 'Feature', geometry: { type: 'LineString', coordinates: coords }, properties: {} }
           });
+          // עובי קבוע (o.width) גובר על האינטרפולציה — שימושי למסלולים חלופיים דקים
+          var width = (typeof o.width === 'number')
+            ? o.width
+            : ['interpolate', ['linear'], ['zoom'], 7, 2.5, 14, 5, 18, 8];
+          var paint = {
+            'line-color': o.color || C.routeColor,
+            'line-width': width,
+            'line-opacity': (typeof o.opacity === 'number') ? o.opacity : 0.9
+          };
+          if (Array.isArray(o.dash)) paint['line-dasharray'] = o.dash;   // מקווקו = חלופה
           map.addLayer({
             id: lyrId, type: 'line', source: srcId,
             layout: { 'line-cap': 'round', 'line-join': 'round' },
-            paint: {
-              'line-color': o.color || C.routeColor,
-              'line-width': ['interpolate', ['linear'], ['zoom'], 7, 2.5, 14, 5, 18, 8],
-              'line-opacity': 0.9
-            }
+            paint: paint
           });
           routes.push({ id: id, group: o.group || null, srcId: srcId, lyrId: lyrId });
           return id;

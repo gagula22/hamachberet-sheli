@@ -299,6 +299,7 @@ Web Speech he-IL; טקסט סופי דרך `execCommand('insertText')` → שמ�
 | ניווט גוף-ראשון במפה (WASD/חצים/Q/E/R/F) | `tripmap/controls.js` (`window.TripMapControls`) |
 | פאנל הטיולים, ייבוא JSON, חיבור המתכנן | `tripmap/trip-layer.js` (`window.TripLayer`) |
 | פריסת ה-view, סרגל צף, חיפוש Nominatim | `tripmap/index.js` |
+| ניתוב נסיעה אמיתי (מסלול לפי כבישים כמו Waze) | `tripmap/routing.js` (`window.TripRouting`) — OSRM ציבורי |
 | מאגר ידע הטיולים (אטרקציות/מסעדות/לינה/חו"ל) | `tripmap/planner-data.js` (`window.TripPlannerData`) |
 | מנוע התכנון (לוגיקה טהורה, 4 מסלולים) | `tripmap/planner-engine.js` (`window.TripPlannerEngine`) |
 | אשף התכנון + מסך התוכנית + הדפסה | `tripmap/planner-ui.js` + `css/features/tripplanner.css` (`window.TripPlannerUI`) |
@@ -321,3 +322,7 @@ surprise→abroad מעבירה הלאה את התשובות שכבר נבחרו 
 embed ללא מפתח (`/maps/embed?pb=!6m7…`) — ה-endpoint היחיד בלי X-Frame-Options.
 ייבוא טיול מהסקיל trip-planner-metakhnen-tiyulim: פרומפט מוכן + הדבקת JSON
 (סכמה: title/region/days[n,title,stops[name,lat,lng,time?,note?,type?]]).
+**ניתוב נסיעה אמיתי:** בהצגת טיול על המפה כל יום מנותב לפי כבישים דרך OSRM הציבורי
+(`routing.js`) — גאומטריה אמיתית במקום קו אווירי, מסלול חלופי מקווקו כשזמין, ובועת
+סיכום (מרחק/זמן/מספרי-כבישים) בקליק על "יום N". כשל רשת → נפילה לקו אווירי. המפה
+ממוקדת על העצירות דרך `handle.fitBounds`.
