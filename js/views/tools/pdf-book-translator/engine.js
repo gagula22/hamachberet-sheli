@@ -10,6 +10,8 @@
   //   3. תרגום EN→HE של כל פסקה (MyMemory — אותו שירות חינמי של כלי תרגום-PDF).
   //   4. כיסוי הטקסט האנגלי במלבן בצבע-רקע נדגם, וציור העברית מעליו (RTL,
   //      התאמת גודל פונט וריווח כדי למלא את מסגרת הבלוק — מקביל ל-fill_column).
+  //      דגימת-רקע חסינה (mode), כיסוי תיבה-צבעונית מלאה, ושומר-ניגודיות —
+  //      פורט משיפורי צנרת-השרת כדי שטקסט לא ייצא בלתי-נראה ולא יישארו שאריות.
   //   5. הרכבת כל העמודים המתורגמים ל-PDF (pdf-lib המאורז).
   //
   // אין DOM-של-אפליקציה כאן (רק canvas off-screen). ה-UI, בורר-התיקייה והשמירה
@@ -142,15 +144,20 @@
   }
 
   // לא נוגעים: מספרים/מחירים/תאריכים/שעות/ערכי-ציר/סמלים (כמו בסקיל).
+  // + העדפת משתמש: לא מתרגמים תוויות שלבים (Phase A/B/C/D) — נשארות במקור.
   function shouldSkip(t) {
     if (!t) return true;
-    if (t.trim().length < 3) return true;
-    var letters = t.replace(/[^A-Za-zÀ-ɏ]/g, '');
+    var c = t.trim();
+    if (c.length < 3) return true;
+    if (/^phase\b/i.test(c) && c.length <= 12) return true;   // "Phase A"/"Phase |A|"
+    if (/^[A-D]$/.test(c)) return true;                       // תווית-שלב בודדת
+    var letters = c.replace(/[^A-Za-zÀ-ɏ]/g, '');
     return letters.length < 2;
   }
 
   // ── ציור העברית על התמונה ──────────────────────────────────────────────────
-  function sampleBg(ctx, b) {
+  // דגימת-קצוות ישנה — נפילה לבלוקים זעירים בלבד.
+  function sampleBgEdges(ctx, b) {
     var W = ctx.canvas.width, H = ctx.canvas.height;
     var pts = [[b.x0 - 3, b.y0 - 3], [b.x1 + 3, b.y0 - 3], [b.x0 - 3, b.y1 + 3],
       [b.x1 + 3, b.y1 + 3], [(b.x0 + b.x1) / 2, b.y0 - 3], [(b.x0 + b.x1) / 2, b.y1 + 3]];
@@ -163,11 +170,68 @@
     }
     return { r: Math.round(r / c), g: Math.round(g / c), b: Math.round(bl / c) };
   }
-  function rgbStr(c) { return 'rgb(' + c.r + ',' + c.g + ',' + c.b + ')'; }
-  function inkFor(bg) {
-    var lum = (0.299 * bg.r + 0.587 * bg.g + 0.114 * bg.b);
-    return lum > 140 ? '#1a1a1a' : '#f7f7f7';
+  // צבע-רקע חסין: הצבע הדומיננטי (mode) על פני פנים הבלוק. חסין לקווי-רשת ולרווחים
+  // בין אותיות שגרמו לדגימת-פיקסל-בודד להחזיר לבן בטעות (הבאג שתוקן בצנרת השרת).
+  function dominantBg(ctx, b) {
+    var W = ctx.canvas.width, H = ctx.canvas.height;
+    var x0 = Math.max(0, Math.round(b.x0)), y0 = Math.max(0, Math.round(b.y0));
+    var x1 = Math.min(W, Math.round(b.x1)), y1 = Math.min(H, Math.round(b.y1));
+    var w = x1 - x0, h = y1 - y0;
+    if (w < 4 || h < 4) return sampleBgEdges(ctx, b);
+    var img = ctx.getImageData(x0, y0, w, h).data;
+    var counts = {}, sums = {}, step = Math.max(2, Math.round(Math.min(w, h) / 20));
+    for (var yy = 0; yy < h; yy += step) {
+      for (var xx = 0; xx < w; xx += step) {
+        var i = (yy * w + xx) * 4, r = img[i], g = img[i + 1], bb = img[i + 2];
+        var key = (r >> 4) + ',' + (g >> 4) + ',' + (bb >> 4);
+        counts[key] = (counts[key] || 0) + 1;
+        var s = sums[key] || (sums[key] = [0, 0, 0, 0]);
+        s[0] += r; s[1] += g; s[2] += bb; s[3]++;
+      }
+    }
+    var bestK = null, bestC = -1;
+    for (var k in counts) if (counts[k] > bestC) { bestC = counts[k]; bestK = k; }
+    var m = sums[bestK];
+    return { r: Math.round(m[0] / m[3]), g: Math.round(m[1] / m[3]), b: Math.round(m[2] / m[3]) };
   }
+  function lumOf(c) { return 0.299 * c.r + 0.587 * c.g + 0.114 * c.b; }
+  function satOf(c) { return Math.max(c.r, c.g, c.b) - Math.min(c.r, c.g, c.b); }
+  // לתיבה צבעונית מלאה: למצוא את גבולות המלבן בצבע אחיד (לכסות שאריות אנגלית
+  // ולצייר תיבה נקייה כמו במקור), בסריקה החוצה ממרכז הבלוק.
+  function colorBoxBounds(ctx, b, bg) {
+    var W = ctx.canvas.width, H = ctx.canvas.height;
+    var mX = Math.min(90, (b.x1 - b.x0)), mY = Math.min(90, (b.y1 - b.y0));
+    var rx0 = Math.max(0, Math.round(b.x0) - mX), ry0 = Math.max(0, Math.round(b.y0) - mY);
+    var rx1 = Math.min(W, Math.round(b.x1) + mX), ry1 = Math.min(H, Math.round(b.y1) + mY);
+    var rw = rx1 - rx0, rh = ry1 - ry0;
+    if (rw < 4 || rh < 4) return null;
+    var img = ctx.getImageData(rx0, ry0, rw, rh).data;
+    // פרופיל-צפיפות: כמה פיקסלים תואמי-רקע בכל שורה/עמודה. גוף התיבה = ספירה גבוהה;
+    // טקסט-פנימי רק מוריד מעט (התיבה רחבה), וקווים דקים/שאריות = ספירה זניחה.
+    var rowC = new Int32Array(rh), colC = new Int32Array(rw);
+    var step = 2;
+    for (var yy = 0; yy < rh; yy += step) {
+      for (var xx = 0; xx < rw; xx += step) {
+        var i = (yy * rw + xx) * 4;
+        if (Math.abs(img[i] - bg.r) + Math.abs(img[i + 1] - bg.g) + Math.abs(img[i + 2] - bg.b) < 60) {
+          rowC[yy]++; colC[xx]++;
+        }
+      }
+    }
+    function band(arr, n) {
+      var mx = 0, j;
+      for (j = 0; j < n; j++) if (arr[j] > mx) mx = arr[j];
+      if (mx < 3) return null;
+      var th = mx * 0.4, lo = -1, hi = -1;
+      for (j = 0; j < n; j++) if (arr[j] >= th) { if (lo < 0) lo = j; hi = j; }
+      return lo < 0 ? null : [lo, hi];
+    }
+    var yb = band(rowC, rh), xb = band(colC, rw);
+    if (!yb || !xb) return null;
+    return { x0: rx0 + xb[0], y0: ry0 + yb[0], x1: rx0 + xb[1], y1: ry0 + yb[1] };
+  }
+  function rgbStr(c) { return 'rgb(' + c.r + ',' + c.g + ',' + c.b + ')'; }
+  function inkFor(bg) { return lumOf(bg) > 140 ? '#1a1a1a' : '#f7f7f7'; }
   function wrapRtl(ctx, text, maxW, fontPx, family) {
     ctx.font = fontPx + 'px ' + family;
     var words = text.split(/\s+/).filter(Boolean);
@@ -187,12 +251,26 @@
     if (w < 10 || h < 8) return false;
     family = family || 'Arial, "Segoe UI", "Noto Sans Hebrew", sans-serif';
 
-    var bg = sampleBg(ctx, bbox);
+    var bg = dominantBg(ctx, bbox);
     ctx.fillStyle = rgbStr(bg);
-    // הרחבה קלה (בעיקר כלפי מעלה) כדי לכסות שאריות של אותיות אנגליות
-    ctx.fillRect(x0 - 2, y0 - 4, w + 4, h + 7);
+    // תיבה צבעונית מלאה → לכסות את כל המלבן בצבע (להעלים שאריות אנגלית);
+    // אחרת הרחבה קלה (בעיקר כלפי מעלה) לכיסוי שאריות אותיות.
+    if (satOf(bg) > 40) {
+      var cb = colorBoxBounds(ctx, bbox, bg);
+      if (cb) ctx.fillRect(cb.x0, cb.y0, cb.x1 - cb.x0, cb.y1 - cb.y0);
+      else ctx.fillRect(x0 - 2, y0 - 4, w + 4, h + 7);
+    } else {
+      ctx.fillRect(x0 - 2, y0 - 4, w + 4, h + 7);
+    }
 
-    ctx.fillStyle = inkFor(bg);
+    // שומר-ניגודיות: אם הדיו שנבחר קרוב מדי בבהירות לרקע — להכריח קוטב הפוך.
+    var ink = inkFor(bg);
+    var inkLum = ink === '#1a1a1a' ? 26 : 247;
+    if (Math.abs(lumOf(bg) - inkLum) < 60) {
+      ink = lumOf(bg) > 140 ? '#111111' : '#ffffff';
+      if (window.console && console.warn) console.warn('[PBT] ניגודיות נמוכה rgb', bg, '→ דיו מוכרח', ink);
+    }
+    ctx.fillStyle = ink;
     ctx.textAlign = 'right';
     ctx.textBaseline = 'top';
     try { ctx.direction = 'rtl'; } catch (e) {}
@@ -309,6 +387,7 @@
     run: run,
     // נחשפים גם לבדיקות/שימוש-חוזר:
     translateText: translateText, ocrParagraphs: ocrParagraphs,
-    drawParagraph: drawParagraph, shouldSkip: shouldSkip, splitChunks: splitChunks
+    drawParagraph: drawParagraph, shouldSkip: shouldSkip, splitChunks: splitChunks,
+    dominantBg: dominantBg, colorBoxBounds: colorBoxBounds
   };
 })();
