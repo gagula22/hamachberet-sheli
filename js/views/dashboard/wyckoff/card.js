@@ -3,7 +3,7 @@
   // dashboard needs zero knowledge of Wyckoff. Opens reports / launches the
   // symbol picker (window.Wyckoff.openSymbolPicker).
   function renderWyckoffCard() {
-    return App.el('div', { class: 'card', style: { background: 'linear-gradient(135deg, #fff8e7 0%, #ffe5e5 100%)', borderLeft: '4px solid #d4a017' } }, [
+    return App.el('div', { class: 'card', title: 'כדי שהפקת ניתוח חדש תצליח — חובה שתוכנת TradingView תהיה מותקנת ופתוחה במחשב (הדוח מופק דרך לכידת גרפים מ-TradingView). זה שונה מ"ניתוח לפי וויקוף" שרץ עצמאית מ-Binance ללא תוכנה.', style: { background: 'linear-gradient(135deg, #fff8e7 0%, #ffe5e5 100%)', borderLeft: '4px solid #d4a017' } }, [
       App.el('div', { class: 'row row-between' }, [
         App.el('h2', { style: { margin: 0 } }, '📊 ניתוח Wyckoff — BTCUSDT.P'),
         App.el('span', { style: { fontSize: '11px', color: 'var(--ink-soft)' } }, 'BYBIT')
@@ -29,5 +29,6 @@
     ]);
   }
 
+  renderWyckoffCard.order = 10;   // כרטיס הסחר הראשי — ראשון בין הווידג'טים
   (window.DASHBOARD_WIDGETS = window.DASHBOARD_WIDGETS || []).push(renderWyckoffCard);
 })();

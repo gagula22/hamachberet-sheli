@@ -230,6 +230,7 @@
     ]);
     return card;
   }
+  dashCard.order = 15;   // מתחת לכרטיס הסחר הראשי (10), מעל "ביום הזה לפני" (50)
   if (window.DASHBOARD_WIDGETS) window.DASHBOARD_WIDGETS.push(dashCard);
 
   // ── CSS לא-ממוקד לייצוא (תבנית הסקיל) ──

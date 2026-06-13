@@ -56,6 +56,8 @@
     // Dashboard widgets registered by other features (e.g. Wyckoff). The
     // dashboard is agnostic — it just renders whatever has registered itself.
     const widgets = (window.DASHBOARD_WIDGETS || [])
+      .slice()
+      .sort((a, b) => ((a && a.order) || 50) - ((b && b.order) || 50))  // סדר אופציונלי לפי fn.order
       .map(fn => { try { return fn(); } catch (e) { console.warn('dashboard widget failed:', e); return null; } })
       .filter(Boolean);
 
