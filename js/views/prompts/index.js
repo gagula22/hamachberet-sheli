@@ -1,19 +1,19 @@
 (function () {
   'use strict';
   // ─────────────────────────────────────────────────────────────────────────
-  // עמוד "פרומטים" — אקורדיון מתקפל + הוספה ידנית.
-  //   • BUILTIN  — פרומטים מובנים (קריאה בלבד), תמיד מוצגים.
-  //   • משתמש    — נשמרים ב-Store('prompts') (subcol, מסונכרן/מגובה), עם
-  //                הוספה/עריכה/מחיקה דרך הממשק. אפס שינוי בקוד להוספת פרומט.
-  // כל פרומט: { id, skill, title, body }. מובנה מסומן builtin:true.
+  // עמוד "פרומטים" — אקורדיון מתקפל + ניהול ידני מלא.
+  // כל הפרומטים נשמרים ב-Store('prompts') (subcol, מסונכרן/מגובה) וניתנים
+  // לעריכת שם/סקיל/תוכן ולמחיקה. פרומט onboarding נזרע פעם אחת (SEED) עם
+  // מזהה קבוע — כך גם הוא ניתן לעריכה, ומיזוג by-id מונע כפילות בין מכשירים.
+  // כל פרומט: { id, skill, title, body }. ברירת מחדל: כולם סגורים.
   // ─────────────────────────────────────────────────────────────────────────
 
   function el(t, a, k) { return App.el(t, a || {}, k || []); }
 
-  var BUILTIN = [
+  var SEED_FLAG = 'mahberet.prompts.seeded';
+  var SEED = [
     {
-      id: 'builtin-onboarding-skill',
-      builtin: true,
+      id: 'onboarding-skill',
       skill: 'קיבוץ הניווט — שתי קבוצות ("המרכז היומי" + "ידע ולכידה") · navmode',
       title: 'להמשך עבודה להטמעה של סקיל',
       body: [
@@ -54,8 +54,21 @@
     }
   ];
 
-  function userPrompts() { return (Store.get('prompts') || []).slice(); }
-  function saveUserPrompts(list) { Store.set('prompts', list); }
+  // זריעה חד-פעמית למכשיר: מוסיף את פרומטי ה-SEED שחסרים (לפי id), פעם אחת.
+  // מזהה קבוע + מיזוג by-id מבטיחים שלא ייווצרו כפילויות בין מכשירים.
+  function ensureSeeded() {
+    try {
+      if (localStorage.getItem(SEED_FLAG) === '1') return;
+      var cur = Store.get('prompts') || [];
+      var ids = cur.map(function (x) { return x.id; });
+      var add = SEED.filter(function (s) { return ids.indexOf(s.id) === -1; });
+      if (add.length) Store.set('prompts', add.concat(cur));
+      localStorage.setItem(SEED_FLAG, '1');
+    } catch (e) {}
+  }
+
+  function prompts() { return (Store.get('prompts') || []).slice(); }
+  function savePrompts(list) { Store.set('prompts', list); }
 
   function copyText(text) {
     function ok() { if (App.toast) App.toast('הפרומט הועתק ✓'); }
@@ -72,25 +85,27 @@
   }
 
   function render(root) {
+    ensureSeeded();
     var state = { formOpen: false, editingId: null, query: '' };
 
     function rerender() { root.innerHTML = ''; root.append(build()); }
 
     function build() {
-      var all = BUILTIN.concat(userPrompts());
-      var items = all.map(function (p, i) { return buildItem(p, i === 0); });
+      var all = prompts();
+      var items = all.map(function (p) { return buildItem(p); });  // כולם סגורים כברירת מחדל
 
       var list = el('div', { class: 'prompts-list' }, items);
-      var empty = el('div', { class: 'prompts-empty hidden' }, 'לא נמצאו פרומטים תואמים.');
+      var emptyAll = el('div', { class: 'prompts-empty' + (all.length ? ' hidden' : '') }, 'אין עדיין פרומטים — לחץ "➕ הוסף פרומט" כדי להתחיל.');
+      var emptySearch = el('div', { class: 'prompts-empty hidden' }, 'לא נמצאו פרומטים תואמים.');
 
       function applyFilter() {
         var q = state.query.trim().toLowerCase();
         var shown = 0;
         items.forEach(function (it) { var ok = it._match(q); it.classList.toggle('hidden', !ok); if (ok) shown++; });
-        empty.classList.toggle('hidden', shown !== 0);
+        emptySearch.classList.toggle('hidden', !(all.length && shown === 0));
       }
 
-      var search = el('input', { type: 'search', placeholder: 'חיפוש לפי שם סקיל, כותרת או תוכן…' });
+      var search = el('input', { type: 'search', placeholder: 'חיפוש לפי שם סקיל, שם פרומט או תוכן…' });
       search.value = state.query;
       search.addEventListener('input', function () { state.query = search.value; applyFilter(); });
 
@@ -102,7 +117,7 @@
         el('div', { class: 'prompts-hero' }, [
           el('div', {}, [
             el('h2', {}, '📋 פרומטים'),
-            el('p', {}, 'אוסף פרומטים לשימוש חוזר. לחץ על כותרת כדי לפתוח, "העתק" כדי להעתיק ללוח, או "➕ הוסף פרומט" כדי להוסיף משלך.')
+            el('p', {}, 'אוסף פרומטים לשימוש חוזר. לחץ על כותרת כדי לפתוח, "העתק" כדי להעתיק ללוח, "✏️" כדי לשנות שם/תוכן, או "➕ הוסף פרומט".')
           ]),
           el('span', { class: 'prompts-count' }, all.length === 1 ? 'פרומט אחד' : all.length + ' פרומטים')
         ]),
@@ -114,43 +129,40 @@
 
       var wrap = el('div', { class: 'prompts-wrap' }, [ hero ]);
       if (state.formOpen) wrap.append(buildForm());
-      wrap.append(list, empty);
+      wrap.append(list, emptyAll, emptySearch);
       setTimeout(applyFilter, 0);
       return wrap;
     }
 
     function buildForm() {
-      var editing = state.editingId ? userPrompts().filter(function (x) { return x.id === state.editingId; })[0] : null;
+      var editing = state.editingId ? prompts().filter(function (x) { return x.id === state.editingId; })[0] : null;
       var skillIn = el('input', { type: 'text', placeholder: 'לדוגמה: קיבוץ הניווט · navmode' });
-      var titleIn = el('input', { type: 'text', placeholder: 'כותרת קצרה לפרומט' });
+      var titleIn = el('input', { type: 'text', placeholder: 'שם קצר לפרומט' });
       var bodyIn = el('textarea', { placeholder: 'הדבק כאן את תוכן הפרומט…', spellcheck: 'false', dir: 'auto' });
       if (editing) { skillIn.value = editing.skill || ''; titleIn.value = editing.title || ''; bodyIn.value = editing.body || ''; }
 
       function save() {
         var skill = skillIn.value.trim(), title = titleIn.value.trim(), body = bodyIn.value;
-        if (!title.trim() && !body.trim()) { if (App.toast) App.toast('צריך לפחות כותרת או תוכן'); return; }
-        var list = userPrompts();
+        if (!title && !body.trim()) { if (App.toast) App.toast('צריך לפחות שם או תוכן'); return; }
+        var list = prompts();
         if (editing) {
-          list = list.map(function (x) { return x.id === editing.id ? { id: x.id, skill: skill, title: title || '(ללא כותרת)', body: body } : x; });
+          list = list.map(function (x) { return x.id === editing.id ? { id: x.id, skill: skill, title: title || '(ללא שם)', body: body } : x; });
           if (App.toast) App.toast('הפרומט עודכן ✓');
         } else {
-          list.unshift({ id: Store.uid(), skill: skill, title: title || '(ללא כותרת)', body: body });
+          list.unshift({ id: Store.uid(), skill: skill, title: title || '(ללא שם)', body: body });
           if (App.toast) App.toast('הפרומט נוסף ✓');
         }
-        saveUserPrompts(list);
+        savePrompts(list);
         state.formOpen = false; state.editingId = null;
         rerender();
       }
       function cancel() { state.formOpen = false; state.editingId = null; rerender(); }
-
-      function field(labelText, control) {
-        return el('div', {}, [ el('label', {}, labelText), control ]);
-      }
+      function field(labelText, control) { return el('div', {}, [ el('label', {}, labelText), control ]); }
 
       return el('div', { class: 'prompt-form' }, [
         el('div', { class: 'prompt-form-title' }, editing ? '✏️ עריכת פרומט' : '➕ פרומט חדש'),
         field('שם הסקיל', skillIn),
-        field('כותרת', titleIn),
+        field('שם הפרומט', titleIn),
         field('תוכן הפרומט', bodyIn),
         el('div', { class: 'prompt-form-actions' }, [
           el('button', { class: 'btn btn-primary', onClick: save }, editing ? 'שמור שינויים' : 'שמור פרומט'),
@@ -159,37 +171,34 @@
       ]);
     }
 
-    function buildItem(p, open) {
+    function buildItem(p) {
       var ta = el('textarea', { class: 'prompt-text', readonly: 'readonly', dir: 'auto', spellcheck: 'false' });
       ta.value = p.body;
 
-      var actions = [ el('button', { class: 'btn', onClick: function (e) { e.stopPropagation(); copyText(p.body); } }, '📋 העתק פרומט') ];
-      if (!p.builtin) {
-        actions.push(el('button', { class: 'btn btn-mini', onClick: function (e) { e.stopPropagation(); state.editingId = p.id; state.formOpen = true; rerender(); } }, '✏️ ערוך'));
-        actions.push(el('button', { class: 'btn btn-mini btn-danger', onClick: function (e) {
+      var actions = [
+        el('button', { class: 'btn', onClick: function (e) { e.stopPropagation(); copyText(p.body); } }, '📋 העתק פרומט'),
+        el('button', { class: 'btn btn-mini', onClick: function (e) { e.stopPropagation(); state.editingId = p.id; state.formOpen = true; rerender(); } }, '✏️ ערוך'),
+        el('button', { class: 'btn btn-mini btn-danger', onClick: function (e) {
           e.stopPropagation();
           if (!confirm('למחוק את הפרומט "' + (p.title || '') + '"?')) return;
-          saveUserPrompts(userPrompts().filter(function (x) { return x.id !== p.id; }));
+          savePrompts(prompts().filter(function (x) { return x.id !== p.id; }));
           if (App.toast) App.toast('הפרומט נמחק');
           rerender();
-        } }, '🗑️ מחק'));
-      }
+        } }, '🗑️ מחק')
+      ];
       var body = el('div', { class: 'prompt-body' }, [
         el('div', { class: 'prompt-body-inner' }, [ ta, el('div', { class: 'prompt-body-actions' }, actions) ])
       ]);
 
       var caret = el('span', { class: 'prompt-caret' }, '▾');
-      var skillRow = [ document.createTextNode('סקיל:') ];
       var skillTag = el('span', { class: 'tag' }); skillTag.textContent = p.skill || 'כללי';
-      skillRow.push(skillTag);
-      if (p.builtin) { var b = el('span', { class: 'prompt-builtin-tag' }); b.textContent = 'מובנה'; skillRow.push(b); }
       var titles = el('div', { class: 'prompt-titles' }, [
-        el('div', { class: 'prompt-title' }, p.title),
-        el('div', { class: 'prompt-skill' }, skillRow)
+        el('div', { class: 'prompt-title' }, p.title || '(ללא שם)'),
+        el('div', { class: 'prompt-skill' }, [ document.createTextNode('סקיל:'), skillTag ])
       ]);
       var topCopy = el('button', { class: 'btn prompt-copy', onClick: function (e) { e.stopPropagation(); copyText(p.body); } }, 'העתק');
 
-      var item = el('div', { class: 'prompt-item' + (open ? ' open' : '') });
+      var item = el('div', { class: 'prompt-item' });   // סגור כברירת מחדל
       var head = el('button', { class: 'prompt-head', onClick: function () { item.classList.toggle('open'); } }, [ caret, titles, topCopy ]);
       item.append(head, body);
       item._match = function (q) {
