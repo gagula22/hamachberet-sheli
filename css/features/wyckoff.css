@@ -1,0 +1,86 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   מנתח וויקוף (js/views/wyckoff) — עיצוב התצוגה החיה. prefix: wk-
+   (ה-CSS של הקובץ המיוצא מוטמע ב-index.js, נפרד.)
+   ───────────────────────────────────────────────────────────────────────── */
+.wk-view { max-width: 940px; margin: 0 auto; }
+
+/* סרגל קלט */
+.wk-bar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  background: var(--paper, #fff); border: 1px solid var(--line, #e3e7ee);
+  border-radius: var(--r-lg, 14px); padding: 10px 14px; margin-bottom: 14px;
+  box-shadow: var(--shadow, 0 1px 3px rgba(20,30,50,.05));
+}
+.wk-coin { font-size: 20px; }
+.wk-input {
+  flex: 0 1 200px; border: 1.5px solid var(--line, #e3e7ee); border-radius: var(--r-md, 9px);
+  padding: 8px 12px; font-size: 15px; font-weight: 700; letter-spacing: .5px;
+  background: var(--cream, #fff); color: var(--ink, #1d2430); text-transform: uppercase;
+}
+.wk-input:focus { outline: none; border-color: var(--sky-deep, #2d6cdf); }
+.wk-analyze {
+  border: 0; background: var(--sky-deep, #2d6cdf); color: #fff; font-weight: 700;
+  border-radius: var(--r-md, 9px); padding: 9px 18px; cursor: pointer; font-size: 14px;
+}
+.wk-analyze:hover { filter: brightness(1.07); }
+.wk-analyze:disabled { opacity: .6; cursor: default; }
+.wk-quick { display: flex; gap: 6px; margin-inline-start: auto; }
+.wk-chip {
+  border: 1px solid var(--line, #e3e7ee); background: var(--cream, #f6f7f9);
+  border-radius: 999px; padding: 5px 12px; font-size: 12.5px; font-weight: 700; cursor: pointer;
+  color: var(--ink-soft, #5b6675);
+}
+.wk-chip:hover { background: var(--sky, #eef3fb); color: var(--sky-deep, #2d6cdf); }
+
+/* טעינה / כשל */
+.wk-loading { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 60px 0; color: var(--ink-soft, #5b6675); }
+.wk-spin { width: 34px; height: 34px; border-radius: 50%; border: 3px solid var(--line, #e3e7ee); border-top-color: var(--sky-deep, #2d6cdf); animation: wkSpin 1s linear infinite; }
+@keyframes wkSpin { to { transform: rotate(360deg); } }
+.wk-fail { background: #fdf1ef; border: 1px solid #f0c7c0; color: #b3382c; border-radius: 12px; padding: 18px; text-align: center; font-weight: 600; }
+
+/* הדוח */
+.wk-card { background: var(--paper, #fff); border: 1px solid var(--line, #e3e7ee); border-radius: var(--r-lg, 14px); padding: 16px 18px; margin: 0 0 14px; box-shadow: var(--shadow, 0 1px 3px rgba(20,30,50,.05)); }
+.wk-doc h1 { font-size: 22px; margin: 0 0 4px; color: var(--ink, #1d2430); }
+.wk-doc h2 { font-size: 17px; margin: 0 0 10px; color: var(--ink, #15233c); }
+.wk-doc h3 { margin: 0 0 6px; font-size: 15px; }
+.wk-sub { color: var(--ink-soft, #5b6675); font-size: 13px; }
+
+.wk-verdict { display: inline-block; font-size: 30px; font-weight: 900; letter-spacing: 1px; padding: 6px 24px; border-radius: 12px; margin: 8px 0; }
+.wk-wait { background: #fdf4dd; color: #d9a227; border: 2px solid #d9a227; }
+.wk-go   { background: #e7f7ee; color: #1f9d57; border: 2px solid #1f9d57; }
+.wk-nogo { background: #fdecea; color: #d2483b; border: 2px solid #d2483b; }
+
+.wk-ctrl { background: var(--sky, #eef3fb); border: 1px solid #d4e0f5; border-radius: 10px; padding: 10px 14px; font-size: 14px; }
+.wk-why { color: var(--ink, #3a4456); margin-top: 4px; }
+
+.wk-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.wk-tbl th, .wk-tbl td { border: 1px solid var(--line, #e3e7ee); padding: 6px 9px; text-align: right; vertical-align: top; }
+.wk-tbl thead th { background: var(--sky, #eef2f7); color: var(--ink, #15233c); }
+.wk-bull { color: #1f9d57; font-weight: 700; }
+.wk-bear { color: #d2483b; font-weight: 700; }
+.wk-neut { color: #d9a227; font-weight: 700; }
+
+.wk-canvas { width: 100%; height: auto; display: block; border-radius: 10px; background: #0e1116; }
+.wk-legend { font-size: 12px; color: var(--ink-soft, #5b6675); margin-top: 5px; }
+.wk-hint { background: #fcf7e6; border: 1px solid #ecdca6; border-radius: 8px; padding: 9px 12px; font-size: 13px; margin-top: 8px; }
+
+.wk-scn { border-radius: 10px; padding: 12px 14px; margin: 9px 0; border: 1px solid var(--line, #e3e7ee); }
+.wk-scn-long { background: #f0f9f3; border-color: #bce3cc; }
+.wk-scn-short { background: #fdf1ef; border-color: #f0c7c0; }
+.wk-scn-break { background: #eef3fb; border-color: #cfe0f7; }
+.wk-trig { font-size: 13px; color: var(--ink-soft, #444); margin-bottom: 4px; }
+.wk-lvls { font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.wk-chk td:first-child { text-align: center; font-weight: 900; width: 34px; font-size: 15px; }
+.wk-yes { color: #1f9d57; } .wk-no { color: #d2483b; } .wk-part { color: #d9a227; }
+.wk-note { color: var(--ink-soft, #5b6675); font-size: 12.5px; }
+
+.wk-actions { display: flex; gap: 8px; margin-bottom: 8px; }
+.wk-btn { border: 1px solid var(--line, #e3e7ee); background: var(--cream, #fff); border-radius: 9px; padding: 8px 14px; font-weight: 700; cursor: pointer; font-size: 13px; }
+.wk-btn:hover { background: var(--sky, #eef2f8); }
+.wk-disc { color: var(--ink-mute, #8a93a0); font-size: 12px; text-align: center; margin: 6px 0 0; }
+
+@media (max-width: 640px) {
+  .wk-quick { margin-inline-start: 0; width: 100%; }
+}
+@media print { .wk-bar, .wk-actions { display: none; } }
