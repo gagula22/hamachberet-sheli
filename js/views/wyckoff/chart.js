@@ -102,7 +102,7 @@
   // לפי תאוריית וויקוף, עם ווליום תואם (שיא בשטיפה/קלימקס, התייבשות בטסט, פריצה,
   // No-Demand). מחזיר {candles, notes, divider}. real=[{o,h,l,c,v}].
   function buildPath(real, sc, kind) {
-    var tail = real.slice(-5);
+    var tail = real.slice(-20);          // 20 נרות 4H אמיתיים מזמן אמת + מסלול צפוי מעליהם
     var avgV = 0; tail.forEach(function (c) { avgV += c.v; }); avgV = (avgV / tail.length) || 1;
     var p0 = tail[tail.length - 1].c;
     var cs = tail.map(function (c) { return { o: c.o, h: c.h, l: c.l, c: c.c, v: c.v, real: true }; });
