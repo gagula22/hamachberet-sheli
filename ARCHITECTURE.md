@@ -329,3 +329,22 @@ embed ללא מפתח (`/maps/embed?pb=!6m7…`) — ה-endpoint היחיד בל
 (`routing.js`) — גאומטריה אמיתית במקום קו אווירי, מסלול חלופי מקווקו כשזמין, ובועת
 סיכום (מרחק/זמן/מספרי-כבישים) בקליק על "יום N". כשל רשת → נפילה לקו אווירי. המפה
 ממוקדת על העצירות דרך `handle.fitBounds`.
+
+---
+
+## 10. ניתוח לפי וויקוף (`js/views/wyckoff/`, view `wyckoff`) — יוני 2026
+
+> ⚠️ **שני כלי-וויקוף נפרדים — לא לבלבל:**
+> - `js/views/dashboard/wyckoff/` (ישן) — כרטיס סחר מבוסס **Cloudflare Worker** שדורש
+>   **TradingView מותקן** (לכידת גרפים). order=10 בדשבורד.
+> - `js/views/wyckoff/` (חדש, "ניתוח לפי וויקוף") — **עצמאי, ללא תוכנה, מ-Binance חי**,
+>   מנוע-חוקים בדפדפן. order=15. **מקור-אמת מלא: `js/views/wyckoff/CONTRACT.md`** (כולל
+>   ממשקים, יומן פיתוח, נקודות המשך).
+
+מפיק **דוח 3 מטבעות (BTC·ETH·SOL)** בתבנית ה-HTML/CSS המדויקת של הסקיל wyckoff-analyzer,
+רץ 100% בדפדפן (אפס תלות בקלוד/בשרת). מודולים: `data.js` (Binance), `engine.js`
+(מנוע-חוקים: SC/AR/טווח/V1%/צ'ק-ליסט/פסיקה/תרחישים), `chart.js` (`draw`+`scenario`),
+`index.js` (view+דוח+ייצוא+כרטיס דשבורד), `css/features/wyckoff.css`. ה-CSS של הסקיל
+גלובלי — ממוקד תחת `.wk-report` בתצוגה החיה, ולא-ממוקד ב-EXPORT_CSS לקובץ העצמאי.
+נגיעות משותפות: SECTIONS ב-app.js, מיון `fn.order` ב-dashboard/index.js, tooltip+order
+בכרטיס הישן. ⚠️ אסור לכתוב לתיקיית `wyckoff/` (של הכלי הישן).
