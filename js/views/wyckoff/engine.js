@@ -16,23 +16,23 @@
     return '$' + (Math.round(n * 1e6) / 1e6);
   }
 
-  // ── זיהוי Selling Climax: נר נפח-שיא ליד תחתית החלון, טווח רחב, סגירה לא בשפל ──
+  // ── זיהוי Selling Climax / עוגן-תחתית הטווח ──
+  // מאתר את השפל המבני בחלון (תחתית הטווח), ומעדיף נר נפח-שיא בסביבתו (SC קלאסי).
+  // אם השפל הוא ב-3 הנרות האחרונים — המחיר עוד יורד, אין טווח מאומת → -1.
   function detectSC(candles, win) {
     win = Math.min(win || 40, candles.length);
     var w = candles.slice(candles.length - win);
     var base = candles.length - win;
-    var avgV = mean(w.map(function (c) { return c.v; }));
-    var lowest = Math.min.apply(null, w.map(function (c) { return c.l; }));
-    var best = -1, bestScore = 0;
-    w.forEach(function (c, i) {
-      var nearLow = (c.l - lowest) / lowest < 0.02;        // בתחתית החלון
-      var climactic = c.v >= avgV * 1.7;                    // נפח קלימקטי
-      var wide = rng(c) >= mean(w.map(rng)) * 1.2;          // נר רחב
-      if (!climactic) return;
-      var score = c.v * (nearLow ? 1.6 : 1) * (wide ? 1.2 : 1);
-      if (nearLow && score > bestScore) { bestScore = score; best = i; }
-    });
-    return best >= 0 ? base + best : -1;
+    // השפל הנמוך ביותר בחלון
+    var loIdx = 0, lo = Infinity;
+    w.forEach(function (c, i) { if (c.l < lo) { lo = c.l; loIdx = i; } });
+    if (loIdx >= win - 3) return -1;                        // שפל טרי = עדיין יורד
+    // העדפת נר נפח-שיא בטווח ±2 נרות מהשפל (ה-SC הקלאסי), אחרת השפל עצמו
+    var best = loIdx, bestV = w[loIdx].v;
+    for (var i = Math.max(0, loIdx - 2); i <= Math.min(win - 1, loIdx + 2); i++) {
+      if (w[i].v > bestV && w[i].l < lo * 1.025) { bestV = w[i].v; best = i; }
+    }
+    return base + best;
   }
 
   // ── Automatic Rally: השיא הגבוה ביותר ב-N נרות אחרי ה-SC ──
@@ -91,8 +91,8 @@
 
     if (scIdx >= 0) {
       sup = candles[scIdx].l;
-      // תמיכה = שפל ה-SC; חפש שפל-מאומת נמוך יותר אחרי (לא נמצא → SC הוא התמיכה)
-      res = arIdx >= 0 ? candles[arIdx].h : Math.max.apply(null, candles.slice(scIdx).map(function (c) { return c.h; }));
+      // התנגדות הטווח = השיא הגבוה ביותר מאז ה-SC (גג מבני יציב יותר מ-AR בלבד)
+      res = Math.max.apply(null, candles.slice(scIdx).map(function (c) { return c.h; }));
       structure = 'אקומולציה (טווח ' + money(sup) + '–' + money(res) + ')';
       // מיקום בטווח
       var posInRange = (last.c - sup) / (res - sup);
@@ -158,24 +158,30 @@
     if (sup == null || res == null || res <= sup) return [];
     var W = res - sup, M = sup + W / 2;
     function rr(entry, sl, tp) { return Math.round(Math.abs(tp - entry) / Math.abs(entry - sl) * 10) / 10; }
-    var sE = sup + W * 0.06, sSL = sup - W * 0.09, sTP1 = M, sTP2 = res;
-    var bE = res + W * 0.01, bSL = res - W * 0.06, bTP = res + W;
-    var uE = res - W * 0.02, uSL = res + W * 0.05, uTP1 = M, uTP2 = sup + W * 0.05;
+    var sE = sup + W * 0.06, sSL = sup - W * 0.09, sTP1 = M, sTP2 = res, sTP3 = res + W;
+    var bE = res + W * 0.01, bSL = res - W * 0.06, bTP1 = res + W * 0.5, bTP2 = res + W, bTP3 = res + W * 1.5;
+    var uE = res - W * 0.02, uSL = res + W * 0.05, uTP1 = M, uTP2 = sup + W * 0.05, uTP3 = sup;
     return [
       { kind: 'long', title: '🟢 לונג A — ספרינג (המועדף)',
-        trigger: 'ניעור (sweep) מתחת ' + money(sup) + ' + ריקליים מהיר מעל ' + money(sup * 1.005) + ' עם נר היפוך 15m/1H',
-        entry: sE, sl: sSL, tp1: sTP1, tp2: sTP2, rr: rr(sE, sSL, sTP2) },
+        tf: 'מבנה יומי+4H · טריגר ספרינג+טסט ב-15m',
+        cond: 'שטיפה מתחת ' + money(sup) + ' → ריקליים מעל ' + money(sup * 1.005) + ' + טסט 15ד\' בנפח ≤60%',
+        trigger: 'ניעור (sweep) מתחת ' + money(sup) + ' + ריקליים מהיר עם נר היפוך 15m/1H',
+        entry: sE, sl: sSL, tp1: sTP1, tp2: sTP2, tp3: sTP3, rr: rr(sE, sSL, sTP2) },
       { kind: 'break', title: '🔵 לונג B — פריצת SOS (שמרני)',
+        tf: 'מבנה בסגירת נר יומי · טריגר חזרה ל-BU ב-1H/15m',
+        cond: 'נר יומי נסגר מעל ' + money(res) + ' בנפח פי 2–3 → BU/חזרה לתקרה → טריגר',
         trigger: 'סגירת יומי/4H מעל ' + money(res) + ' בנפח פי 2–3, ואז פולבק LPS',
-        entry: bE, sl: bSL, tp1: M, tp2: bTP, rr: rr(bE, bSL, bTP) },
+        entry: bE, sl: bSL, tp1: bTP1, tp2: bTP2, tp3: bTP3, rr: rr(bE, bSL, bTP2) },
       { kind: 'short', title: '🔴 שורט — UT/דחייה בתקרה',
+        tf: 'מבנה 4H/1H · טריגר LPSY נכשל ב-15m',
+        cond: 'פריצה כוזבת מעל ' + money(res) + ' → סגירה בחזרה בטווח + LPSY שנכשל',
         trigger: 'דחייה ב-' + money(res) + ' עם נר בליעה דובי + נפח פריצה חלש (No Demand)',
-        entry: uE, sl: uSL, tp1: uTP1, tp2: uTP2, rr: rr(uE, uSL, uTP1) }
+        entry: uE, sl: uSL, tp1: uTP1, tp2: uTP2, tp3: uTP3, rr: rr(uE, uSL, uTP1) }
     ];
   }
 
   // ── צ'ק-ליסט 8 השאלות + פסיקה ──
-  function checklistAndVerdict(D, last, scenarios) {
+  function checklistAndVerdict(D, last, scenarios, isBTC, btcBias) {
     var sup = D.sup, res = D.res, price = last.c;
     var posInRange = sup != null ? (price - sup) / (res - sup) : 0.5;
     var nearSup = sup != null && Math.abs(price - sup) / (res - sup) < 0.12;
@@ -195,7 +201,9 @@
       { n: 5, label: 'R:R ≥ 3?', state: bestRR >= 3 ? 'part' : 'no',
         note: 'תרחיש מיטבי R:R ≈ ' + bestRR + (bestRR >= 3 ? ' — אך לא פעיל' : '') },
       { n: 6, label: 'סיכון ≤ 1% וחום תיק ≤ 6%?', state: 'yes', note: 'גודל ייקבע ל-1% בכניסה בפועל' },
-      { n: 7, label: '(אלט) BTC מיושר?', state: 'yes', note: 'תלוי-נכס — בדוק מול הטיית BTC ידנית באלטים' },
+      { n: 7, label: '(אלט) BTC מיושר?',
+        state: isBTC ? 'yes' : (/דובי/.test(btcBias || '') ? 'no' : 'yes'),
+        note: isBTC ? 'זהו BTC עצמו' : (/דובי/.test(btcBias || '') ? 'BTC דובי — אלט-לונג נחלש (חוק הביטקוין)' : 'BTC ' + (btcBias || 'ניטרלי') + ' — מיושר') },
       { n: 8, label: 'OI/פאנדינג לא סותרים?', state: 'warn', note: 'לא נבדק — נתוני ספוט בלבד' }
     ];
 
@@ -216,7 +224,9 @@
   }
 
   // ── הניתוח המרכזי ──
-  function analyze(bundle) {
+  function analyze(bundle, opts) {
+    opts = opts || {};
+    var isBTC = /^BTC/.test(bundle.symbol || '');
     if (!bundle || !bundle.d || !bundle.d.length) throw new Error('אין נתונים לניתוח');
     var D = analyzeTF(bundle.d, 'd');
     var H4 = analyzeTF(bundle.h4, 'h4');
@@ -225,15 +235,24 @@
     var lastPrice = bundle.m15 && bundle.m15.length ? bundle.m15[bundle.m15.length - 1].c : last.c;
 
     var scenarios = buildScenarios(D.sup, D.res);
-    var cv = checklistAndVerdict(D, { c: lastPrice }, scenarios);
+    var cv = checklistAndVerdict(D, { c: lastPrice }, scenarios, isBTC, opts.btcBias);
 
     // שליטה כוללת
     function score(tf) { return tf.control.tag.indexOf('🟢') === 0 ? 1 : tf.control.tag.indexOf('🔴') === 0 ? -1 : 0; }
     var net = score(D) * 1.4 + score(H4) + score(H1);
     var overall = net > 0.6 ? '🟢 הקונים שולטים' : net < -0.6 ? '🔴 המוכרים שולטים' : '🟠 קרב נחוש / מעורב';
 
-    // 15m setup
+    // 15m setup + קריאת שליטה ברגע הטריגר
     var m15Setup = cv.verdict === 'GO' ? 'Primary — יש כניסה' : 'חכה — אין טריגר';
+    var m15read = (bundle.m15 && bundle.m15.length) ? controlRead(bundle.m15) : null;
+
+    // התראות מומלצות (רמות מפתח לחמש)
+    var alerts = [];
+    if (D.sup != null) {
+      alerts.push(D.sup * 1.012);   // מעל התמיכה — קדם-ספרינג
+      alerts.push(D.res * 1.001);   // פריצת התקרה — קדם-SOS
+      alerts.push(D.res * 1.012);   // מעל התקרה — אזור UT
+    }
 
     return {
       symbol: bundle.symbol,
@@ -245,6 +264,8 @@
       tfs: { d: D, h4: H4, h1: H1 },
       overall: overall,
       m15Setup: m15Setup,
+      m15read: m15read,
+      alerts: alerts,
       v1Table: v1Table(bundle.d, D.scIdx, D.arIdx),
       checklist: cv.checklist,
       scenarios: scenarios,

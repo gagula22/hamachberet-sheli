@@ -35,6 +35,14 @@
 .wk-report .verdict:hover { transform: scale(1.03); }
 .wk-report .verdict.go { background: #e7f7ee; color: #1f8a54; border-color: #97d8b4; }
 .wk-report .verdict.nogo { background: #fceae8; color: #c44b42; border-color: #f0b7b0; }
+/* 3 מטבעות: TOC + בלוק מטבע + coinbar */
+.wk-report .toc { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin: 8px 0 18px; }
+.wk-report .toc a { font-size: .9rem; font-weight: 600; background: #eef4fc; color: #2b6cb0; border: 1px solid #c5d8f0; border-radius: 20px; padding: 6px 16px; text-decoration: none; }
+.wk-report .toc a:hover { background: #dbe8f8; }
+.wk-report .coinblock { margin-bottom: 26px; }
+.wk-report .coinbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 11px 16px; margin-bottom: 12px; }
+.wk-report .coinbar h2 { font-size: 1.15rem; color: #34425c; border: none; padding: 0; }
+.wk-report h2.sec { border-right-color: var(--accent); }
 .wk-report .sub { color: var(--muted); font-size: .9rem; }
 .wk-report section { background: var(--card); border: 1px solid var(--border); border-radius: 13px; padding: 18px 20px; margin-bottom: 15px; box-shadow: 0 1px 3px rgba(40,60,100,.05); }
 .wk-report h2 { font-size: 1.15rem; margin-bottom: 10px; padding-right: 10px; border-right: 4px solid var(--accent); color: #3a4a66; }
@@ -52,7 +60,7 @@
 .wk-report .read b.lbl { color: var(--cyan); }
 .wk-report .ctrl-tag { display: inline-block; font-size: .78rem; font-weight: bold; border-radius: 20px; padding: 2px 11px; margin-bottom: 6px; }
 .wk-report .ctrl-buy { background: #e7f5ee; color: #1f8a54; } .wk-report .ctrl-sell { background: #fceae8; color: #c44b42; } .wk-report .ctrl-mix { background: #fbf2e0; color: #9a6f1d; }
-.wk-report .wkchart { width: 100%; border-radius: 9px; display: block; margin: 4px 0; background: #0e1116; }
+.wk-report .wkchart { width: 100%; border-radius: 9px; display: block; margin: 4px 0; background: #fff; border: 1px solid #e6eaf0; }
 .wk-report .scen { border-radius: 11px; padding: 14px; margin: 10px 0; border: 1px solid var(--border); }
 .wk-report .long { background: #f1faf4; border-color: #bce3cd; } .wk-report .short { background: #fdf2f1; border-color: #f0cac6; }
 .wk-report .scen h3 { margin-bottom: 6px; font-size: 1rem; } .wk-report .scen ul { padding-right: 18px; font-size: .86rem; } .wk-report .scen li { margin-bottom: 4px; }

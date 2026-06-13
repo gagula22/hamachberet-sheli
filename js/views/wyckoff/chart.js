@@ -26,9 +26,10 @@
     function X(i) { return padL + cw * i + cw / 2; }
     function Y(p) { return padT + (max - p) / (max - min) * priceH; }
 
-    x.fillStyle = '#0e1116'; x.fillRect(0, 0, W, H);
+    // רקע בהיר (תואם תבנית הסקיל — לא שחור)
+    x.fillStyle = '#ffffff'; x.fillRect(0, 0, W, H);
     // gridlines + price labels
-    x.strokeStyle = '#1d2530'; x.fillStyle = '#7d8aa0'; x.font = '11px Segoe UI'; x.textAlign = 'right';
+    x.strokeStyle = '#eef1f5'; x.fillStyle = '#7a8699'; x.font = '11px Segoe UI'; x.textAlign = 'right';
     for (var g = 0; g <= 4; g++) {
       var p = min + (max - min) * g / 4, yy = Y(p);
       x.beginPath(); x.moveTo(padL, yy); x.lineTo(W - padR, yy); x.stroke();
@@ -38,9 +39,17 @@
     if (opts.res != null) { x.setLineDash([5, 4]); x.strokeStyle = '#d2483b'; x.beginPath(); x.moveTo(padL, Y(opts.res)); x.lineTo(W - padR, Y(opts.res)); x.stroke(); }
     if (opts.sup != null) { x.setLineDash([5, 4]); x.strokeStyle = '#1f9d57'; x.beginPath(); x.moveTo(padL, Y(opts.sup)); x.lineTo(W - padR, Y(opts.sup)); x.stroke(); }
     x.setLineDash([]);
+    // קווי-רמה לתרחיש (כניסה/SL/יעדים) — opts.levels=[{price,color,label}]
+    if (opts.levels) opts.levels.forEach(function (lv) {
+      if (lv.price < min || lv.price > max) return;
+      x.strokeStyle = lv.color; x.setLineDash([6, 3]); x.lineWidth = 1.3;
+      x.beginPath(); x.moveTo(padL, Y(lv.price)); x.lineTo(W - padR, Y(lv.price)); x.stroke(); x.setLineDash([]);
+      x.fillStyle = lv.color; x.font = 'bold 11px Segoe UI'; x.textAlign = 'left';
+      x.fillText(lv.label, padL + 4, Y(lv.price) - 3);
+    });
     // candles + volume
     data.forEach(function (c, i) {
-      var up = c.c >= c.o, col = up ? '#26a269' : '#e0524a', cx = X(i);
+      var up = c.c >= c.o, col = up ? '#2faa6a' : '#e06a62', cx = X(i);
       x.strokeStyle = col; x.fillStyle = col; x.lineWidth = 1;
       x.beginPath(); x.moveTo(cx, Y(c.h)); x.lineTo(cx, Y(c.l)); x.stroke();
       var bw = Math.max(2, cw * 0.62);
@@ -55,18 +64,18 @@
         if (li < 0 || li >= n) return;
         var lab = opts.marks[gi], c = data[li], below = (lab === 'SC' || lab === 'Spring');
         var cx = X(li), cy = Y(below ? c.l : c.h);
-        x.fillStyle = below ? '#e0b34a' : '#5aa9ff'; x.font = 'bold 12px Segoe UI'; x.textAlign = 'center';
+        x.fillStyle = below ? '#cf9224' : '#4f7fd1'; x.font = 'bold 12px Segoe UI'; x.textAlign = 'center';
         x.fillText(lab, cx, cy + (below ? 16 : -7));
         x.beginPath(); x.arc(cx, cy, 3, 0, 7); x.fill();
       });
     }
     // current price line
     var last = data[n - 1].c;
-    x.fillStyle = '#e8eaed'; x.textAlign = 'left'; x.font = 'bold 11px Segoe UI';
+    x.fillStyle = '#2b3648'; x.textAlign = 'left'; x.font = 'bold 11px Segoe UI';
     x.fillText('עכשיו $' + Math.round(last).toLocaleString('en-US'), padL + 4, Y(last) - 5);
-    x.strokeStyle = '#e8eaed'; x.setLineDash([2, 3]); x.beginPath(); x.moveTo(padL, Y(last)); x.lineTo(W - padR, Y(last)); x.stroke(); x.setLineDash([]);
+    x.strokeStyle = '#9aa6b8'; x.setLineDash([2, 3]); x.beginPath(); x.moveTo(padL, Y(last)); x.lineTo(W - padR, Y(last)); x.stroke(); x.setLineDash([]);
     // date labels (sparse)
-    x.fillStyle = '#6b7688'; x.font = '10px Segoe UI'; x.textAlign = 'center';
+    x.fillStyle = '#9aa6b8'; x.font = '10px Segoe UI'; x.textAlign = 'center';
     var step = Math.ceil(n / 9);
     data.forEach(function (c, i) { if (i % step === 0 || i === n - 1) x.fillText(fmtDate(c.t), X(i), H - 7); });
   }
