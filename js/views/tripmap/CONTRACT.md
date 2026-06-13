@@ -204,6 +204,36 @@ config.js → engine.js → street.js → controls.js → planner-data.js → pl
    כרונולוגית (צהריים בין בוקר לאחה"צ, לא נדחף לסוף) → אין קפיצה אחורה; (ב) `clusterIntoDays`
    מקבץ אטרקציות לימים גיאוגרפית-רציפים במקום לפי ניקוד.
 
+## איך זה עובד — המנגנון לכל מודול (כדי לתקן/להרחיב בביטחון)
+- **engine.js (`TripMapEngine`)** — `ensureLib()` מזריק את maplibre המקומי בטעינה עצלה
+  (fallback ל-CDN) + רושם תוסף RTL. `create()` בונה **style אחד** עם כל המקורות, ומחליף
+  לוויין/רחובות/3D דרך `visibility` של שכבות (לא setStyle) כדי לא לאבד markers/routes.
+  3D = `setTerrain` (raster-dem terrarium) + `fill-extrusion` על שכבת building + pitch.
+  `addMarker` עם `badge` בונה אלמנט-סיכה מותאם (מספר/🚩/🏁). `fitBounds` ממקד על נקודות.
+- **routing.js (`TripRouting`)** — `route(coords)` שולח ל-OSRM הציבורי
+  (`/route/v1/driving/...&geometries=geojson&steps=true&alternatives=true`), ומחזיר
+  `{coords, distanceKm, durationMin, roads}` לכל מסלול (roads מחולץ מ-`steps[].ref`). cache
+  פנימי לפי מפתח-קואורדינטות. נכשל → reject (הקורא נופל לקו אווירי).
+- **planner-data.js (`TripPlannerData`)** — אובייקט נתונים סטטי בלבד (regions/attractions/
+  restaurants/lodging/abroad/originCities/packing/checklist/pitfalls/israelNotes). קואורדינטות
+  אמיתיות (מדגם אומת מול Nominatim).
+- **planner-engine.js (`TripPlannerEngine.plan`)** — לוגיקה טהורה. israel: `pickRegion` →
+  `candidateAttractions` (ניקוד לפי סגנון/הרכב/עונה/גיל) → **`clusterIntoDays`**: שרשרת
+  nearest-neighbor מנקודת הבסיס, חתוכה לקטעים רצופים = ימים גיאוגרפית-קומפקטיים → לכל יום
+  `orderGeographically` + בניית **ציר-זמן כרונולוגי** (בוקר→צהריים→אחה"צ→ערב) שממנו נגזרים
+  `blocks` ו-`stops` *באותו סדר* (כך אין קפיצה אחורה). מסעדות: צהריים ליד אטרקציית הבוקר,
+  ערב ליד הלינה. תקציב לפי priceNight/price/cost. abroad/getaway/surprise — ראה הקוד.
+- **planner-ui.js (`TripPlannerUI`)** — אשף 3 מסכים במודאל; `plan()` נקרא במסך התוצאה.
+  **ייצוא:** `buildStandaloneHTML` בונה מסמך עם CSS מוטמע (A4/RTL); הדפסה דרך **iframe נקי**
+  (לא @media print על ה-DOM החי). `buildMapsSection` מנתב כל יום (TripRouting), מטמיע נתוני
+  Leaflet + **SVG-גיבוי** אופליין; הסקריפט המוטמע מצייר Leaflet ומסתיר את ה-SVG כשהאריחים עולים.
+- **trip-layer.js (`TripLayer`)** — פאנל הטיולים + ציור על המפה: `showTripOnMap` מצייר
+  🚩התחלה (origin) + עצירות ממוספרות + 🏁סוף, ומנתב כל יום (`drawDayRoute` → רק המסלול
+  הפעיל; `cycleRoute` מחליף לחלופי). `_drawToken` מבטל ציורים אסינכרוניים ישנים. שמירה ל-Store('trips').
+- **index.js** — ה-view: פריסה, סרגל צף, חיפוש Nominatim, ו**ניהול חיים**: MutationObserver +
+  Store.subscribe מזהים עזיבת ה-view ומריצים `cleanup` (destroy למפה, detach ל-controls,
+  הסרת מאזיני window/resize) — אומת: אפס דליפה במעבר חוזר בין מסכים.
+
 ## מצב נוכחי — מה עובד (נבדק חי, אפס שגיאות קונסול)
 - מפה 2D/3D, לוויין/רחובות, שמות, חיפוש Nominatim, תצוגת רחוב, ניווט גוף-ראשון.
 - אשף תכנון מלא ל-4 המסלולים; טיול בארץ → עצירות+מסלול אמיתי על המפה; חו"ל → מסמך מלא.
@@ -229,7 +259,17 @@ config.js → engine.js → street.js → controls.js → planner-data.js → pl
 - **שבת חכמה** — להחזיר העדפת shabbatOpen מבלי לפגוע ברציפות (למשל לבחור את היום שכבר
   עשיר ב-shabbatOpen כ"יום השבת").
 
-## איפה עצרנו
-הכל מוטמע ונדחף לאתר החי (gagula22.github.io/hamachberet-sheli, ענף main). 9 קומיטים
-של הפיצ'ר. המשתמש אישר דפלוי. כל הבדיקות עברו. הצעד הבא תלוי בבקשת המשתמש (ראה
-"נקודות המשך פתוחות").
+## ⚠️ דפלוי — ידע תפעולי קריטי (אל תסיר!)
+- האתר באוויר ב-**GitHub Pages** מענף `main` (root). פריסה = `git push origin main`.
+- **קובץ `.nojekyll` בשורש חובה** — בלעדיו GitHub Pages מריץ Jekyll ש**מתעלם מתיקיות בשם
+  `vendor`**, וכל `js/vendor/*` (maplibre, pdfjs, mammoth, chart, tesseract, firebase)
+  מוחזר 404. הקובץ הזה מכבה את Jekyll ומגיש הכל סטטית. **לא למחוק אותו.**
+- מוסכמת cache: `?v=N` פר-קובץ ב-index.html. ששינית קובץ → הקפץ את ה-`v` שלו.
+- הבנייה הראשונה אחרי שינוי סוג (הוספת .nojekyll) לוקחת עד ~כמה דקות; אחרי זה ~1-2 דק'.
+
+## איפה עצרנו (עדכני)
+הכל מוטמע, נדחף ונפרס לאתר החי (gagula22.github.io/hamachberet-sheli, ענף main, נכון ל-13.6.2026).
+אומת מקצה-לקצה: כל הקבצים מוגשים (200), 25 המסכים מרנדרים, אפס שגיאות קונסול, ניקוי משאבים
+מלא במעבר בין מסכים, בידוד מקלדת/namespace/overlays, ו-`.nojekyll` תיקן את 404 ה-vendor.
+git נקי ומסונכרן עם origin. **הצעד הבא תלוי בבקשת המשתמש** (ראה "נקודות המשך פתוחות" —
+ג'/2-opt, חלופות מובטחות, ייצוא PDF, שבת חכמה).
