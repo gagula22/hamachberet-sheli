@@ -297,8 +297,20 @@ Web Speech he-IL; טקסט סופי דרך `execCommand('insertText')` → שמ�
 | מנוע המפה: 2D/3D, terrain, markers, מסלולים | `tripmap/engine.js` (`window.TripMapEngine`) |
 | תצוגת רחוב (overlay, Google embed, fallback) | `tripmap/street.js` (`window.TripMapStreet`) |
 | ניווט גוף-ראשון במפה (WASD/חצים/Q/E/R/F) | `tripmap/controls.js` (`window.TripMapControls`) |
-| פאנל הטיולים, ייבוא JSON, פרומפט הסקיל | `tripmap/trip-layer.js` (`window.TripLayer`) |
+| פאנל הטיולים, ייבוא JSON, חיבור המתכנן | `tripmap/trip-layer.js` (`window.TripLayer`) |
 | פריסת ה-view, סרגל צף, חיפוש Nominatim | `tripmap/index.js` |
+| מאגר ידע הטיולים (אטרקציות/מסעדות/לינה/חו"ל) | `tripmap/planner-data.js` (`window.TripPlannerData`) |
+| מנוע התכנון (לוגיקה טהורה, 4 מסלולים) | `tripmap/planner-engine.js` (`window.TripPlannerEngine`) |
+| אשף התכנון + מסך התוכנית + הדפסה | `tripmap/planner-ui.js` + `css/features/tripplanner.css` (`window.TripPlannerUI`) |
+
+**מתכנן הטיולים עצמאי לחלוטין — אפס תלות ב-LLM.** האשף (planner-ui) מציג את כל
+אפשרויות הסקיל trip-planner-metakhnen-tiyulim כ-UI: 4 מסלולים (בארץ/חו"ל/חופשה
+קצרה/הפתע אותי), המנוע (planner-engine) מחולל תוכנית יום-יום אמיתית מתוך מאגר הידע
+(planner-data: 122 אטרקציות עם קואורדינטות אמיתיות שאומתו מול Nominatim, 46 מסעדות,
+40 לינה, 12 יעדי חו"ל). טיול בארץ נשמר עם עצירות ומוצג על המפה; כל טיול מחזיק `doc`
+(מסמך תוכנית מלא: ימים, תקציב, ציוד, צ'קליסט, טיפים) שנפתח מ-📄 בפאנל. הצמדת
+surprise→abroad מעבירה הלאה את התשובות שכבר נבחרו (ימים/הרכב/חודש/תקציב). הסכמה
+המקובעת של כל המודולים — ב-CONTRACT.md, סעיף "מתכנן הטיולים העצמאי".
 
 הערות מימוש: MapLibre GL v5 מאורז ב-`js/vendor/maplibre/` (טעינה עצלה + fallback CDN);
 לוויין Esri (maxzoom 19), גבהים AWS terrarium, מבנים OpenFreeMap fill-extrusion.

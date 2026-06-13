@@ -85,8 +85,67 @@ B משתמש רק ב־API הציבורי של handle (כולל handle.map). לא
   ה-JSON הזו) ללוח + כפתור "ייבוא JSON" שמדביק את תוצאת הסקיל ושומר ל-Store.
 - חיפוש מקום: Nominatim (חינמי, בלי מפתח) עם debounce ו-User-Agent תקין.
 
+## מתכנן הטיולים העצמאי (planner) — שלושה מודולים, אפס תלות ב-LLM
+
+> כל תכנון הטיול מתבצע **בתוך האתר**: אשף בחירות → מחולל תוכנית מקומי → תוצאה על
+> המפה + מסמך תוכנית. ארבעת המסלולים של הסקיל: בארץ / חו"ל / חופשה קצרה / הפתע אותי.
+
+| בעלות | קובץ | namespace |
+|---|---|---|
+| סוכן D — מאגר ידע | `js/views/tripmap/planner-data.js` | `window.TripPlannerData` |
+| סוכן E — מנוע תכנון | `js/views/tripmap/planner-engine.js` | `window.TripPlannerEngine` |
+| סוכן F — אשף UI | `js/views/tripmap/planner-ui.js` + `css/features/tripplanner.css` | `window.TripPlannerUI` |
+
+### צורת הנתונים (TripPlannerData) — מקובעת, כולם כותבים מולה
+```js
+{
+  regions: [{ id, name, center:{lat,lng}, seasons:['spring','summer','autumn','winter'],
+              desc, audiences:['family','couple','friends','solo'] }],
+  attractions: [{ id, name, region, lat, lng,
+                  type:'nature'|'water'|'beach'|'history'|'museum'|'fun'|'view'|'market'|'spa',
+                  durationH, cost:0|1|2|3, kids:'all'|'4+'|'8+'|'teens'|'no',
+                  seasons:[...], shabbatOpen:bool, needsBooking:bool, rainOk:bool, desc, tip? }],
+  restaurants: [{ id, name, region, lat, lng, style, price:1|2|3, kosher:bool, desc }],
+  lodging:     [{ id, name, region, lat, lng, level:'free'|'budget'|'mid'|'premium',
+                  priceNight:[min,max], romantic:bool, family:bool, pool:bool, desc }],
+  abroad: { destinations: [{ id, name, daily:{lodging:[lo,hi],food:[..],attractions:[..],transport:[..]},
+            flight:{low:[..],regular:[..],peak:[..]}, bestSeasons, language, currency, timeDiff,
+            kosher:bool, days:[{title, morning, lunch, afternoon, evening, tip}...] /*תבנית עד 10 ימים*/,
+            why, vibe:'classic'|'adventure'|'pamper' }] },
+  packing: { base:[], summer:[], winter:[], kids:[], baby:[], hiking:[], beach:[], abroad:[] },
+  checklist: [],            // צ'קליסט לפני טיסה (מהסקיל)
+  pitfalls: [{trap, truth}],// מלכודות נפוצות (מהסקיל)
+  israelNotes: { shabbat, seasons, kids }
+}
+```
+
+### ממשק המנוע (TripPlannerEngine) — לוגיקה טהורה, אפס DOM/רשת
+```js
+plan(params) → result
+// params: { kind:'israel'|'abroad'|'getaway'|'surprise',
+//   days, nights?, month? /*1-12*/,
+//   composition:{ type:'couple'|'family'|'friends'|'solo', kidsAges?:[] },
+//   budgetLevel:'free'|'budget'|'mid'|'premium' | budgetTotal?,
+//   style:'nature'|'attractions'|'food'|'mixed', region? /*israel*/,
+//   destination? /*abroad id*/, important? /*getaway*/, avoid? /*surprise*/ }
+// result.kind==='israel':  { trip /*סכמת TripLayer מלאה עם lat/lng אמיתיים*/, doc }
+// result.kind==='abroad':  { trip:null, doc }
+// result.kind==='getaway': { options:[3 × { title, lodging, doc }] }
+// result.kind==='surprise':{ suggestions:[3 × { destination, why, estCost }] }
+// doc = { title, overview, days:[{n,title,blocks:[{when,what,desc,cost?}],transport?,tip?,costPerDay?}],
+//         budgetTable:[{cat,perDay,total}], packing:[], checklist:[], tips:[], lodging?, rainAlt? }
+```
+
+### ממשק האשף (TripPlannerUI)
+```js
+TripPlannerUI.open({ onSave:function(trip, doc){} })  // אשף מלא במודאל (מוסכמת ✕/ESC/רקע)
+TripPlannerUI.showDoc(doc)                            // הצגת מסמך תוכנית שמור
+```
+- האשף שומר doc בתוך הטיול: `trip.doc = doc` (השדה אופציונלי בסכמת trips).
+- טיולי חו"ל/אופציות getaway בלי קואורדינטות → נשמרים עם `days:[]` ו-doc מלא.
+
 ## סדר טעינה ב-index.html (באחריות C)
-vendor/maplibre → tripmap/config.js → engine.js → street.js → controls.js → trip-layer.js → index.js
+vendor/maplibre → tripmap/config.js → engine.js → street.js → controls.js → planner-data.js → planner-engine.js → planner-ui.js → trip-layer.js → index.js
 
 ## עמידות (חובה לכולם)
 כל מודול בודק שהתלות שלו קיימת (`if (!window.TripMapEngine) …`) ומציג הודעה ידידותית

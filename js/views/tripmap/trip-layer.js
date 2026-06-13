@@ -129,62 +129,35 @@
     return { close: close };
   }
 
-  // ── הפרומפט המוכן ל-Claude (כולל סכמת ה-JSON המדויקת מ-CONTRACT.md) ──
-  function claudePrompt() {
-    return [
-      'היי Claude! בעזרת סקיל תכנון הטיולים (trip-planner-metakhnen-tiyulim) תכנן לי בבקשה טיול בישראל.',
-      '',
-      'מה אני רוצה: [כתבו כאן: אזור/יעד, כמה ימים, סגנון (טבע / עירוני / משפחה / קולינרי), ניידות והעדפות]',
-      '',
-      'בסוף התשובה, בנוסף לתוכנית המפורטת, החזר גם בלוק JSON יחיד (עטוף ב-```json) בסכמה המדויקת הבאה — בלי שדות נוספים ובלי טקסט חופשי בתוך הבלוק:',
-      '',
-      '{',
-      '  "title": "שם הטיול",',
-      '  "region": "האזור בארץ",',
-      '  "days": [',
-      '    {',
-      '      "n": 1,',
-      '      "title": "כותרת היום",',
-      '      "stops": [',
-      '        { "name": "שם העצירה", "lat": 32.7940, "lng": 34.9896, "time": "09:00", "note": "הערה קצרה", "type": "nature" }',
-      '      ]',
-      '    }',
-      '  ]',
-      '}',
-      '',
-      'חשוב מאוד: lat/lng חייבים להיות קואורדינטות אמיתיות ומדויקות (WGS84) של כל עצירה, בתחומי ישראל (lat בין 29 ל-34, lng בין 34 ל-36). השדות time/note/type אופציונליים. את ה-JSON אדביק באתר "המחברת שלי" → מפת טיולים → "📋 ייבוא תוכנית (JSON)".'
-    ].join('\n');
-  }
-
-  function copyText(text) {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      return navigator.clipboard.writeText(text);
+  // ── מתכנן הטיולים העצמאי (אשף מקומי — אפס תלות ב-LLM) ──
+  // נפתח דרך window.TripPlannerUI (סוכן F). onSave מקבל את הטיול והמסמך
+  // שחולל המנוע, שומר ל-Store, ומציג על המפה (אם יש עצירות עם קואורדינטות).
+  function openPlanner() {
+    if (!window.TripPlannerUI || typeof TripPlannerUI.open !== 'function') {
+      App.toast('מתכנן הטיולים עדיין נטען — נסו שוב בעוד רגע'); return;
     }
-    return new Promise(function (resolve, reject) {  // fallback לדפדפנים ישנים / http
-      var ta = document.createElement('textarea');
-      ta.value = text;
-      ta.style.position = 'fixed'; ta.style.opacity = '0';
-      document.body.appendChild(ta);
-      ta.select();
-      try { document.execCommand('copy') ? resolve() : reject(new Error('copy failed')); }
-      catch (e) { reject(e); }
-      ta.remove();
+    TripPlannerUI.open({
+      onSave: function (trip, doc) {
+        if (!trip || typeof trip !== 'object') return;
+        if (!trip.id) trip.id = Store.uid();
+        if (!trip.createdAt) trip.createdAt = Date.now();
+        if (!Array.isArray(trip.days)) trip.days = [];
+        if (doc && !trip.doc) trip.doc = doc;          // המסמך נשמר בתוך הטיול
+        save(trips().concat([trip]));
+        _activeTripId = trip.id;
+        renderPanel();
+        // טיול בארץ → עצירות עם קואורדינטות → הצגה על המפה. חו"ל → רק מסמך.
+        var hasStops = trip.days.some(function (d) { return d.stops && d.stops.length; });
+        if (hasStops) {
+          showTripOnMap(trip);
+          var d0 = trip.days.find(function (d) { return d.stops && d.stops.length; });
+          if (d0) flyToDay(d0);
+          App.toast('🧳 "' + trip.title + '" נשמר והוצג על המפה');
+        } else {
+          App.toast('🧳 "' + trip.title + '" נשמר — פתחו אותו לצפייה בתוכנית');
+        }
+      }
     });
-  }
-
-  function openClaudeModal() {
-    var body = el('div', { class: 'tm-claude-body' }, [
-      el('p', {}, 'מעתיקים את הפרומפט, מדביקים בשיחה עם Claude (עם סקיל תכנון הטיולים), ומקבלים תוכנית מלאה + JSON מוכן לייבוא. את ה-JSON מדביקים כאן דרך "📋 ייבוא תוכנית (JSON)" — והטיול מופיע על המפה.'),
-      el('pre', { class: 'tm-prompt-preview' }, claudePrompt())
-    ]);
-    var copyBtn = el('button', { class: 'tm-primary-btn' }, '📋 העתק את הפרומפט');
-    copyBtn.addEventListener('click', function () {
-      copyText(claudePrompt()).then(function () {
-        App.toast('✈️ הפרומפט הועתק — הדביקו בשיחה עם Claude');
-      }).catch(function () { App.toast('ההעתקה נכשלה — סמנו והעתיקו ידנית'); });
-    });
-    body.appendChild(el('div', { class: 'tm-modal-actions' }, [copyBtn]));
-    openModal('✈️ תכנן טיול עם Claude', body);
   }
 
   // ── ולידציה של JSON מיובא ────────────────────────────────────────────
@@ -319,7 +292,7 @@
 
       // פעולות עליונות
       body.appendChild(el('div', { class: 'tm-actions' }, [
-        el('button', { class: 'tm-action-btn', onClick: openClaudeModal }, '✈️ תכנן טיול עם Claude'),
+        el('button', { class: 'tm-action-btn primary', onClick: openPlanner }, '✨ תכנן טיול חדש'),
         el('button', { class: 'tm-action-btn', onClick: openImportModal }, '📋 ייבוא תוכנית (JSON)')
       ]));
 
@@ -342,7 +315,7 @@
       // רשימת הטיולים
       var list = trips().slice().sort(function (a, b) { return (b.createdAt || 0) - (a.createdAt || 0); });
       if (!list.length) {
-        body.appendChild(el('div', { class: 'tm-empty' }, 'עוד אין טיולים. צרו אחד, או תנו ל-Claude לתכנן ✈️'));
+        body.appendChild(el('div', { class: 'tm-empty' }, 'עוד אין טיולים. לחצו "✨ תכנן טיול חדש" וקבלו תוכנית מלאה תוך שניות.'));
       }
       list.forEach(function (t) {
         var isActive = t.id === _activeTripId;
@@ -362,6 +335,16 @@
           disarmAddStop();
           renderPanel();
         });
+        row.appendChild(open);
+        // טיול שחולל ע"י המתכנן מחזיק תוכנית מלאה (doc) — כפתור לפתיחתה
+        if (t.doc && window.TripPlannerUI && TripPlannerUI.showDoc) {
+          var docBtn = el('button', { class: 'tm-trip-doc', title: 'צפייה בתוכנית המלאה' }, '📄');
+          docBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            try { TripPlannerUI.showDoc(t.doc); } catch (err) { App.toast('שגיאה בפתיחת התוכנית'); }
+          });
+          row.appendChild(docBtn);
+        }
         var del = el('button', { class: 'tm-trip-del', title: 'מחיקת הטיול' }, '✕');
         del.addEventListener('click', function (e) {
           e.stopPropagation();
@@ -372,7 +355,7 @@
           renderPanel();
           App.toast('הטיול נמחק');
         });
-        row.appendChild(open); row.appendChild(del);
+        row.appendChild(del);
         body.appendChild(row);
 
         if (isActive) body.appendChild(renderTripEditor(t));
