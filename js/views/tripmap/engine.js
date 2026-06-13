@@ -308,13 +308,31 @@
         },
 
         // מחזיר markerId. label → popup (עברית, dir=rtl). onClick({id,lat,lng}).
+        // o.badge → טקסט/אמוג'י על פני הסיכה (מספר עצירה / 🚩 התחלה / 🏁 סוף).
         addMarker: function (o) {
           if (state.destroyed || !o) return null;
           var id = o.id != null ? String(o.id) : ('tm-mk-' + (++seq));
           // אותו id שוב = החלפה (מסיר את הישן)
           _removeMarkers(function (m) { return m.id === id; });
-          var mk = new maplibregl.Marker({ color: o.color || C.markerColor })
-            .setLngLat([o.lng, o.lat]);
+          var mk;
+          if (o.badge != null) {
+            // סיכת-טיפה מותאמת עם תווית על פניה (קריא ישירות על המפה)
+            var bg = o.color || C.markerColor;
+            var big = (o.pinKind === 'start' || o.pinKind === 'end');
+            var sz = big ? 30 : 25;
+            var pin = document.createElement('div');
+            pin.style.cssText = 'width:' + sz + 'px;height:' + sz + 'px;border-radius:50% 50% 50% 0;' +
+              'transform:rotate(-45deg);background:' + bg + ';border:2px solid #fff;' +
+              'box-shadow:0 1px 5px rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;cursor:pointer;';
+            var txt = document.createElement('span');
+            txt.style.cssText = 'transform:rotate(45deg);color:#fff;font-weight:700;line-height:1;font-size:' +
+              (big ? 13 : 12) + 'px;';
+            txt.textContent = o.badge;
+            pin.appendChild(txt);
+            mk = new maplibregl.Marker({ element: pin, anchor: 'bottom' }).setLngLat([o.lng, o.lat]);
+          } else {
+            mk = new maplibregl.Marker({ color: o.color || C.markerColor }).setLngLat([o.lng, o.lat]);
+          }
           if (o.label) {
             var div = document.createElement('div');
             div.dir = 'rtl';

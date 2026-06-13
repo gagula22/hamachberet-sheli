@@ -965,20 +965,144 @@
     '.tp-bullets li::before{content:"•";position:absolute;inset-inline-start:0;color:#b3503f;font-weight:700}',
     '.tp-rain{margin:0;color:#444}',
     '.tp-export-foot{margin-top:16px;padding-top:9px;border-top:1px solid #e4dccb;font-size:9pt;color:#9a948a;text-align:center}',
-    'a{color:inherit}'
+    'a{color:inherit}',
+    // ── מפות לפי יום (ייצוא) ──
+    '.tp-maps{margin-top:16px}',
+    '.tp-map-day{margin:0 0 16px;break-inside:avoid;page-break-inside:avoid}',
+    '.tp-map-day h4{font-size:13.5pt;color:#1f6b46;margin:0 0 4px}',
+    '.tp-route-sum{font-size:10.5pt;color:#444;margin:0 0 6px;background:#f3f0e8;padding:5px 9px;border-radius:6px;display:inline-block}',
+    '.tp-map-box{position:relative;width:100%;height:300px;border:1px solid #d8d2c4;border-radius:9px;overflow:hidden;background:#eef2f4}',
+    '.tp-map-live{position:absolute;inset:0;width:100%;height:100%}',
+    '.tp-map-svg{position:absolute;inset:0;width:100%;height:100%}',
+    '.leaflet-container{font:inherit}',
+    '@media print{.tp-map-box{height:78mm}.tp-map-live{display:none!important}.tp-map-svg{display:block!important}}'
   ].join('');
 
-  // לוקח את צומת המסמך המוצג, מנקה אינטראקטיביות ומחזיר מחרוזת HTML עצמאית
-  function buildStandaloneHTML(docNode, title) {
+  var LEAFLET_CSS = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+  var LEAFLET_JS = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+
+  // לוקח את צומת המסמך המוצג ומחזיר מחרוזת HTML עצמאית. mapsHTML/mapData
+  // אופציונליים — אם קיימים, מוטמעים Leaflet + סקריפט שמצייר מפה לכל יום.
+  function buildStandaloneHTML(docNode, title, mapsHTML, mapData) {
     var clone = docNode.cloneNode(true);
-    // פותחים את כל האקורדיונים כדי שהכול יודפס/ייוצא, ומסירים שאריות אינטראקטיביות
     Array.prototype.forEach.call(clone.querySelectorAll('details'), function (d) { d.setAttribute('open', ''); });
     var safeTitle = (title || 'תוכנית טיול').replace(/[<>&]/g, ' ').trim();
     var foot = '<div class="tp-export-foot">נוצר באפליקציית "המחברת שלי" · מתכנן הטיולים</div>';
-    return '<!DOCTYPE html><html lang="he" dir="rtl"><head><meta charset="utf-8">' +
+    var head = '<!DOCTYPE html><html lang="he" dir="rtl"><head><meta charset="utf-8">' +
       '<meta name="viewport" content="width=device-width,initial-scale=1">' +
-      '<title>' + safeTitle + '</title><style>' + EXPORT_CSS + '</style></head>' +
-      '<body>' + clone.outerHTML + foot + '</body></html>';
+      '<title>' + safeTitle + '</title>';
+    if (mapsHTML) head += '<link rel="stylesheet" href="' + LEAFLET_CSS + '">';
+    head += '<style>' + EXPORT_CSS + '</style></head>';
+    var body = '<body>' + clone.outerHTML + (mapsHTML || '') + foot;
+    if (mapsHTML && mapData) {
+      // נתוני המפות מוטמעים; הסקריפט מצייר Leaflet כשהוא נטען, אחרת ה-SVG נשאר
+      var json = JSON.stringify(mapData).replace(/</g, '\\u003c');
+      body += '<script src="' + LEAFLET_JS + '"></scr' + 'ipt>';
+      body += '<script>' + MAP_INIT_JS.replace('__DATA__', json) + '</scr' + 'ipt>';
+    }
+    return head + body + '</body></html>';
+  }
+
+  // סקריפט אתחול המפות בקובץ המיוצא (רץ אצל הצופה). מצייר Leaflet לכל יום ומסתיר
+  // את ה-SVG כשהמפה החיה עולה. אם Leaflet/אריחים נכשלו (אופליין) — ה-SVG נשאר.
+  var MAP_INIT_JS = [
+    '(function(){var DAYS=__DATA__;function go(){if(!window.L)return;DAYS.forEach(function(d){',
+    'var box=document.getElementById("map-live-"+d.n);if(!box||!d.geometry||!d.geometry.length)return;try{',
+    'var map=L.map(box,{scrollWheelZoom:false,attributionControl:true});',
+    'L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap"}).addTo(map);',
+    'var line=L.polyline(d.geometry,{color:d.color,weight:5,opacity:.85}).addTo(map);',
+    'd.stops.forEach(function(s){L.marker([s.lat,s.lng]).bindPopup(s.n+". "+s.name).addTo(map);});',
+    'if(d.start)L.circleMarker([d.start.lat,d.start.lng],{radius:9,color:"#fff",weight:2,fillColor:"#2e9e5b",fillOpacity:1}).bindPopup("\\uD83D\\uDEA9 \\u05D4\\u05EA\\u05D7\\u05DC\\u05D4: "+d.start.name).addTo(map);',
+    'if(d.end)L.circleMarker([d.end.lat,d.end.lng],{radius:9,color:"#fff",weight:2,fillColor:"#d9442e",fillOpacity:1}).bindPopup("\\uD83C\\uDFC1 "+d.end.name).addTo(map);',
+    'map.fitBounds(line.getBounds(),{padding:[26,26]});',
+    'var svg=document.getElementById("map-svg-"+d.n);if(svg)svg.style.display="none";',
+    '}catch(e){}});}',
+    'if(document.readyState!=="loading")go();else document.addEventListener("DOMContentLoaded",go);})();'
+  ].join('');
+
+  // פלטת צבעים לימים (זהה לרוח של trip-layer)
+  var DAY_COLORS = ['#5a78c7', '#1f6b46', '#c98a2b', '#9c4dcc', '#2899a6', '#c0564e', '#5f7d2e', '#b3477e'];
+
+  // SVG סטטי של מסלול יום (גיבוי אופליין, נטמע בקובץ). geom/stops ב-[lat,lng].
+  function routeSVG(n, geom, stops, start, end, color) {
+    var all = geom.slice();
+    stops.forEach(function (s) { all.push([s.lat, s.lng]); });
+    if (start) all.push([start.lat, start.lng]);
+    if (end) all.push([end.lat, end.lng]);
+    if (!all.length) return '';
+    var lats = all.map(function (p) { return p[0]; }), lngs = all.map(function (p) { return p[1]; });
+    var minLat = Math.min.apply(null, lats), maxLat = Math.max.apply(null, lats);
+    var minLng = Math.min.apply(null, lngs), maxLng = Math.max.apply(null, lngs);
+    var W = 640, H = 300, pad = 26;
+    var kx = Math.cos((minLat + maxLat) / 2 * Math.PI / 180) || 1;
+    var spanLng = ((maxLng - minLng) * kx) || 1e-6, spanLat = (maxLat - minLat) || 1e-6;
+    var scale = Math.min((W - 2 * pad) / spanLng, (H - 2 * pad) / spanLat);
+    var offX = (W - spanLng * scale) / 2, offY = (H - spanLat * scale) / 2;
+    function X(lng) { return (offX + (lng - minLng) * kx * scale).toFixed(1); }
+    function Y(lat) { return (H - offY - (lat - minLat) * scale).toFixed(1); }
+    var path = geom.length ? ('M' + geom.map(function (p) { return X(p[1]) + ' ' + Y(p[0]); }).join(' L')) : '';
+    var dots = stops.map(function (s) {
+      return '<circle cx="' + X(s.lng) + '" cy="' + Y(s.lat) + '" r="9" fill="' + color + '" stroke="#fff" stroke-width="2"/>' +
+        '<text x="' + X(s.lng) + '" y="' + (parseFloat(Y(s.lat)) + 3.5).toFixed(1) + '" font-size="10" fill="#fff" text-anchor="middle" font-weight="bold">' + s.n + '</text>';
+    }).join('');
+    var se = '';
+    if (start) se += '<circle cx="' + X(start.lng) + '" cy="' + Y(start.lat) + '" r="10" fill="#2e9e5b" stroke="#fff" stroke-width="2"/><text x="' + X(start.lng) + '" y="' + (parseFloat(Y(start.lat)) + 4).toFixed(1) + '" font-size="11" text-anchor="middle">🚩</text>';
+    if (end) se += '<circle cx="' + X(end.lng) + '" cy="' + Y(end.lat) + '" r="10" fill="#d9442e" stroke="#fff" stroke-width="2"/><text x="' + X(end.lng) + '" y="' + (parseFloat(Y(end.lat)) + 4).toFixed(1) + '" font-size="11" text-anchor="middle">🏁</text>';
+    return '<svg class="tp-map-svg" id="map-svg-' + n + '" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">' +
+      '<rect width="' + W + '" height="' + H + '" fill="#eef2f4"/>' +
+      (path ? '<path d="' + path + '" fill="none" stroke="' + color + '" stroke-width="4" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/>' : '') +
+      se + dots + '</svg>';
+  }
+
+  // בונה את מקטע המפות לפי יום: לכל יום מנתב (TripRouting), בונה SVG-גיבוי + נתוני
+  // Leaflet + סיכום מסלול. מחזיר Promise<{html, data}>. אין geo → מחזיר ריק.
+  function buildMapsSection(doc) {
+    var days = (doc && doc.days || []).filter(function (d) { return d.geo && d.geo.length; });
+    if (!days.length) return Promise.resolve({ html: '', data: null });
+    var origin = (doc.origin && isFinite(doc.origin.lat) && isFinite(doc.origin.lng)) ? doc.origin : null;
+    var lastIdx = days.length - 1;
+    var dh = (window.TripRouting && TripRouting.durHuman) ? TripRouting.durHuman : function (m) { return m + ' דק\''; };
+
+    var jobs = days.map(function (d, i) {
+      var color = DAY_COLORS[i % DAY_COLORS.length];
+      var stops = d.geo.map(function (g) { return { n: g.n, name: g.name, lat: g.lat, lng: g.lng }; });
+      var coords = stops.map(function (s) { return [s.lng, s.lat]; });
+      var start = (i === 0 && origin) ? { lat: origin.lat, lng: origin.lng, name: origin.name || 'עיר מוצא' } : null;
+      if (start) coords.unshift([start.lng, start.lat]);
+      var end = (i === lastIdx) ? { lat: stops[stops.length - 1].lat, lng: stops[stops.length - 1].lng, name: 'סוף הטיול' } : null;
+
+      function build(geomLngLat, summary) {
+        var geom = (geomLngLat || coords).map(function (c) { return [c[1], c[0]]; });  // → [lat,lng]
+        var svg = routeSVG(d.n, geom, stops, start, end, color);
+        var sumTxt = summary
+          ? ('🚗 ' + summary.distanceKm + ' ק"מ · ' + dh(summary.durationMin) +
+             (summary.roads && summary.roads.length ? ' · כבישים ' + summary.roads.slice(0, 6).join(', ') : ''))
+          : 'מסלול משוער (ללא ניתוב חי)';
+        var html = '<div class="tp-map-day"><h4>' + escapeHtml(d.title || ('יום ' + d.n)) + '</h4>' +
+          '<div class="tp-route-sum">' + escapeHtml(sumTxt) + '</div>' +
+          '<div class="tp-map-box"><div class="tp-map-live" id="map-live-' + d.n + '"></div>' + svg + '</div></div>';
+        var data = { n: d.n, color: color, geometry: geom, stops: stops, start: start, end: end };
+        return { html: html, data: data };
+      }
+
+      if (!window.TripRouting || !TripRouting.route || coords.length < 2) {
+        return Promise.resolve(build(null, null));
+      }
+      return TripRouting.route(coords).then(function (res) {
+        var r = res && res.ok && res.routes[0];
+        return build(r ? r.coords : null, r || null);
+      }).catch(function () { return build(null, null); });
+    });
+
+    return Promise.all(jobs).then(function (parts) {
+      var html = '<section class="tp-maps"><h3 class="tp-section-title">🗺️ מסלולים ומפות לפי יום</h3>' +
+        parts.map(function (p) { return p.html; }).join('') + '</section>';
+      return { html: html, data: parts.map(function (p) { return p.data; }) };
+    });
+  }
+
+  function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
   // הדפסה דרך iframe נקי — לא נוגעים ב-DOM של האפליקציה, אז הפלט מושלם תמיד
@@ -1003,25 +1127,42 @@
     setTimeout(go, 1200);   // fallback אם onload לא נורה
   }
 
-  // ייצוא: הורדת קובץ HTML עצמאי (נפתח בכל דפדפן, גם בלי רשת)
-  function exportDoc(docNode, title) {
+  function downloadHTML(html, title) {
+    var blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var fname = ((title || 'תוכנית-טיול').replace(/[\\/:*?"<>|]+/g, ' ').trim() || 'תוכנית-טיול') + '.html';
+    var a = el('a', { href: url, download: fname });
+    document.body.appendChild(a); a.click();
+    setTimeout(function () { a.remove(); URL.revokeObjectURL(url); }, 4000);
+  }
+
+  // ייצוא: קובץ HTML עצמאי + מפה אינטראקטיבית לכל יום (עם גיבוי SVG אופליין).
+  // doc אופציונלי — אם יש בו geo, מפיקים את מקטע המפות (דורש ניתוב; אסינכרוני).
+  function exportDoc(docNode, title, doc) {
     try {
-      var html = buildStandaloneHTML(docNode, title);
-      var blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-      var url = URL.createObjectURL(blob);
-      var fname = ((title || 'תוכנית-טיול').replace(/[\\/:*?"<>|]+/g, ' ').trim() || 'תוכנית-טיול') + '.html';
-      var a = el('a', { href: url, download: fname });
-      document.body.appendChild(a); a.click();
-      setTimeout(function () { a.remove(); URL.revokeObjectURL(url); }, 4000);
-      toast('📄 קובץ ה-HTML יורד — ניתן לפתוח ולהדפיס בכל דפדפן');
+      var hasGeo = doc && (doc.days || []).some(function (d) { return d.geo && d.geo.length; });
+      if (!hasGeo) {
+        downloadHTML(buildStandaloneHTML(docNode, title), title);
+        toast('📄 קובץ ה-HTML יורד — נפתח בכל דפדפן');
+        return;
+      }
+      toast('🗺️ מכין מפות לכל יום…');
+      buildMapsSection(doc).then(function (maps) {
+        downloadHTML(buildStandaloneHTML(docNode, title, maps.html, maps.data), title);
+        toast('📄 הקובץ יורד — כולל מפה לכל יום (נפתח בכל דפדפן)');
+      }).catch(function () {
+        // נכשל הניתוב — מייצאים בלי מפות, התוכנית עדיין שלמה
+        downloadHTML(buildStandaloneHTML(docNode, title), title);
+        toast('📄 הקובץ יורד (ללא מפות — בעיית רשת)');
+      });
     } catch (e) { toast('הייצוא נכשל'); }
   }
 
   // שני כפתורי פעולה למסמך: ייצוא ל-HTML + הדפסה (A4)
   function docActionButtons(docNode, doc) {
     var title = (doc && doc.title) || 'תוכנית טיול';
-    var exp = el('button', { class: 'tp-btn tp-btn-soft', type: 'button' }, '📄 ייצוא ל-HTML');
-    exp.addEventListener('click', function () { exportDoc(docNode, title); });
+    var exp = el('button', { class: 'tp-btn tp-btn-soft', type: 'button' }, '📄 ייצוא ל-HTML + מפות');
+    exp.addEventListener('click', function () { exportDoc(docNode, title, doc); });
     var prn = el('button', { class: 'tp-btn tp-btn-soft', type: 'button' }, '🖨️ הדפסה (A4)');
     prn.addEventListener('click', function () { printDoc(docNode, title); });
     return [exp, prn];

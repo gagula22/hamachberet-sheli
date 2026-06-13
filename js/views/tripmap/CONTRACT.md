@@ -41,7 +41,8 @@ handle.setBasemap('satellite'|'streets')
 handle.setLabels(on)                            // שמות רחובות/שכונות/ערים + גבולות (ברירת-מחדל: דולק)
 handle.flyTo({lat,lng,zoom?,pitch?,bearing?})
 handle.fitBounds(points /*[[lng,lat],…]*/, {padding?,maxZoom?,duration?,pitch?})  // מיקוד שכל הנקודות ייכנסו
-handle.addMarker({id?,lat,lng,label?,color?,group?,onClick?}) → markerId
+handle.addMarker({id?,lat,lng,label?,color?,group?,onClick?,badge?,pinKind?}) → markerId
+//   badge: טקסט/אמוג'י על פני הסיכה (מספר/🚩/🏁). pinKind: 'start'|'end'|'stop' (גודל).
 handle.clearMarkers(group?)                     // בלי group = הכל
 handle.drawRoute(coords /*[[lng,lat],…]*/, {id?,color?,group?,width?,opacity?,dash?})
 

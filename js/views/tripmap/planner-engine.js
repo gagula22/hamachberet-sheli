@@ -533,10 +533,14 @@
         transport = 'נסיעה ברכב בין הנקודות; מומלץ לצאת מ' + (lodging ? lodging.name : region.name) + ' בבוקר.';
       }
       trip.days.push({ n: dnum, title: 'יום ' + dnum + ' — ' + dayTitle, stops: stops });
+      // geo = העצירות עם קואורדינטות (לבניית מפות בייצוא + מסלול לפי יום)
+      var geo = stops.filter(function (s) { return isFinite(s.lat) && isFinite(s.lng); })
+        .map(function (s, gi) { return { n: gi + 1, name: s.name, lat: s.lat, lng: s.lng, type: s.type }; });
       docDays.push({
         n: dnum,
         title: 'יום ' + dnum + ' — ' + dayTitle + (isFirst ? ' (יום ראשון קליל)' : ''),
         blocks: blocks,
+        geo: geo,
         transport: transport,
         tip: dayTip,
         costPerDay: dayCost
@@ -544,6 +548,7 @@
     }
 
     trip.title = 'טיול ב' + region.name + ' — ' + params.days + ' ימים';
+    if (params.origin) trip.origin = params.origin;   // {name,lat?,lng?} — נקודת מוצא
 
     // טבלת תקציב
     var lodgingTotal = lodging ? mid(lodging.priceNight) * params.nights : 0;
@@ -572,6 +577,7 @@
       overview: originLine + region.desc + ' ' + (lodging ? ('בסיס: ' + lodging.name + '. ') : '') +
                 'התוכנית מסודרת גיאוגרפית כדי לחסוך נסיעות, עם 2-3 עצירות ביום (היום הראשון קליל).',
       days: docDays,
+      origin: params.origin || null,   // נקודת מוצא — לסימון "התחלה" במפות הייצוא
       budgetTable: budgetTable,
       packing: buildPacking(params),
       checklist: [],

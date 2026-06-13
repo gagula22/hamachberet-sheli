@@ -49,7 +49,8 @@
   }
 
   var _drawToken = 0;          // מבטל ציורי-מסלול אסינכרוניים ישנים בהחלפת טיול
-  var _dayRoutes = {};         // n היום → { primary, alt } (לתצוגת סיכום בקליק על יום)
+  var _dayRoutes = {};         // n היום → { routes:[…], active, color } (מסלול ראשי+חלופות)
+  var START_COLOR = '#2e9e5b', END_COLOR = '#d9442e';
 
   function showTripOnMap(trip) {
     clearMap();
@@ -57,54 +58,90 @@
     if (!_handle || !trip) return;
     var token = ++_drawToken;
     var allPts = [];
-    (trip.days || []).forEach(function (day, i) {
+    var days = trip.days || [];
+    var lastDayIdx = days.length - 1;
+
+    // נקודת מוצא (עיר מגורים) → סיכת "התחלה" + תחילת המסלול של יום 1
+    var originPt = (trip.origin && isFinite(trip.origin.lat) && isFinite(trip.origin.lng))
+      ? { lat: trip.origin.lat, lng: trip.origin.lng, name: trip.origin.name } : null;
+    if (originPt) {
+      try {
+        _handle.addMarker({
+          lat: originPt.lat, lng: originPt.lng, id: 'tm-start',
+          badge: '🚩', color: START_COLOR, pinKind: 'start', group: 'trip',
+          label: 'התחלה · ' + (originPt.name || 'עיר מוצא'),
+          onClick: function () { openInfoPop('🚩 התחלה', originPt.name || 'נקודת המוצא של הטיול'); }
+        });
+      } catch (e) {}
+      allPts.push([originPt.lng, originPt.lat]);
+    }
+
+    days.forEach(function (day, i) {
       var color = dayColor(i);
       var coords = [];
-      (day.stops || []).forEach(function (stop, j) {
-        if (!isFinite(stop.lat) || !isFinite(stop.lng)) return;
+      var stops = (day.stops || []).filter(function (s) { return isFinite(s.lat) && isFinite(s.lng); });
+      stops.forEach(function (stop, j) {
+        var isLastOfDay = (j === stops.length - 1);
+        var isTripEnd = isLastOfDay && (i === lastDayIdx);
         try {
           _handle.addMarker({
             lat: stop.lat, lng: stop.lng,
-            label: String(j + 1), color: color, group: 'trip',
-            onClick: function () { openStopPop(stop, day, i); }
+            badge: isTripEnd ? '🏁' : String(j + 1),
+            color: isTripEnd ? END_COLOR : color,
+            pinKind: isTripEnd ? 'end' : 'stop', group: 'trip',
+            label: stop.name,
+            onClick: function () { openStopPop(stop, day, i, isLastOfDay, isTripEnd); }
           });
         } catch (e) { console.warn('triplayer: marker failed', e); }
         coords.push([stop.lng, stop.lat]);
         allPts.push([stop.lng, stop.lat]);
       });
-      if (coords.length > 1) drawDayRoute(day, coords, color, token);
+      // יום 1: המסלול מתחיל מעיר המוצא (אם יש)
+      var routeCoords = coords.slice();
+      if (i === 0 && originPt) routeCoords.unshift([originPt.lng, originPt.lat]);
+      if (routeCoords.length > 1) drawDayRoute(day, routeCoords, color, token);
     });
-    // מיקוד המפה על כל עצירות הטיול (במקום מבט-על של כל הארץ)
+
+    // מיקוד המפה על כל הנקודות (כולל ההתחלה) — לא מבט-על של כל הארץ
     if (allPts.length) {
       try { _handle.fitBounds(allPts, { maxZoom: 13 }); } catch (e) {}
     }
   }
 
-  // מצייר מסלול נסיעה אמיתי ליום (לפי כבישים) + חלופה; נכשל → קו אווירי ישר.
+  // מצייר את המסלול הפעיל של היום (לפי כבישים). שומר את כל החלופות לכפתור-המעבר.
+  // נכשל (רשת/שרת) → קו אווירי ישר מקווקו.
   function drawDayRoute(day, coords, color, token) {
     var straight = function () {
       if (token !== _drawToken) return;
-      try { _handle.drawRoute(coords, { id: 'd' + day.n + '-air', color: color, group: 'trip', dash: [1.5, 1.2], opacity: 0.7 }); }
+      try { _handle.drawRoute(coords, { id: 'rt-d' + day.n, color: color, group: 'trip', dash: [1.5, 1.2], opacity: 0.7 }); }
       catch (e) { console.warn('triplayer: route failed', e); }
     };
     if (!window.TripRouting || !TripRouting.route) { straight(); return; }
     TripRouting.route(coords).then(function (res) {
       if (token !== _drawToken) return;                 // טיול אחר כבר מצויר
       if (!res || !res.ok || !res.routes.length) { straight(); return; }
-      var C = (window.TripMapConfig && TripMapConfig.routing) || {};
-      // חלופה ראשון (מתחת), אחר כך הראשי (מעל) — לפי סדר addLayer
-      res.routes.slice(1).forEach(function (alt, k) {
-        try {
-          _handle.drawRoute(alt.coords, {
-            id: 'd' + day.n + '-alt' + k, group: 'trip',
-            color: C.altColor || '#9aa6b8', width: 3.5, opacity: 0.75, dash: C.altDash || [2, 1.6]
-          });
-        } catch (e) {}
-      });
-      try { _handle.drawRoute(res.routes[0].coords, { id: 'd' + day.n + '-main', color: color, group: 'trip' }); }
-      catch (e) {}
-      _dayRoutes[day.n] = { primary: res.routes[0], alt: res.routes[1] || null };
-    }).catch(function () { straight(); });   // רשת/שרת נפלו → קו אווירי
+      _dayRoutes[day.n] = { routes: res.routes, active: 0, color: color };
+      drawActiveRoute(day.n);                            // רק המסלול הפעיל — לא הכול יחד
+    }).catch(function () { straight(); });
+  }
+
+  // מצייר רק את המסלול הפעיל של היום (אותו id → מחליף את הקודם)
+  function drawActiveRoute(n) {
+    var info = _dayRoutes[n];
+    if (!info || !_handle) return;
+    var r = info.routes[info.active];
+    if (!r) return;
+    try { _handle.drawRoute(r.coords, { id: 'rt-d' + n, color: info.color, group: 'trip' }); } catch (e) {}
+  }
+
+  // החלפה למסלול הבא (כפתור "מסלול חלופי") — מציג אחד בלבד בכל רגע
+  function cycleRoute(day) {
+    var info = _dayRoutes[day.n];
+    if (!info || info.routes.length < 2) return;
+    info.active = (info.active + 1) % info.routes.length;
+    drawActiveRoute(day.n);
+    try { _handle.fitBounds(info.routes[info.active].coords, { maxZoom: 14 }); } catch (e) {}
+    showRouteInfo(day);
   }
 
   // מיקוד המפה על עצירות היום (fitBounds) + סיכום מסלול אם כבר חושב
@@ -117,45 +154,64 @@
     showRouteInfo(day);
   }
 
-  // בועת סיכום מסלול ליום: מרחק/זמן/כבישים + חלופה (כמו Waze)
+  // בועת סיכום מסלול ליום: מרחק/זמן/כבישים של המסלול הפעיל + כפתור החלפה לחלופי
   function showRouteInfo(day) {
     closePop();
     var info = _dayRoutes[day.n];
-    if (!info || !info.primary) return;
+    if (!info || !info.routes.length) return;
     var host = _sideEl && _sideEl.closest('.tm-view');
     if (!host) return;
     var dh = (window.TripRouting && TripRouting.durHuman) ? TripRouting.durHuman : function (m) { return m + ' דק\''; };
-    var p = info.primary;
-    var lines = [
-      el('div', { class: 'tm-route-main' }, '🚗 ' + p.distanceKm + ' ק"מ · ' + dh(p.durationMin) +
-        (p.roads && p.roads.length ? ' · כבישים ' + p.roads.slice(0, 5).join(', ') : ''))
+    var n = info.routes.length, idx = info.active, r = info.routes[idx];
+    var which = (n > 1) ? (idx === 0 ? 'מסלול ראשי' : 'מסלול חלופי ' + idx) + ' (' + (idx + 1) + '/' + n + ')' : 'מסלול נסיעה';
+    var rows = [
+      el('div', { class: 'tm-route-main' }, '🚗 ' + r.distanceKm + ' ק"מ · ' + dh(r.durationMin) +
+        (r.roads && r.roads.length ? ' · כבישים ' + r.roads.slice(0, 6).join(', ') : ''))
     ];
-    if (info.alt) {
-      lines.push(el('div', { class: 'tm-route-alt' }, '↪ חלופה: ' + info.alt.distanceKm + ' ק"מ · ' + dh(info.alt.durationMin) +
-        (info.alt.roads && info.alt.roads.length ? ' · ' + info.alt.roads.slice(0, 4).join(', ') : '')));
+    var headKids = [
+      el('span', {}, 'יום ' + (day.n != null ? day.n : '?') + ' — ' + which),
+      el('button', { class: 'tm-stop-pop-close', title: 'סגירה', onClick: closePop }, '✕')
+    ];
+    _pop = el('div', { class: 'tm-route-info' }, [el('div', { class: 'tm-route-info-head' }, headKids)].concat(rows));
+    if (n > 1) {
+      var btn = el('button', { class: 'tm-route-alt-btn' }, '🔀 הצג מסלול חלופי (' + (n) + ' אפשרויות)');
+      btn.addEventListener('click', function () { cycleRoute(day); });
+      _pop.appendChild(btn);
     }
-    _pop = el('div', { class: 'tm-route-info' }, [
-      el('div', { class: 'tm-route-info-head' }, [
-        el('span', {}, 'יום ' + (day.n != null ? day.n : '?') + ' — מסלול נסיעה'),
-        el('button', { class: 'tm-stop-pop-close', title: 'סגירה', onClick: closePop }, '✕')
-      ])
-    ].concat(lines));
+    host.appendChild(_pop);
+  }
+
+  // בועת מידע כללית (להתחלה/סוף)
+  function openInfoPop(title, body) {
+    closePop();
+    var host = _sideEl && _sideEl.closest('.tm-view');
+    if (!host) return;
+    _pop = el('div', { class: 'tm-stop-pop' }, [
+      el('div', { class: 'tm-stop-pop-body' }, [
+        el('div', { class: 'tm-stop-pop-name' }, title),
+        el('div', { class: 'tm-stop-pop-meta' }, body || '')
+      ]),
+      el('button', { class: 'tm-stop-pop-close', title: 'סגירה', onClick: closePop }, '✕')
+    ]);
     host.appendChild(_pop);
   }
 
   // ── בועת מידע לעצירה (תחליף popup — אין popup ב-API של המנוע) ──
   function closePop() { if (_pop) { _pop.remove(); _pop = null; } }
-  function openStopPop(stop, day, dayIdx) {
+  function openStopPop(stop, day, dayIdx, isDayEnd, isTripEnd) {
     closePop();
     var host = _sideEl && _sideEl.closest('.tm-view');
     if (!host) return;
     var meta = [];
     if (stop.time) meta.push('🕐 ' + stop.time);
     if (stop.type) meta.push(stop.type);
+    // סימון סוף יום / סוף הטיול
+    var tag = isTripEnd ? '🏁 סוף הטיול'
+            : (isDayEnd ? '🏁 סוף יום ' + (day && day.n != null ? day.n : '?') : null);
     _pop = el('div', { class: 'tm-stop-pop' }, [
-      el('span', { class: 'tm-stop-pop-dot', style: { background: dayColor(dayIdx || 0) } }),
+      el('span', { class: 'tm-stop-pop-dot', style: { background: isTripEnd ? END_COLOR : dayColor(dayIdx || 0) } }),
       el('div', { class: 'tm-stop-pop-body' }, [
-        el('div', { class: 'tm-stop-pop-name' }, stop.name || 'עצירה'),
+        el('div', { class: 'tm-stop-pop-name' }, (stop.name || 'עצירה') + (tag ? '  ·  ' + tag : '')),
         el('div', { class: 'tm-stop-pop-meta' }, [
           'יום ' + (day && day.n != null ? day.n : '?'),
           meta.length ? ' · ' + meta.join(' · ') : '',

@@ -225,6 +225,12 @@
 }
 .tm-route-main { color: var(--ink); font-weight: 600; }
 .tm-route-alt { color: var(--ink-soft); margin-top: 2px; }
+.tm-route-alt-btn {
+  margin-top: 7px; width: 100%; padding: 6px 10px; border-radius: var(--r-sm);
+  background: var(--sky); color: var(--sky-deep); border: 1px solid var(--sky-deep);
+  font-weight: 700; font-size: 12px; cursor: pointer; transition: background .15s;
+}
+.tm-route-alt-btn:hover { background: var(--sky-deep); color: #fff; }
 
 /* ── מודאלים (עזרה / Claude / ייבוא) ── */
 .tm-modal-overlay {
