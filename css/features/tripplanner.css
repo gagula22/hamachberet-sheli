@@ -337,30 +337,9 @@
   .tp-title { font-size: 19px; }
 }
 
-/* ── הדפסה: מדפיס רק את מסמך התוכנית ── */
+/* ── הדפסה ── הדפסת A4 וייצוא מתבצעים דרך מסמך HTML עצמאי (iframe נקי) ב-planner-ui.js,
+   כך הפלט מושלם תמיד. הכלל כאן הוא רק רשת-ביטחון: אם המשתמש לוחץ Ctrl+P כשמודאל
+   האשף פתוח — נסתיר את רקע האפליקציה כדי שלא ייצא פלט משובש. */
 @media print {
-  body.tp-printing > *:not(.tp-overlay) { display: none !important; }
-  .tp-printing .tp-overlay {
-    position: static !important; inset: auto !important;
-    background: none !important; backdrop-filter: none !important; padding: 0 !important;
-    display: block !important;
-  }
-  .tp-printing .tp-modal {
-    width: 100% !important; height: auto !important; max-height: none !important;
-    box-shadow: none !important; border: 0 !important; border-radius: 0 !important;
-    display: block !important; color: #000 !important; background: #fff !important;
-  }
-  .tp-printing .tp-head,
-  .tp-printing .tp-progress,
-  .tp-printing .tp-nav,
-  .tp-printing .tp-doc-actions,
-  .tp-printing .tp-close { display: none !important; }
-  /* הצג רק את ה-doc; שאר תוכן ה-body מוסתר */
-  .tp-printing .tp-body > .tp-stage > *:not(.tp-doc) { display: none !important; }
-  .tp-printing .tp-doc { display: block !important; }
-  .tp-printing .tp-acc { border-color: #ccc !important; }
-  .tp-printing .tp-acc-body { display: block !important; }
-  .tp-printing .tp-acc:not([open]) .tp-acc-body { display: block !important; } /* פתח אקורדיונים בהדפסה */
-  .tp-printing .tp-day, .tp-printing .tp-acc, .tp-printing .tp-doc-section { break-inside: avoid; }
-  .tp-printing .tp-acc-chev { display: none !important; }
+  body:has(.tp-overlay) > *:not(.tp-print-frame) { visibility: hidden !important; }
 }

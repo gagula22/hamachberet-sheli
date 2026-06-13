@@ -675,12 +675,6 @@
       return el('div', { class: 'tp-nav tp-nav-result' }, btns);
     }
 
-    function printButton(docNode) {
-      var b = el('button', { class: 'tp-btn tp-btn-soft', type: 'button' }, '🖨️ הדפסה');
-      b.addEventListener('click', function () { printDoc(docNode); });
-      return b;
-    }
-
     function renderIsraelResult(res) {
       var docNode = renderDoc(res.doc);
       stage.appendChild(docNode);
@@ -692,7 +686,7 @@
         toast('🗺️ הטיול נשמר ומוצג על המפה');
         modal.close();
       });
-      stage.appendChild(resultNav([printButton(docNode), saveBtn]));
+      stage.appendChild(resultNav(docActionButtons(docNode, res.doc).concat([saveBtn])));
     }
 
     function renderAbroadResult(res) {
@@ -706,7 +700,7 @@
         toast('💾 תוכנית החו"ל נשמרה');
         modal.close();
       });
-      stage.appendChild(resultNav([printButton(docNode), saveBtn]));
+      stage.appendChild(resultNav(docActionButtons(docNode, res.doc).concat([saveBtn])));
     }
 
     function renderGetawayResult(res) {
@@ -743,7 +737,7 @@
         modal.close();
       });
       var back = el('button', { class: 'tp-btn tp-btn-ghost', type: 'button', onClick: function () { transitionTo(function () { renderGetawayResult(st.lastResult); }); } }, '→ חזרה לאופציות');
-      stage.appendChild(el('div', { class: 'tp-nav tp-nav-result' }, [back, printButton(docNode), saveBtn]));
+      stage.appendChild(el('div', { class: 'tp-nav tp-nav-result' }, [back].concat(docActionButtons(docNode, opt.doc)).concat([saveBtn])));
     }
 
     function renderSurpriseResult(res) {
@@ -921,20 +915,116 @@
     return ul;
   }
 
-  // ── הדפסה: מדפיס רק את המסמך (CSS @media print מסתיר את השאר) ─────────────────
-  function printDoc(docRootNode) {
-    document.body.classList.add('tp-printing');
-    var host = docRootNode.closest('.tp-overlay') || document.body;
-    host.classList.add('tp-print-target');
-    function cleanup() {
-      document.body.classList.remove('tp-printing');
-      host.classList.remove('tp-print-target');
-      window.removeEventListener('afterprint', cleanup);
+  // ── ייצוא / הדפסה דרך מסמך HTML עצמאי ────────────────────────────────────────
+  // במקום להסתיר את שאר העמוד (שמשתבש בהדפסה), בונים מסמך HTML שלם ועצמאי עם CSS
+  // מוטמע מותאם A4, ומדפיסים אותו ב-iframe נקי / מורידים אותו כקובץ. כך ההדפסה
+  // יוצאת מושלמת תמיד, וקובץ ה-HTML נפתח לבד בכל דפדפן (גם אופליין).
+
+  // CSS עצמאי (צבעים מפורשים, בלי תלות בטוקנים של האתר) — מסך + A4.
+  var EXPORT_CSS = [
+    '@page{size:A4;margin:14mm 13mm}',
+    '*{box-sizing:border-box}',
+    'html,body{margin:0;padding:0}',
+    'body{font-family:"Segoe UI",Arial,"Heebo",sans-serif;direction:rtl;color:#23272f;background:#f4f1ea;font-size:11.5pt;line-height:1.55}',
+    '.tp-doc{max-width:188mm;margin:0 auto;background:#fff;padding:16mm 14mm;box-shadow:0 1px 6px rgba(0,0,0,.08)}',
+    '@media print{body{background:#fff}.tp-doc{box-shadow:none;padding:0;max-width:none;margin:0}}',
+    '.tp-doc-head{border-bottom:2px solid #e4dccb;padding-bottom:10px;margin-bottom:14px}',
+    '.tp-doc-title{font-size:21pt;margin:0 0 6px;color:#1f3a5f;font-weight:800}',
+    '.tp-doc-overview{color:#444;margin:0 0 8px}',
+    '.tp-doc-lodging{background:#f3f0e8;padding:6px 11px;border-radius:7px;display:inline-block;font-size:11pt}',
+    '.tp-day{border:1px solid #ddd6c6;border-radius:9px;padding:11px 13px;margin:0 0 11px;break-inside:avoid;page-break-inside:avoid}',
+    '.tp-day-head{margin-bottom:6px}',
+    '.tp-day-title{font-size:14pt;margin:0;color:#1f6b46;font-weight:700}',
+    '.tp-day-blocks{display:block}',
+    '.tp-block{display:flex;gap:9px;align-items:flex-start;padding:5px 0;border-top:1px dashed #efe9da}',
+    '.tp-block:first-child{border-top:0}',
+    '.tp-block-icon{font-size:14pt;line-height:1.3;flex-shrink:0}',
+    '.tp-block-body{min-width:0;flex:1}',
+    '.tp-block-line{display:flex;flex-wrap:wrap;gap:7px;align-items:baseline}',
+    '.tp-block-when{font-weight:700;color:#555;min-width:52px}',
+    '.tp-block-what{font-weight:600;color:#23272f}',
+    '.tp-block-cost{margin-inline-start:auto;color:#b3503f;font-weight:700;white-space:nowrap}',
+    '.tp-block-desc{color:#666;font-size:10.5pt;margin-top:2px}',
+    '.tp-day-foot{margin-top:7px;border-top:1px solid #eee;padding-top:6px;font-size:10.5pt;color:#555;display:flex;flex-direction:column;gap:3px}',
+    '.tp-doc-section{margin:14px 0;break-inside:avoid}',
+    '.tp-section-title{font-size:13.5pt;color:#1f3a5f;margin:0 0 6px;font-weight:700}',
+    '.tp-budget-table{width:100%;border-collapse:collapse;font-size:11pt}',
+    '.tp-budget-table th,.tp-budget-table td{border:1px solid #d6cfbe;padding:6px 9px;text-align:right}',
+    '.tp-budget-table thead th{background:#eef2f7;color:#1f3a5f;font-weight:700}',
+    '.tp-budget-total{font-weight:800;background:#f7f3e8}',
+    '.tp-accordions{margin-top:8px}',
+    '.tp-acc{margin:9px 0;break-inside:avoid;page-break-inside:avoid}',
+    '.tp-acc-sum{list-style:none;font-weight:700;font-size:12.5pt;color:#1f3a5f;border-bottom:1px solid #e4dccb;padding-bottom:4px;margin-bottom:6px}',
+    '.tp-acc-sum::-webkit-details-marker{display:none}',
+    '.tp-acc-chev{display:none}',
+    'ul{margin:5px 0;padding-inline-start:0;list-style:none}',
+    '.tp-pack-list,.tp-check-list{columns:2;column-gap:18px}',
+    '.tp-pack-item,.tp-check-item{padding:2px 0;break-inside:avoid}',
+    '.tp-check{margin-inline-end:7px;vertical-align:middle}',
+    '.tp-bullets li{padding:3px 0 3px 0;position:relative;padding-inline-start:16px}',
+    '.tp-bullets li::before{content:"•";position:absolute;inset-inline-start:0;color:#b3503f;font-weight:700}',
+    '.tp-rain{margin:0;color:#444}',
+    '.tp-export-foot{margin-top:16px;padding-top:9px;border-top:1px solid #e4dccb;font-size:9pt;color:#9a948a;text-align:center}',
+    'a{color:inherit}'
+  ].join('');
+
+  // לוקח את צומת המסמך המוצג, מנקה אינטראקטיביות ומחזיר מחרוזת HTML עצמאית
+  function buildStandaloneHTML(docNode, title) {
+    var clone = docNode.cloneNode(true);
+    // פותחים את כל האקורדיונים כדי שהכול יודפס/ייוצא, ומסירים שאריות אינטראקטיביות
+    Array.prototype.forEach.call(clone.querySelectorAll('details'), function (d) { d.setAttribute('open', ''); });
+    var safeTitle = (title || 'תוכנית טיול').replace(/[<>&]/g, ' ').trim();
+    var foot = '<div class="tp-export-foot">נוצר באפליקציית "המחברת שלי" · מתכנן הטיולים</div>';
+    return '<!DOCTYPE html><html lang="he" dir="rtl"><head><meta charset="utf-8">' +
+      '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+      '<title>' + safeTitle + '</title><style>' + EXPORT_CSS + '</style></head>' +
+      '<body>' + clone.outerHTML + foot + '</body></html>';
+  }
+
+  // הדפסה דרך iframe נקי — לא נוגעים ב-DOM של האפליקציה, אז הפלט מושלם תמיד
+  function printDoc(docNode, title) {
+    var html = buildStandaloneHTML(docNode, title);
+    var ifr = el('iframe', { class: 'tp-print-frame', 'aria-hidden': 'true' });
+    ifr.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden';
+    document.body.appendChild(ifr);
+    var fired = false;
+    function go() {
+      if (fired) return; fired = true;
+      try {
+        var win = ifr.contentWindow;
+        win.focus();
+        win.print();
+      } catch (e) { toast('ההדפסה נכשלה — נסו ייצוא ל-HTML'); }
+      setTimeout(function () { try { ifr.remove(); } catch (e) {} }, 1500);
     }
-    window.addEventListener('afterprint', cleanup);
-    // fallback אם afterprint לא נורה
-    setTimeout(cleanup, 1500);
-    window.print();
+    ifr.onload = function () { setTimeout(go, 250); };  // המתנה קצרה לציור
+    var d = ifr.contentWindow.document;
+    d.open(); d.write(html); d.close();
+    setTimeout(go, 1200);   // fallback אם onload לא נורה
+  }
+
+  // ייצוא: הורדת קובץ HTML עצמאי (נפתח בכל דפדפן, גם בלי רשת)
+  function exportDoc(docNode, title) {
+    try {
+      var html = buildStandaloneHTML(docNode, title);
+      var blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+      var url = URL.createObjectURL(blob);
+      var fname = ((title || 'תוכנית-טיול').replace(/[\\/:*?"<>|]+/g, ' ').trim() || 'תוכנית-טיול') + '.html';
+      var a = el('a', { href: url, download: fname });
+      document.body.appendChild(a); a.click();
+      setTimeout(function () { a.remove(); URL.revokeObjectURL(url); }, 4000);
+      toast('📄 קובץ ה-HTML יורד — ניתן לפתוח ולהדפיס בכל דפדפן');
+    } catch (e) { toast('הייצוא נכשל'); }
+  }
+
+  // שני כפתורי פעולה למסמך: ייצוא ל-HTML + הדפסה (A4)
+  function docActionButtons(docNode, doc) {
+    var title = (doc && doc.title) || 'תוכנית טיול';
+    var exp = el('button', { class: 'tp-btn tp-btn-soft', type: 'button' }, '📄 ייצוא ל-HTML');
+    exp.addEventListener('click', function () { exportDoc(docNode, title); });
+    var prn = el('button', { class: 'tp-btn tp-btn-soft', type: 'button' }, '🖨️ הדפסה (A4)');
+    prn.addEventListener('click', function () { printDoc(docNode, title); });
+    return [exp, prn];
   }
 
   // ============================================================================
@@ -949,10 +1039,9 @@
     var docNode = renderDoc(doc);
     modal.body.appendChild(docNode);
 
-    var printBtn = el('button', { class: 'tp-btn tp-btn-soft', type: 'button' }, '🖨️ הדפסה');
-    printBtn.addEventListener('click', function () { printDoc(docNode); });
     var closeBtn = el('button', { class: 'tp-btn tp-btn-ghost', type: 'button', onClick: modal.close }, 'סגירה');
-    modal.body.appendChild(el('div', { class: 'tp-nav tp-nav-result tp-doc-actions' }, [closeBtn, printBtn]));
+    modal.body.appendChild(el('div', { class: 'tp-nav tp-nav-result tp-doc-actions' },
+      [closeBtn].concat(docActionButtons(docNode, doc))));
     return { close: modal.close };
   }
 

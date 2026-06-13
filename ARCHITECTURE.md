@@ -302,7 +302,7 @@ Web Speech he-IL; טקסט סופי דרך `execCommand('insertText')` → שמ�
 | ניתוב נסיעה אמיתי (מסלול לפי כבישים כמו Waze) | `tripmap/routing.js` (`window.TripRouting`) — OSRM ציבורי |
 | מאגר ידע הטיולים (אטרקציות/מסעדות/לינה/חו"ל) | `tripmap/planner-data.js` (`window.TripPlannerData`) |
 | מנוע התכנון (לוגיקה טהורה, 4 מסלולים) | `tripmap/planner-engine.js` (`window.TripPlannerEngine`) |
-| אשף התכנון + מסך התוכנית + הדפסה | `tripmap/planner-ui.js` + `css/features/tripplanner.css` (`window.TripPlannerUI`) |
+| אשף התכנון + מסך התוכנית + ייצוא/הדפסה | `tripmap/planner-ui.js` + `css/features/tripplanner.css` (`window.TripPlannerUI`) |
 
 **מתכנן הטיולים עצמאי לחלוטין — אפס תלות ב-LLM.** האשף (planner-ui) מציג את כל
 אפשרויות הסקיל trip-planner-metakhnen-tiyulim כ-UI: 4 מסלולים (בארץ/חו"ל/חופשה
@@ -314,6 +314,9 @@ Web Speech he-IL; טקסט סופי דרך `execCommand('insertText')` → שמ�
 (מסמך תוכנית מלא: ימים, תקציב, ציוד, צ'קליסט, טיפים) שנפתח מ-📄 בפאנל. הצמדת
 surprise→abroad מעבירה הלאה את התשובות שכבר נבחרו (ימים/הרכב/חודש/תקציב). הסכמה
 המקובעת של כל המודולים — ב-CONTRACT.md, סעיף "מתכנן הטיולים העצמאי".
+**ייצוא והדפסה:** כל מסמך תוכנית מייצא ל-HTML עצמאי (CSS מוטמע, A4, RTL — נפתח בכל
+דפדפן גם אופליין) ומדפיס דרך iframe נקי (buildStandaloneHTML/printDoc/exportDoc) —
+לא דרך `@media print` על ה-DOM של האפליקציה, כך ההדפסה אף פעם לא משתבשת.
 
 הערות מימוש: MapLibre GL v5 מאורז ב-`js/vendor/maplibre/` (טעינה עצלה + fallback CDN);
 לוויין Esri (maxzoom 19), גבהים AWS terrarium, מבנים OpenFreeMap fill-extrusion.
