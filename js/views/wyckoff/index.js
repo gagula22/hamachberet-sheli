@@ -39,11 +39,21 @@
   var WHY = { 1: 'הטיה זה הכיוון הכללי שהדגים הגדולים דוחפים אליו. סוחרים עם הזרם.', 2: 'שלב B = אוסף סחורה, מבלבל. שלב C/D = האירוע האמיתי (ספרינג/פריצה) — שם הכסף.', 3: 'קונפלואנס = כמה סיבות מתכנסות לרמה אחת. אמצע = שטח הפקר.', 4: 'טריגר = נר האישור שאומר "עכשיו". נפח נמוך בטסט = אין מוכרים שנותרו.', 5: 'R:R = סיכון מול רווח. 3R = על כל שקל סיכון, שלושה רווח.', 6: 'לא מסכנים יותר מ-1% בעסקה. רצף הפסדים לא מוחק אותך.', 7: 'אלטים זזים אחרי ביטקוין. אקומולציה באלט לא שווה אם ביטקוין נופל.', 8: 'OI=כסף ממונף פתוח. פאנדינג=מי משלם למי. מגלים אם פריצה אמיתית או מלכודת.' };
   var TIP = { 1: 'אין הטיה ברורה — היד על ההדק נחה.', 2: 'לא נכנסים בשלב B — שם רוב ההפסדים.', 3: 'קנייה באמצע = יחס גרוע. מחכים לקצה.', 4: 'בלי טריגר — אין כניסה.', 5: 'מתחת ל-3R — מוותרים.', 6: 'הגודל חשוב יותר מהכיוון.', 7: 'באלט — בדוק קודם מה ביטקוין עושה.', 8: 'פריצה עם OI עולה = אמיתית. OI יורד = מלכודת.' };
 
+  // חץ מגמת-ווליום לפי קריאת השליטה (היצע/ביקוש) — מצויר על ההיסטוגרמה
+  function volNoteFor(tf) {
+    if (!tf || !tf.control) return null;
+    var c = tf.control;
+    if (c.demandTrend < -0.1 && c.tag.indexOf('🔴') === 0) return { slope: -1, text: 'ביקוש דועך (No-Demand)', color: '#cf9224' };
+    if (c.supplyTrend < -0.12) return { slope: -1, text: 'היצע יורד — מוכרים מתעייפים', color: '#2faa6a' };
+    if (c.supplyTrend > 0.15) return { slope: 1, text: 'היצע גובר', color: '#e06a62' };
+    if (c.demandTrend > 0.12) return { slope: 1, text: 'ביקוש גובר (Demand ↑)', color: '#2faa6a' };
+    return { slope: 0, text: 'נפח מעורב — איזון', color: '#7a8699' };
+  }
   // ── גרף offscreen → dataURL (רקע בהיר) ──
   function chartImg(candles, tf, take, levels, h) {
     var cv = document.createElement('canvas'); cv.width = 1000; cv.height = h || 360;
     var marks = {}; if (tf && tf.scIdx >= 0) marks[tf.scIdx] = 'SC'; if (tf && tf.arIdx >= 0) marks[tf.arIdx] = 'AR';
-    try { WyckoffChart.draw(cv, candles, { marks: marks, sup: tf && tf.sup, res: tf && tf.res, take: take || undefined, levels: levels }); return cv.toDataURL('image/png'); }
+    try { WyckoffChart.draw(cv, candles, { marks: marks, sup: tf && tf.sup, res: tf && tf.res, take: take || undefined, levels: levels, volNote: volNoteFor(tf) }); return cv.toDataURL('image/png'); }
     catch (e) { return ''; }
   }
   // גרף תרחיש סכמטי (מסלול צפוי לפי וויקוף) — ייחוס נרות 4H

@@ -69,6 +69,23 @@
         x.beginPath(); x.arc(cx, cy, 3, 0, 7); x.fill();
       });
     }
+    // חץ מגמת-ווליום על ההיסטוגרמה (היצע/ביקוש לפי וויקוף) — opts.volNote
+    if (opts.volNote) {
+      var vTop = H - 22 - volH, vBot = H - 22, slope = opts.volNote.slope;
+      var ax1 = padL + (W - padL - padR) * 0.34, ax2 = W - padR - 8, ay1, ay2;
+      if (slope < 0) { ay1 = vTop + volH * 0.22; ay2 = vBot - volH * 0.10; }
+      else if (slope > 0) { ay1 = vBot - volH * 0.10; ay2 = vTop + volH * 0.22; }
+      else { ay1 = ay2 = vTop + volH * 0.4; }
+      x.strokeStyle = opts.volNote.color; x.fillStyle = opts.volNote.color; x.lineWidth = 2.4;
+      x.beginPath(); x.moveTo(ax1, ay1); x.lineTo(ax2, ay2); x.stroke();
+      var ang = Math.atan2(ay2 - ay1, ax2 - ax1);
+      x.beginPath(); x.moveTo(ax2, ay2);
+      x.lineTo(ax2 - 9 * Math.cos(ang - 0.45), ay2 - 9 * Math.sin(ang - 0.45));
+      x.lineTo(ax2 - 9 * Math.cos(ang + 0.45), ay2 - 9 * Math.sin(ang + 0.45));
+      x.closePath(); x.fill();
+      x.font = 'bold 11px Segoe UI'; x.textAlign = 'right';
+      x.fillText(opts.volNote.text, ax2, vTop - 4);
+    }
     // current price line
     var last = data[n - 1].c;
     x.fillStyle = '#2b3648'; x.textAlign = 'left'; x.font = 'bold 11px Segoe UI';
