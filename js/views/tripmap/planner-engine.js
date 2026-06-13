@@ -314,6 +314,21 @@
     return route;
   }
 
+  // קיבוץ גיאוגרפי של מועמדים לימים *רציפים*: בונים שרשרת "השכן הקרוב" מנקודת
+  // הבסיס על פני המקומות שנבחרו, וחותכים אותה לקטעים רצופים לפי גודל כל יום.
+  // כך כל יום = אזור-משנה קומפקטי (לא אוסף מפוזר של "הכי-מנוקדים" מכל האזור).
+  function clusterIntoDays(cands, targets, startPoint) {
+    var total = targets.reduce(function (s, t) { return s + t; }, 0);
+    var work = cands.slice(0, total);                 // top-scored בכמות הדרושה בלבד
+    var chain = orderGeographically(work, startPoint); // שרשרת גיאוגרפית רציפה
+    var groups = [], idx = 0;
+    for (var i = 0; i < targets.length; i++) {
+      groups.push(chain.slice(idx, idx + targets[i]));
+      idx += targets[i];
+    }
+    return groups;
+  }
+
   // ── שעות משוערות לבלוקים של יום ──────────────────────────────────────────────
 
   var DAY_TIMES = { morning: '09:00', lunch: '12:30', afternoon: '15:00', evening: '19:00' };
@@ -422,89 +437,74 @@
       cands.sort(function (a, b) { return b.score - a.score; });
     }
 
-    var usedAtt = {};
     var usedRest = [];
     var trip = { id: 'plan_' + region.id + '_' + params.seed, title: '', region: region.id, createdAt: Date.now(), days: [] };
     var docDays = [];
-    var shabbatPlaced = false;
     var rainAltGlobal = null;
+
+    // ── חלוקת האטרקציות לימים לפי גיאוגרפיה (רציפות) — לא לפי ניקוד בלבד ──
+    // יעד לכל יום: יום ראשון קליל = 2 אטרקציות, שאר הימים = 3.
+    var targets = [];
+    for (var ti = 1; ti <= params.days; ti++) targets.push(ti === 1 ? 2 : 3);
+    var dayGroups = clusterIntoDays(cands, targets, lodgingPoint);
+    // כל האטרקציות המשובצות — לסינון חלופת-הגשם (שלא תחזור על מקום קיים בתוכנית)
+    var usedAtt = {};
+    dayGroups.forEach(function (g) { g.forEach(function (x) { usedAtt[x.att.id] = 1; }); });
 
     for (var dnum = 1; dnum <= params.days; dnum++) {
       var isFirst = dnum === 1;
-      // היום הראשון קליל: 2 אטרקציות; שאר הימים 3.
-      var target = isFirst ? 2 : 3;
-
-      // שבת: ביום אחד העדף shabbatOpen=true
-      var preferShabbat = hasShabbat && !shabbatPlaced && (dnum === Math.min(2, params.days));
-
-      var picks = [];
-      // אם יום-שבת — קודם בחר shabbatOpen
-      var pool = cands.filter(function (c) { return !usedAtt[c.att.id]; });
-      if (preferShabbat) {
-        pool.sort(function (a, b) {
-          var sa = a.att.shabbatOpen ? 1 : 0, sb = b.att.shabbatOpen ? 1 : 0;
-          return (sb - sa) || (b.score - a.score);
-        });
-      }
-      for (var k = 0; k < pool.length && picks.length < target; k++) {
-        picks.push(pool[k]);
-      }
-      picks.forEach(function (p) { usedAtt[p.att.id] = 1; });
-      if (preferShabbat && picks.some(function (p) { return p.att.shabbatOpen; })) shabbatPlaced = true;
-
-      // סדר גיאוגרפי מנקודת הלינה
+      var picks = dayGroups[dnum - 1] || [];
+      // סדר גיאוגרפי בתוך היום, מנקודת הלינה (הבסיס)
       var ordered = orderGeographically(picks, lodgingPoint);
 
-      // בלוקים: בוקר → צהריים(מסעדה) → אחה"צ → (ערב מסעדה)
+      // ── בחירת המסעדות ── צהריים ליד אטרקציית הבוקר, ערב ליד הלינה ──
+      var anchor = ordered.length ? ordered[0].att : lodgingPoint;
+      var lunchR = nearestRestaurant(region.id, anchor, usedRest, params.style);
+      if (lunchR) usedRest.push(lunchR.id);
+      var dinnerR = null;
+      if (ordered.length < 3) {   // אם 3 אטרקציות — הערב כבר תפוס באטרקציה
+        dinnerR = nearestRestaurant(region.id, lodgingPoint, usedRest, params.style);
+        if (dinnerR) usedRest.push(dinnerR.id);
+      }
+
+      // ── ציר-זמן כרונולוגי אחד: בוקר(אטרקציה) → צהריים(מסעדה) → אחה"צ(אטרקציה)
+      //    → לפנות ערב(אטרקציה) / ערב(מסעדה). גם הבלוקים וגם העצירות-על-המפה
+      //    נגזרים ממנו *באותו סדר* — כך מסלול היום רציף ולא קופץ אחורה למסעדה.
+      var timeline = [];
+      ordered.forEach(function (item, idx) {
+        var when = idx === 0 ? 'בוקר' : (idx === 1 ? 'אחה"צ' : 'לפנות ערב');
+        var timeKey = idx === 0 ? 'morning' : (idx === 1 ? 'afternoon' : 'evening');
+        timeline.push({ kind: 'att', att: item.att, when: when, timeKey: timeKey });
+        if (idx === 0 && lunchR) timeline.push({ kind: 'rest', rest: lunchR, when: 'צהריים', timeKey: 'lunch' });
+      });
+      if (!ordered.length && lunchR) timeline.push({ kind: 'rest', rest: lunchR, when: 'צהריים', timeKey: 'lunch' });
+      if (dinnerR) timeline.push({ kind: 'rest', rest: dinnerR, when: 'ערב', timeKey: 'evening' });
+
       var blocks = [];
       var stops = [];
       var dayCost = 0;
-      var whenKeys = ['morning', 'afternoon'];
-      // אם 3 אטרקציות — נוסיף בלוק "view"/ערב מוקדם נוסף
-      ordered.forEach(function (item, idx) {
-        var a = item.att;
-        var when = idx === 0 ? 'בוקר' : (idx === 1 ? 'אחה"צ' : 'לפנות ערב');
-        var timeKey = idx === 0 ? 'morning' : (idx === 1 ? 'afternoon' : 'evening');
-        var cost = attractionCostNis(a.cost) * params.people;
-        dayCost += cost;
-        var what = a.name;
-        if (a.needsBooking) what += ' (להזמין מראש)';
-        blocks.push({
-          when: when, what: what, desc: a.desc + (a.tip ? ' · ' + a.tip : ''),
-          cost: cost
-        });
-        stops.push({
-          name: a.name, lat: a.lat, lng: a.lng,
-          time: DAY_TIMES[timeKey] || '15:00',
-          note: a.desc, type: a.type
-        });
-      });
-
-      // צהריים — מסעדה קרובה לנקודה הראשונה של היום
-      var anchor = ordered.length ? ordered[0].att : lodgingPoint;
-      var lunchR = nearestRestaurant(region.id, anchor, usedRest, params.style);
-      if (lunchR) {
-        usedRest.push(lunchR.id);
-        var lunchCost = lunchR.price * 45 * params.people; // price 1/2/3 → ~45/90/135 לאדם
-        dayCost += lunchCost;
-        blocks.splice(1, 0, { // אחרי הבוקר
-          when: 'צהריים', what: lunchR.name, desc: lunchR.style + ' · ' + lunchR.desc + (lunchR.kosher ? ' · כשר' : ''),
-          cost: lunchCost
-        });
-        stops.push({ name: lunchR.name, lat: lunchR.lat, lng: lunchR.lng, time: DAY_TIMES.lunch, note: lunchR.style, type: 'restaurant' });
-      }
-
-      // ערב — מסעדה (אם לא כבר 3 אטרקציות שתפסו את הערב)
-      if (ordered.length < 3) {
-        var dinnerR = nearestRestaurant(region.id, lodgingPoint, usedRest, params.style);
-        if (dinnerR) {
-          usedRest.push(dinnerR.id);
-          var dinnerCost = dinnerR.price * 55 * params.people;
-          dayCost += dinnerCost;
-          blocks.push({ when: 'ערב', what: dinnerR.name, desc: dinnerR.style + ' · ' + dinnerR.desc + (dinnerR.kosher ? ' · כשר' : ''), cost: dinnerCost });
-          stops.push({ name: dinnerR.name, lat: dinnerR.lat, lng: dinnerR.lng, time: DAY_TIMES.evening, note: dinnerR.style, type: 'restaurant' });
+      timeline.forEach(function (t) {
+        if (t.kind === 'att') {
+          var a = t.att;
+          var cost = attractionCostNis(a.cost) * params.people;
+          dayCost += cost;
+          blocks.push({
+            when: t.when, what: a.name + (a.needsBooking ? ' (להזמין מראש)' : ''),
+            desc: a.desc + (a.tip ? ' · ' + a.tip : ''), cost: cost
+          });
+          stops.push({ name: a.name, lat: a.lat, lng: a.lng, time: DAY_TIMES[t.timeKey] || '15:00', note: a.desc, type: a.type });
+        } else {
+          var r = t.rest;
+          var unit = t.timeKey === 'lunch' ? 45 : 55;   // צהריים ~45 / ערב ~55 לאדם
+          var rcost = r.price * unit * params.people;
+          dayCost += rcost;
+          blocks.push({
+            when: t.when, what: r.name,
+            desc: r.style + ' · ' + r.desc + (r.kosher ? ' · כשר' : ''), cost: rcost
+          });
+          stops.push({ name: r.name, lat: r.lat, lng: r.lng, time: DAY_TIMES[t.timeKey], note: r.style, type: 'restaurant' });
         }
-      }
+      });
 
       // אלטרנטיבת גשם (חורף): אטרקציה rainOk חלופית שלא נבחרה
       var dayTip = null;
