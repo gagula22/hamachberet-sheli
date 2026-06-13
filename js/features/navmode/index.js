@@ -2,21 +2,21 @@
   'use strict';
   // ─────────────────────────────────────────────────────────────────────────
   // מצב ניווט — אחריות עצמאית (window.NavMode).
-  // קובע איך 7 הכלים של "המרכז היומי" (group:'daily') מוצגים בסרגל:
-  //   'flat'  — כרגיל, כל כלי פריט נפרד (המצב המקורי).
-  //   'group' — קבוצה נפתחת בסרגל (אפשרות א): פריט-אב מתקפל עם הכלים תחתיו.
-  //   'hub'   — עמוד-מרכז עם לשוניות (אפשרות ב): פריט אחד → #/hub.
-  // sidebar.js קורא NavMode.get() בזמן רינדור; js/views/hub מממש את עמוד-המרכז.
-  // אפס שינוי ב-views עצמם. נשמר מקומית (mahberet.navMode); כרטיס בהגדרות.
+  // מאחד כלים לקבוצות. שתי קבוצות (GROUPS): "המרכז היומי" ו"ידע ולכידה".
+  // המתג (mahberet.navMode) קובע איך כל הקבוצות מוצגות בסרגל:
+  //   'flat'  — כל כלי פריט נפרד (המצב המקורי).
+  //   'group' — כל קבוצה נפתחת בסרגל (פריט-אב מתקפל עם הילדים).
+  //   'hub'   — כל קבוצה = פריט אחד → עמוד-מרכז עם לשוניות (#/hub/<groupId>).
+  // צרור (bundle) = ילד שמאגד כמה views תחת לשוניות-משנה (משימות, מעקב יומי).
+  // sidebar.js קורא מכאן; js/views/hub מממש את עמודי-המרכז והצרורות.
+  // אפס שינוי ב-views עצמם. כרטיס שליטה בהגדרות.
   // ─────────────────────────────────────────────────────────────────────────
 
   var KEY = 'mahberet.navMode';
-  var DEFAULT = 'group';   // בחירת המשתמש: "קבוצה נפתחת" (אפשרות א) כברירת מחדל
+  var DEFAULT = 'group';
   var VALID = { flat: 1, group: 1, hub: 1 };
 
-  // ── צרורות "המרכז היומי" ──────────────────────────────────────────────────
-  // 7 הכלים מאוחדים ל-4 ילדים לפי רעיון משותף. צרור = עמוד-מיני עם לשוניות
-  // שמארח views קיימים (members) — אפס שינוי בקוד שלהם. יומן נשאר עצמאי.
+  // ── צרורות (כלי-אב עם לשוניות-משנה) ───────────────────────────────────────
   var BUNDLES = [
     { id: 'tasks', title: 'משימות', icon: '✅', color: 'blush', members: [
         { id: 'todos', title: 'רשימה', icon: '✅' },
@@ -26,21 +26,46 @@
         { id: 'mood', title: 'מצב רוח', icon: '💭' },
         { id: 'water', title: 'שתייה ושינה', icon: '💧' },
         { id: 'habits', title: 'מעקב הרגלים', icon: '🌱' }
-    ] },
-    { id: 'knowledge', title: 'ידע וזיכרון', icon: '📝', color: 'lavender', members: [
-        { id: 'notes', title: 'הערות', icon: '📝' },
-        { id: 'flashcards', title: 'כרטיסיות זיכרון', icon: '🧠' }
     ] }
   ];
   function bundleById(id) { return BUNDLES.filter(function (b) { return b.id === id; })[0] || null; }
 
-  // 4 הילדים של "המרכז היומי": יומן (עצמאי) + 3 צרורות.
-  function dailyChildren() {
-    return [
-      { id: 'calendar', title: 'יומן', icon: '📅', color: 'butter', route: '#/calendar' }
-    ].concat(BUNDLES.map(function (b) {
-      return { id: b.id, title: b.title, icon: b.icon, color: b.color, route: '#/bundle/' + b.id, isBundle: true };
-    }));
+  // ── קבוצות ─────────────────────────────────────────────────────────────────
+  // child: { view:id } (כלי בודד) או { bundle:id } (צרור עם לשוניות).
+  var GROUPS = [
+    { id: 'daily', title: 'המרכז היומי', icon: '🗓️', color: 'sky', children: [
+        { view: 'calendar', title: 'יומן', icon: '📅', color: 'butter' },
+        { bundle: 'tasks' },
+        { bundle: 'daily-track' },
+        { view: 'goals', title: 'מטרות', icon: '🎯', color: 'blush' }
+    ] },
+    { id: 'knowledge', title: 'ידע ולכידה', icon: '📚', color: 'lavender', children: [
+        { view: 'notes', title: 'הערות', icon: '📝', color: 'lavender' },
+        { view: 'sketch', title: 'לוח שרטוט', icon: '✏️', color: 'lavender' },
+        { view: 'highlights', title: 'מרכז הדגשות', icon: '🖍️', color: 'butter' },
+        { view: 'flashcards', title: 'כרטיסיות זיכרון', icon: '🧠', color: 'sage' },
+        { view: 'voice', title: 'הערות קול', icon: '🎙️', color: 'blush' }
+    ] }
+  ];
+  function groupById(id) { return GROUPS.filter(function (g) { return g.id === id; })[0] || null; }
+
+  // הופך child גולמי לאובייקט תצוגה אחיד {id,title,icon,color,route,isBundle}
+  function resolveChild(c) {
+    if (c.bundle) {
+      var b = bundleById(c.bundle);
+      return b ? { id: b.id, title: b.title, icon: b.icon, color: b.color, route: '#/bundle/' + b.id, isBundle: true } : null;
+    }
+    return { id: c.view, title: c.title, icon: c.icon, color: c.color, route: '#/' + c.view };
+  }
+  function groupChildren(groupId) {
+    var g = groupById(groupId);
+    return g ? g.children.map(resolveChild).filter(Boolean) : [];
+  }
+
+  // לאיזו קבוצה שייך section (לפי שדה group). משמש את הסרגל ל-setActive ולדילוג.
+  function groupOf(sectionId) {
+    var s = (window.App && App.sections || []).filter(function (x) { return x.id === sectionId; })[0];
+    return s ? s.group || null : null;
   }
 
   function get() {
@@ -50,21 +75,8 @@
   function set(mode) {
     if (!VALID[mode]) mode = DEFAULT;
     try { localStorage.setItem(KEY, mode); } catch (e) {}
-    // רינדור מחדש של הסרגל והמסך הנוכחי
     if (window.Sidebar && window.App) Sidebar.render(App.sections);
-    if (window.App && App.render) {
-      // אם היינו בכלי שהוסתר מהסרגל במצב hub — לא נוגעים בנתיב, רק מרעננים
-      App.render();
-    }
-  }
-
-  // האם הכלי הזה חבר ב"מרכז היומי"
-  function isDaily(id) {
-    var s = (window.App && App.sections || []).find(function (x) { return x.id === id; });
-    return !!(s && s.group === 'daily');
-  }
-  function dailyTools() {
-    return (window.App && App.sections || []).filter(function (s) { return s.group === 'daily'; });
+    if (window.App && App.render) App.render();
   }
 
   // ── כרטיס בהגדרות ─────────────────────────────────────────────────────────
@@ -72,8 +84,8 @@
   function card() {
     var OPTS = [
       { v: 'flat',  icon: '☰',  label: 'רגיל', sub: 'כל כלי בנפרד' },
-      { v: 'group', icon: '🗂️', label: 'קבוצה נפתחת', sub: 'מקופלים תחת "המרכז היומי"' },
-      { v: 'hub',   icon: '🗓️', label: 'עמוד-מרכז', sub: 'הכול בלשוניות בעמוד אחד' }
+      { v: 'group', icon: '🗂️', label: 'קבוצות נפתחות', sub: 'מקופלים תחת פריט-אב' },
+      { v: 'hub',   icon: '🗓️', label: 'עמוד-מרכז', sub: 'הכול בלשוניות' }
     ];
     var row = el('div', { class: 'settings-options nav-mode-opts' });
     OPTS.forEach(function (o) {
@@ -93,14 +105,16 @@
     });
     return el('div', { class: 'card settings-card' }, [
       el('h2', { class: 'settings-card-title' }, '🧭 סגנון התפריט'),
-      el('div', { class: 'settings-card-sub' }, 'איך להציג את כלי "המרכז היומי" (יומן, הערות, משימות, מטריצה, מצב רוח, שתייה, כרטיסיות)'),
+      el('div', { class: 'settings-card-sub' }, 'איך להציג את קבוצות הכלים — "המרכז היומי" ו"ידע ולכידה": כל כלי בנפרד, מקובצים ונפתחים, או בעמוד-מרכז עם לשוניות.'),
       row
     ]);
   }
   (window.SETTINGS_CARDS = window.SETTINGS_CARDS || []).push(card);
 
   window.NavMode = {
-    get: get, set: set, isDaily: isDaily, dailyTools: dailyTools,
-    bundles: function () { return BUNDLES; }, bundleById: bundleById, dailyChildren: dailyChildren
+    get: get, set: set,
+    groups: function () { return GROUPS; }, groupById: groupById,
+    groupChildren: groupChildren, groupOf: groupOf,
+    bundles: function () { return BUNDLES; }, bundleById: bundleById
   };
 })();

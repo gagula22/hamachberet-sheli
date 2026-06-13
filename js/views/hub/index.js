@@ -63,26 +63,29 @@
   // עוטף ב-hub-wrap כדי לקבל אנימציית כניסה אחידה
   function el2(root) { var w = el('div', { class: 'hub-wrap' }); root.appendChild(w); return w; }
 
-  // ── עמוד-מרכז מלא (אפשרות ב): #/hub/<childId>/<member?> ──────────────────
+  // ── עמוד-מרכז של קבוצה: #/hub/<groupId>/<childId?>/<member?> ─────────────
   function renderHub(root) {
-    var children = window.NavMode ? NavMode.dailyChildren()
-      : (App.sections || []).filter(function (s) { return s.group === 'daily'; });
-    if (!children.length) { root.appendChild(el('div', { class: 'empty-state' }, 'אין כלים במרכז.')); return; }
-    var p = hashParts();                 // ['hub', childId?, memberId?]
-    var activeChildId = children.some(function (c) { return c.id === p[1]; }) ? p[1] : children[0].id;
+    var p = hashParts();                 // ['hub', groupId?, childId?, memberId?]
+    var groups = window.NavMode ? NavMode.groups() : [];
+    var groupId = (window.NavMode && NavMode.groupById(p[1])) ? p[1] : (groups[0] && groups[0].id);
+    var group = window.NavMode ? NavMode.groupById(groupId) : null;
+    var children = group ? NavMode.groupChildren(groupId) : [];
+    if (!children.length) { root.appendChild(el('div', { class: 'empty-state' }, 'אין כלים בקבוצה.')); return; }
+    if (group) setTitle(group.icon + ' ' + group.title);
+    var activeChildId = children.some(function (c) { return c.id === p[2]; }) ? p[2] : children[0].id;
 
     var tabs = children.map(function (c) {
       return {
         id: c.id, title: c.title, icon: c.icon,
-        onClick: function () { location.hash = '#/hub/' + c.id; },
+        onClick: function () { location.hash = '#/hub/' + groupId + '/' + c.id; },
         render: function (pane) {
           if (c.isBundle && window.NavMode) {
             var b = NavMode.bundleById(c.id);
-            var memberId = (activeChildId === c.id && p[2]) ? p[2] : b.members[0].id;
+            var memberId = (activeChildId === c.id && p[3]) ? p[3] : b.members[0].id;
             var subTabs = b.members.map(function (m) {
               return {
                 id: m.id, title: m.title, icon: m.icon,
-                onClick: function () { location.hash = '#/hub/' + c.id + '/' + m.id; },
+                onClick: function () { location.hash = '#/hub/' + groupId + '/' + c.id + '/' + m.id; },
                 render: renderHostView(m.id)
               };
             });
