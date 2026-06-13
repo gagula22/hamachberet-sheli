@@ -95,14 +95,16 @@
       var items = all.map(function (p) { return buildItem(p); });  // כולם סגורים כברירת מחדל
 
       var list = el('div', { class: 'prompts-list' }, items);
-      var emptyAll = el('div', { class: 'prompts-empty' + (all.length ? ' hidden' : '') }, 'אין עדיין פרומטים — לחץ "➕ הוסף פרומט" כדי להתחיל.');
-      var emptySearch = el('div', { class: 'prompts-empty hidden' }, 'לא נמצאו פרומטים תואמים.');
+      var emptyAll = el('div', { class: 'prompts-empty hidden' }, 'אין עדיין פרומטים — לחץ "➕ הוסף פרומט" כדי להתחיל.');
+      var emptySearch = el('div', { class: 'prompts-empty hidden' }, 'לא נמצאו פרומטים תואמים. נקה את החיפוש כדי לראות הכול.');
 
+      // מקור-אמת יחיד למצב התצוגה: מסתיר/מציג פריטים + שתי הודעות-הריק יחד.
       function applyFilter() {
         var q = state.query.trim().toLowerCase();
         var shown = 0;
         items.forEach(function (it) { var ok = it._match(q); it.classList.toggle('hidden', !ok); if (ok) shown++; });
-        emptySearch.classList.toggle('hidden', !(all.length && shown === 0));
+        emptyAll.classList.toggle('hidden', all.length !== 0);                 // אין פרומטים בכלל
+        emptySearch.classList.toggle('hidden', !(all.length !== 0 && shown === 0)); // יש פרומטים אך אף אחד לא תואם לחיפוש
       }
 
       var search = el('input', { type: 'search', placeholder: 'חיפוש לפי שם סקיל, שם פרומט או תוכן…' });
@@ -153,7 +155,7 @@
           if (App.toast) App.toast('הפרומט נוסף ✓');
         }
         savePrompts(list);
-        state.formOpen = false; state.editingId = null;
+        state.formOpen = false; state.editingId = null; state.query = '';  // נקה חיפוש כדי שהפרומט החדש/הערוך ייראה מיד
         rerender();
       }
       function cancel() { state.formOpen = false; state.editingId = null; rerender(); }
