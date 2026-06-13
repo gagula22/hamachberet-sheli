@@ -57,3 +57,28 @@
 .prompt-body-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
 
 .prompts-empty { text-align: center; color: var(--ink-soft); padding: 36px 12px; }
+
+/* תג "מובנה" */
+.prompt-builtin-tag { background: var(--sage); color: #3b3a3a; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; }
+
+/* כפתורי פעולה קטנים בתוך פריט */
+.prompt-body-actions .btn-mini { padding: 7px 12px !important; font-size: 12.5px !important; }
+.prompt-body-actions .btn-danger { background: color-mix(in srgb, var(--blush) 55%, #fff); }
+.prompt-body-actions .btn-danger:hover { background: var(--blush); }
+
+/* טופס הוספה/עריכה */
+.prompt-form { border: 1px dashed var(--lavender); border-radius: 16px; padding: 18px; margin-top: 16px;
+  background: var(--cream); display: flex; flex-direction: column; gap: 12px; }
+.prompt-form-title { font-weight: 700; font-size: 15px; }
+.prompt-form label { display: block; margin-bottom: 5px; font-size: 13px; font-weight: 600; color: var(--ink-soft); }
+.prompt-form input, .prompt-form textarea { width: 100%; box-sizing: border-box; padding: 10px 12px;
+  border-radius: 10px; border: 1px solid var(--line); background: var(--paper); color: var(--ink); font: inherit; }
+.prompt-form input:focus, .prompt-form textarea:focus { outline: none; border-color: var(--lavender);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--lavender) 35%, transparent); }
+.prompt-form textarea { min-height: 220px; resize: vertical; white-space: pre-wrap;
+  font-family: ui-monospace, Menlo, Consolas, "Courier New", monospace; font-size: 13px; line-height: 1.7; }
+.prompt-form-actions { display: flex; gap: 8px; }
+
+/* כפתור ראשי — מודגש, מתוחם לעמוד הפרומטים בלבד */
+.prompts-wrap .btn-primary { background: var(--lavender); color: #3b3a3a; font-weight: 600; border-color: transparent; }
+.prompts-wrap .btn-primary:hover { filter: brightness(.96); }

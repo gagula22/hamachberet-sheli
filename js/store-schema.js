@@ -20,6 +20,7 @@
     readingList:  { default: [],                               sync: 'subcol',  merge: 'by-id' },
     flashcards:   { default: [],                               sync: 'subcol',  merge: 'by-id' },
     trips:        { default: [],                               sync: 'subcol',  merge: 'by-id' },
+    prompts:      { default: [],                               sync: 'subcol',  merge: 'by-id' },
     mood:         { default: {},                               sync: 'maindoc', merge: 'cloud-wins' },
     water:        { default: {},                               sync: 'maindoc', merge: 'cloud-wins' },
     sleep:        { default: {},                               sync: 'maindoc', merge: 'cloud-wins' },
