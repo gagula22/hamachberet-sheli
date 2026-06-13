@@ -127,6 +127,8 @@ plan(params) → result
 //   composition:{ type:'couple'|'family'|'friends'|'solo', kidsAges?:[] },
 //   budgetLevel:'free'|'budget'|'mid'|'premium' | budgetTotal?,
 //   style:'nature'|'attractions'|'food'|'mixed', region? /*israel*/,
+//   origin? /*israel: נקודת מוצא — {name, lat?, lng?} או מחרוזת שם עיר. אם יש
+//            קואורדינטות, המנוע מחשב מרחק/זמן-נסיעה לאזור ומשבץ בתוכנית*/,
 //   destination? /*abroad id*/, important? /*getaway*/, avoid? /*surprise*/ }
 // result.kind==='israel':  { trip /*סכמת TripLayer מלאה עם lat/lng אמיתיים*/, doc }
 // result.kind==='abroad':  { trip:null, doc }

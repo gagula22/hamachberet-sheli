@@ -212,6 +212,34 @@
   }
 
   // ── הרכב נוסעים (משותף לכל המסלולים) — מחזיר {type, kidsAges, getNode} ──────
+  // שדה עיר-מוצא: input חופשי + datalist מערי המוצא של המאגר. זוכר את הבחירה
+  // האחרונה ב-localStorage כך שעיר המגורים נשמרת בין טיולים.
+  var ORIGIN_LS = 'tripmap.originCity';
+  function originField(cities) {
+    var listId = 'tp-origin-list';
+    var dl = el('datalist', { id: listId });
+    (cities || []).forEach(function (c) { dl.appendChild(el('option', { value: c.name })); });
+    var saved = '';
+    try { saved = window.localStorage.getItem(ORIGIN_LS) || ''; } catch (e) {}
+    var input = el('input', {
+      class: 'tp-origin-input', type: 'text', list: listId,
+      placeholder: 'עיר המגורים שלכם', autocomplete: 'off', value: saved
+    });
+    var wrap = el('div', { class: 'tp-origin-wrap' }, [el('span', { class: 'tp-origin-pin' }, '🏠'), input, dl]);
+    return {
+      node: wrap,
+      get: function () {
+        var name = input.value.trim();
+        if (!name) return null;
+        try { window.localStorage.setItem(ORIGIN_LS, name); } catch (e) {}
+        var match = (cities || []).filter(function (c) {
+          return c.name === name || c.name.indexOf(name) === 0 || name.indexOf(c.name) === 0;
+        })[0];
+        return match ? { name: match.name, lat: match.lat, lng: match.lng } : { name: name };
+      }
+    };
+  }
+
   function compositionBlock(opts) {
     opts = opts || {};
     var labels = opts.labels || {
@@ -380,23 +408,26 @@
     }
 
     function buildIsraelForm(form, c) {
+      c.origin = originField(DATA.originCities || []);
+      form.appendChild(question('1. מאיפה יוצאים?', c.origin.node, { hint: 'עיר המגורים — לפיה נחשב את הנסיעה לאזור (נשמרת לפעם הבאה)' }));
+
       c.region = choiceGroup(regionChoices(), {});
-      form.appendChild(question('1. אזור', c.region.node, { required: true }));
+      form.appendChild(question('2. אזור', c.region.node, { required: true }));
 
       c.days = rangeField({ min: 1, max: 7, value: 3, format: function (v) { return v + (v === 1 ? ' יום' : ' ימים'); } });
-      form.appendChild(question('2. כמה ימים', c.days.node));
+      form.appendChild(question('3. כמה ימים', c.days.node));
 
       c.comp = compositionBlock({});
-      form.appendChild(question('3. הרכב', c.comp.node, { required: true }));
+      form.appendChild(question('4. הרכב', c.comp.node, { required: true }));
 
       c.budget = choiceGroup(BUDGET_LEVELS, {});
-      form.appendChild(question('4. תקציב לינה', c.budget.node, { required: true }));
+      form.appendChild(question('5. תקציב לינה', c.budget.node, { required: true }));
 
       c.style = choiceGroup(STYLES, {});
-      form.appendChild(question('5. סגנון', c.style.node, { required: true }));
+      form.appendChild(question('6. סגנון', c.style.node, { required: true }));
 
       c.month = choiceGroup(monthChoices(), { compact: true });
-      form.appendChild(question('6. חודש נסיעה', c.month.node, { hint: 'משפיע על עונה, מסלולי מים ומזג אוויר' }));
+      form.appendChild(question('7. חודש נסיעה', c.month.node, { hint: 'משפיע על עונה, מסלולי מים ומזג אוויר' }));
     }
 
     function buildAbroadForm(form, c) {
@@ -523,6 +554,7 @@
       if (st.kind === 'israel') {
         var reg = c.region.get();
         p.region = reg;
+        if (c.origin) { var og = c.origin.get(); if (og) p.origin = og; }
         p.days = c.days.get();
         p.composition = { type: c.comp.type(), kidsAges: c.comp.kidsAges() };
         p.budgetLevel = c.budget.get();

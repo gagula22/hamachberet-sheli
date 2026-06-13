@@ -85,6 +85,37 @@
   var COST_NIS = { 0: 0, 1: 35, 2: 90, 3: 180 };
   function attractionCostNis(c) { return COST_NIS[c] != null ? COST_NIS[c] : 0; }
 
+  // ── נקודת מוצא (עיר מגורים) → מרחק/זמן-נסיעה משוער ───────────────────────────
+  // מקבל {name,lat?,lng?} או מחרוזת שם; משלים קואורדינטות מ-originCities לפי שם.
+  // זמן נסיעה ~ מרחק-אווירי × 1.3 (פיתולי כביש) / 75 קמ"ש ממוצע בינעירוני.
+  function resolveOrigin(origin) {
+    if (!origin) return null;
+    var name = (typeof origin === 'string') ? origin : (origin.name || '');
+    name = String(name).trim();
+    if (!name) return null;
+    var lat = (origin && isFinite(+origin.lat)) ? +origin.lat : null;
+    var lng = (origin && isFinite(+origin.lng)) ? +origin.lng : null;
+    if (lat == null || lng == null) {              // השלמה מהרשימה לפי שם
+      var d = DATA();
+      var match = (d.originCities || []).filter(function (c) {
+        return c.name === name || c.name.indexOf(name) === 0 || name.indexOf(c.name) === 0;
+      })[0];
+      if (match) { lat = match.lat; lng = match.lng; name = match.name; }
+    }
+    return { name: name, lat: lat, lng: lng };
+  }
+
+  // מחזיר {km, min, text} מנקודת מוצא ליעד — או null אם אין קואורדינטות מוצא
+  function driveFromOrigin(origin, target) {
+    if (!origin || origin.lat == null || origin.lng == null || !target) return null;
+    var km = haversineKm({ lat: origin.lat, lng: origin.lng }, target);
+    if (!isFinite(km)) return null;
+    var roadKm = Math.round(km * 1.3);
+    var min = Math.round(roadKm / 75 * 60);
+    var dur = (min >= 60) ? (Math.floor(min / 60) + ' ש\'' + (min % 60 ? ' ' + (min % 60) + ' דק\'' : '')) : (min + ' דק\'');
+    return { km: roadKm, min: min, text: '~' + roadKm + ' ק"מ (כ-' + dur + ' נסיעה)' };
+  }
+
   // ── ולידציה של params + ברירות מחדל שפויות ──────────────────────────────────
 
   function normalizeParams(p) {
@@ -119,6 +150,7 @@
       budgetTotal: (p.budgetTotal != null && isFinite(+p.budgetTotal)) ? +p.budgetTotal : null,
       style: style,
       region: p.region || null,
+      origin: resolveOrigin(p.origin),
       destination: p.destination || null,
       important: p.important || null,
       avoid: p.avoid || null,
@@ -362,6 +394,8 @@
     var region = pickRegion(params);
     var lodging = pickLodging(region.id, params);
     var lodgingPoint = lodging ? { lat: lodging.lat, lng: lodging.lng } : region.center;
+    // נקודת מוצא (עיר מגורים) → נסיעה לבסיס הטיול (לינה/מרכז האזור)
+    var originDrive = driveFromOrigin(params.origin, lodgingPoint);
     var season = params.season;
     var rand = rng(params.seed);
 
@@ -487,12 +521,23 @@
       var dayTitle = ordered.length ? ordered.map(function (i) { return i.att.name; })[0] + ' וסביבתה'
                                     : ('יום ' + dnum);
 
+      // יום ראשון: אם יש עיר מוצא — מציינים את הנסיעה מהבית לאזור
+      var transport;
+      if (isFirst && params.origin && originDrive) {
+        transport = 'יציאה מ' + params.origin.name + ' לכיוון ' + region.name +
+                    ' — ' + originDrive.text + '. משם נסיעה ברכב בין הנקודות.';
+      } else if (isFirst && params.origin) {
+        transport = 'יציאה מ' + params.origin.name + ' לכיוון ' + region.name +
+                    '. נסיעה ברכב בין הנקודות.';
+      } else {
+        transport = 'נסיעה ברכב בין הנקודות; מומלץ לצאת מ' + (lodging ? lodging.name : region.name) + ' בבוקר.';
+      }
       trip.days.push({ n: dnum, title: 'יום ' + dnum + ' — ' + dayTitle, stops: stops });
       docDays.push({
         n: dnum,
         title: 'יום ' + dnum + ' — ' + dayTitle + (isFirst ? ' (יום ראשון קליל)' : ''),
         blocks: blocks,
-        transport: 'נסיעה ברכב בין הנקודות; מומלץ לצאת מ' + (lodging ? lodging.name : region.name) + ' בבוקר.',
+        transport: transport,
         tip: dayTip,
         costPerDay: dayCost
       });
@@ -517,9 +562,14 @@
       { cat: 'סה"כ', perDay: null, total: lodgingTotal + foodTotal + attrTotal }
     ];
 
+    var originLine = '';
+    if (params.origin) {
+      originLine = 'יציאה מ' + params.origin.name +
+                   (originDrive ? ' (' + originDrive.text + ' לאזור)' : '') + '. ';
+    }
     var doc = {
       title: trip.title,
-      overview: region.desc + ' ' + (lodging ? ('בסיס: ' + lodging.name + '. ') : '') +
+      overview: originLine + region.desc + ' ' + (lodging ? ('בסיס: ' + lodging.name + '. ') : '') +
                 'התוכנית מסודרת גיאוגרפית כדי לחסוך נסיעות, עם 2-3 עצירות ביום (היום הראשון קליל).',
       days: docDays,
       budgetTable: budgetTable,
