@@ -18,6 +18,7 @@
     return n;
   }
   var esc = function (s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); };
+  var INFO = 'אין צורך בתוכנת טריידינג (כמו TradingView) — הניתוח רץ עצמאית דרך הדפדפן ומושך נתונים חיים מ-Binance בזמן ההרצה.';
   function pad2(n) { return ('0' + n).slice(-2); }
   function vWord(v) { return v === 'GO' ? '🟢 GO' : v === 'NO-GO' ? '✋ NO-GO' : '⏸ WAIT'; }
   function vCls(v) { return v === 'GO' ? 'go' : v === 'NO-GO' ? 'nogo' : ''; }
@@ -198,34 +199,36 @@
       if (window.App && App.toast) App.toast('✓ הדוח הופק — ' + pad2(gen.getHours()) + ':' + pad2(gen.getMinutes()) + ':' + pad2(gen.getSeconds()));
     }).catch(function (e) {
       host.innerHTML = ''; host.appendChild(el('div', { class: 'wk-fail' }, '⚠️ ' + (e && e.message ? e.message : 'שגיאה במשיכת הנתונים מ-Binance — בדקו את החיבור.')));
-    }).then(function () { if (btn) { btn.disabled = false; btn.textContent = '🔄 הפק דוח חי חדש'; } });
+    }).then(function () { if (btn) { btn.disabled = false; btn.textContent = '🔍 ניתוח לפי וויקוף'; } });
   }
 
   function render(root) {
     if (!window.WyckoffData || !window.WyckoffEngine || !window.WyckoffChart) {
       root.appendChild(el('div', { class: 'wk-fail' }, 'מודולי הוויקוף לא נטענו — רעננו את הדף.')); return;
     }
-    var btn = el('button', { class: 'wk-analyze' }, '🔄 הפק דוח חי חדש');
+    var btn = el('button', { class: 'wk-analyze', title: INFO }, '🔍 ניתוח לפי וויקוף');
     var host = el('div', { class: 'wk-host' });
     var bar = el('div', { class: 'wk-bar' }, [
       el('span', { class: 'wk-coin' }, '📈'),
-      el('span', { style: 'font-weight:700' }, 'דוח וויקוף עצמאי — BTC · ETH · SOL'),
+      el('span', { style: 'font-weight:700' }, 'ניתוח לפי וויקוף — BTC · ETH · SOL'),
       el('span', { style: 'flex:1' }), btn
     ]);
     btn.addEventListener('click', function () { run(host, btn); });
-    root.appendChild(el('div', { class: 'wk-view' }, [bar, host]));
+    var note = el('div', { class: 'wk-info' }, 'ℹ️ ' + INFO);
+    root.appendChild(el('div', { class: 'wk-view' }, [bar, note, host]));
     run(host, btn);
   }
 
-  // ── כרטיס דשבורד ──
+  // ── כרטיס דשבורד: "ניתוח לפי וויקוף" ──
   function dashCard() {
-    return el('div', { class: 'card wk-dash-card' }, [
-      el('h2', { style: 'margin:0 0 2px' }, '📈 דוח וויקוף עצמאי'),
-      el('p', { class: 'sub', style: 'margin:0' }, 'ניתוח חי של BTC·ETH·SOL לפי וויקוף — רץ באתר עצמו, ללא קלוד.'),
+    var card = el('div', { class: 'card wk-dash-card', title: INFO }, [
+      el('h2', { style: 'margin:0 0 2px' }, '📈 ניתוח לפי וויקוף'),
+      el('p', { class: 'sub', style: 'margin:0' }, INFO),
       el('div', { class: 'wk-dash-btns' }, [
-        el('button', { class: 'wk-dash-btn primary', onClick: function () { location.hash = '#/wyckoff'; } }, '🔍 הפק דוח 3 מטבעות')
+        el('button', { class: 'wk-dash-btn primary', title: INFO, onClick: function () { location.hash = '#/wyckoff'; } }, '🔍 ניתוח לפי וויקוף')
       ])
     ]);
+    return card;
   }
   if (window.DASHBOARD_WIDGETS) window.DASHBOARD_WIDGETS.push(dashCard);
 

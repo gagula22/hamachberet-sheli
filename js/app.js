@@ -20,7 +20,7 @@
     { id: 'goals',     title: 'מטרות',           icon: '🎯', color: 'blush',    desc: 'לחלום, להגשים' },
     { id: 'insights',  title: 'תובנות',          icon: '📊', color: 'sage',     desc: 'גרפים ומגמות מהנתונים שלך' },
     { id: 'tripmap',   title: 'מפת טיולים',      icon: '🗺️', color: 'sky',      desc: 'מפת ישראל בתלת־מימד + תכנון מסלולים' },
-    { id: 'wyckoff',   title: 'מנתח וויקוף',     icon: '📈', color: 'sage',     desc: 'ניתוח קריפטו עצמאי לפי שיטת וויקוף (נתונים חיים)' },
+    { id: 'wyckoff',   title: 'ניתוח לפי וויקוף', icon: '📈', color: 'sage',     desc: 'ניתוח קריפטו חי לפי וויקוף — ללא תוכנת טריידינג, רץ דרך הרשת מנתוני Binance' },
     { id: 'stickers',  title: 'כלים',             icon: '🛠️', color: 'lavender', desc: 'כלים שימושיים' },
     { id: 'assistant', title: 'עוזר חכם',         icon: '🤖', color: 'sage',     desc: 'שאל אותי כל דבר על האתר ועל התוכן שלך' },
     { id: 'settings',  title: 'הגדרות',           icon: '⚙️', color: 'sky',      desc: 'שם, ערכת נושא וגודל טקסט' },
