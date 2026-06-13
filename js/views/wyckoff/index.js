@@ -187,7 +187,7 @@
         var r = i === 0 ? btcR : WyckoffEngine.analyze(bundles[i], { btcBias: btcBias });
         var b = bundles[i];
         var imgs = {
-          d: chartImg(b.d, r.tfs.d), h4: chartImg(b.h4, r.tfs.h4, 60), h1: chartImg(b.h1, r.tfs.h1, 50),
+          d: chartImg(b.d, r.tfs.d, 35), h4: chartImg(b.h4, r.tfs.h4, 60), h1: chartImg(b.h1, r.tfs.h1, 50),
           m15: chartImg(b.m15, { scIdx: -1, arIdx: -1, sup: null, res: null }, 0, null, 300),
           scen: r.scenarios.map(function (s) { return scenarioImg(b.h4, s, r.money); })
         };

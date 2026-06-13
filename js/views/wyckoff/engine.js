@@ -83,7 +83,7 @@
 
   // ── ניתוח טווח-זמן יחיד: SC/AR, טווח, שלב, תודעה ──
   function analyzeTF(candles, tfName) {
-    var scIdx = detectSC(candles, tfName === 'd' ? 40 : 50);
+    var scIdx = detectSC(candles, tfName === 'd' ? 35 : 50);
     var arIdx = detectAR(candles, scIdx);
     var ctrl = controlRead(candles);
     var last = candles[candles.length - 1];
