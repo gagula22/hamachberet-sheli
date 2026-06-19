@@ -214,28 +214,44 @@
     const col    = db.collection(`users/${userId}/topics`);
     const prev   = lastPushed['topics'];
     const newMap = new Map(topics.map(t => [String(t.id), t]));
-    const batch  = db.batch();
-    let   writes = 0;
 
+    // Build the change list.
+    const toSet = [];      // [id, topic]
+    const toDelete = [];   // id
     if (prev !== undefined) {
       const prevMap = new Map(prev.map(t => [String(t.id), JSON.stringify(t)]));
       for (const [id, topic] of newMap) {
-        if (prevMap.get(id) !== JSON.stringify(topic)) { batch.set(col.doc(id), _sizeSafeTopic(topic)); writes++; }
+        if (prevMap.get(id) !== JSON.stringify(topic)) toSet.push([id, topic]);
       }
-      for (const id of prevMap.keys()) {
-        if (!newMap.has(id)) { batch.delete(col.doc(id)); writes++; }
-      }
+      for (const id of prevMap.keys()) { if (!newMap.has(id)) toDelete.push(id); }
     } else {
-      // First push — fetch cloud to detect deletes
+      // First push - fetch cloud to detect deletes
       const snap = await col.get();
       const cloudIds = new Set(); snap.forEach(d => cloudIds.add(d.id));
-      for (const [id, topic] of newMap) { batch.set(col.doc(id), _sizeSafeTopic(topic)); writes++; }
-      for (const id of cloudIds) { if (!newMap.has(id)) { batch.delete(col.doc(id)); writes++; } }
+      for (const [id, topic] of newMap) toSet.push([id, topic]);
+      for (const id of cloudIds) { if (!newMap.has(id)) toDelete.push(id); }
     }
 
-    if (writes > 0) await batch.commit();
-    lastPushed['topics'] = [...topics];
-    return writes;
+    // Commit each topic INDIVIDUALLY. The old code used ONE atomic db.batch():
+    // if a single topic failed (oversized / large combined payload), the WHOLE
+    // batch was rejected and NO topic synced - which left newer notebooks
+    // missing on other devices. Per-doc writes are self-healing.
+    const failed = new Set();
+    for (const [id, topic] of toSet) {
+      try { await col.doc(id).set(_sizeSafeTopic(topic)); }
+      catch (e) { failed.add(String(id)); console.warn('topic sync failed:', id, e); }
+    }
+    for (const id of toDelete) {
+      try { await col.doc(id).delete(); }
+      catch (e) { console.warn('topic delete failed:', id, e); }
+    }
+
+    // Record what synced. Failed topics keep a sentinel so the next cycle
+    // retries them, without blocking the ones that succeeded.
+    lastPushed['topics'] = topics.map(t =>
+      failed.has(String(t.id)) ? { id: t.id, __unsynced: true } : t
+    );
+    return toSet.length + toDelete.length;
   }
 
   // Write a single field to data/main, skipping if unchanged
