@@ -19,25 +19,39 @@
   //   • לעולם לא מחזירים תוצאה גדולה/גרועה מהמקור.
   // הערה: תמונות-ענק נשמרות מקומית במלואן; firebase-sync._sizeSafeTopic
   // מגן על סנכרון הענן (מסיר base64 ענק מהדוק לפני שליחה, שומר מקומית).
+  // דחיסת תמונה חכמה — שומרת חדות בגודל התצוגה (A4/680px) ומקטינה מספיק כדי
+  // שדף מחברת יישאר מתחת לגבול 1MB של Firestore, כך שהתמונות מסתנכרנות לענן.
+  //   • תקרת מימדים 2000px (~3x רוחב התצוגה → חד גם במסכי רטינה).
+  //   • מקודד WebP/JPEG ויורד בהדרגה עד שהתמונה ~150KB (כך ~5 תמונות נכנסות בדף).
+  //   • לעולם לא מחזיר תוצאה גדולה מהמקור.
   function compressImage(dataUrl, maxW, quality) {
-    maxW = maxW || 3000;
-    quality = quality || 0.95;
+    maxW = maxW || 2000;
+    quality = quality || 0.9;
     return new Promise(function (resolve) {
       const img = new Image();
       img.onload = function () {
-        if (img.naturalWidth <= maxW) { resolve(dataUrl); return; }   // ← אין הקטנה = נשמר מדויק, בכל גודל
-        const scale = maxW / img.naturalWidth;
-        const w = Math.round(img.naturalWidth * scale);
-        const h = Math.round(img.naturalHeight * scale);
-        const canvas = document.createElement('canvas');
-        canvas.width = w; canvas.height = h;
-        const ctx = canvas.getContext('2d');
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
-        ctx.drawImage(img, 0, 0, w, h);
-        let out = canvas.toDataURL('image/webp', quality);
-        if (out.indexOf('data:image/webp') !== 0) out = canvas.toDataURL('image/jpeg', quality);
-        resolve(out.length < dataUrl.length ? out : dataUrl);
+        try {
+          const nw = img.naturalWidth || 0, nh = img.naturalHeight || 0;
+          if (!nw || !nh) { resolve(dataUrl); return; }
+          const TARGET_BYTES = 150 * 1024;             // ~150KB per image
+          const widths = [Math.min(nw, maxW), Math.min(nw, 1600), Math.min(nw, 1280)];
+          const quals  = [quality, 0.82, 0.72];
+          let best = dataUrl;
+          for (let i = 0; i < widths.length; i++) {
+            const w = widths[i], scale = w / nw, h = Math.round(nh * scale);
+            if (!w || !h) continue;
+            const c = document.createElement('canvas');
+            c.width = w; c.height = h;
+            const ctx = c.getContext('2d');
+            ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(img, 0, 0, w, h);
+            let out = c.toDataURL('image/webp', quals[i]);
+            if (out.indexOf('data:image/webp') !== 0) out = c.toDataURL('image/jpeg', quals[i]);
+            if (out.length < best.length) best = out;
+            if (out.length * 0.75 <= TARGET_BYTES) { resolve(out.length < dataUrl.length ? out : dataUrl); return; }
+          }
+          resolve(best.length < dataUrl.length ? best : dataUrl);
+        } catch (e) { resolve(dataUrl); }
       };
       img.onerror = function () { resolve(dataUrl); };
       img.src = dataUrl;
