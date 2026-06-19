@@ -73,6 +73,7 @@
     snapFigToPage(fig, editor);
     clampFigToEditor(fig, editor);
     makeFigMovable(fig, editor, save);
+    addResizeHandles(fig, editor, save);
 
     const sel = window.getSelection();
     if (sel && sel.rangeCount && editor.contains(sel.anchorNode)) {
@@ -185,7 +186,7 @@
     if (!img) return;
     const apply = function () {
       const nat = img.naturalWidth || 0;
-      const cap = nat > 0 ? Math.min(nat, A4_PRINT_W) : A4_PRINT_W;
+      const cap = A4_PRINT_W; // ceiling only — allow user-enlarged images up to A4
       if (fig.offsetWidth > cap + 1) {
         fig.style.width = cap + 'px';
         if (editor) clampFigToEditor(fig, editor);
@@ -194,6 +195,45 @@
     };
     if (img.complete && img.naturalHeight > 0) apply();
     else img.addEventListener('load', apply, { once: true });
+  }
+
+  // ── Manual resize handles (drag a bottom corner). Hard ceiling = A4 (680px). ──
+  function addResizeHandles(fig, editor, save) {
+    if (!fig || fig.dataset.rz) return;
+    fig.dataset.rz = '1';
+    [['nb-rz-br', 1], ['nb-rz-bl', -1]].forEach(function (pair) {
+      var cls = pair[0], sign = pair[1];
+      var h = document.createElement('div');
+      h.className = 'nb-img-rz ' + cls;
+      h.contentEditable = 'false';
+      h.setAttribute('draggable', 'false');
+      var startX = 0, startW = 0, active = false, pid = null;
+      h.addEventListener('pointerdown', function (e) {
+        e.preventDefault(); e.stopPropagation();
+        active = true; pid = e.pointerId;
+        startX = e.clientX; startW = fig.offsetWidth;
+        fig.draggable = false;                 // don't start a move-drag while resizing
+        try { h.setPointerCapture(pid); } catch (_) {}
+        if (editor && editor._pushUndo) editor._pushUndo();
+      });
+      h.addEventListener('pointermove', function (e) {
+        if (!active) return;
+        var dx = (e.clientX - startX) * sign;  // outward drag = wider
+        var ew = editorContentWidth(editor);
+        var cap = Math.min(ew > 0 ? ew : A4_PRINT_W, A4_PRINT_W);  // never exceed A4
+        var w = Math.max(60, Math.min(cap, startW + dx * 2));
+        fig.style.width = Math.round(w) + 'px';
+      });
+      function end() {
+        if (!active) return;
+        active = false;
+        fig.draggable = true;
+        try { h.releasePointerCapture(pid); } catch (_) {}
+        save && save();
+      }
+      h.addEventListener('pointerup', end);
+      h.addEventListener('pointercancel', end);
+    });
   }
 
   // ── Image drag-to-reposition ──────────────────────────────────────────────
@@ -414,6 +454,7 @@
       // min(A4, natural) and clamped once the image has loaded.
       if (!fig.style.width) fig.style.width = A4_PRINT_W + 'px';
       unstretchFig(fig, editor, save);
+      addResizeHandles(fig, editor, save);
     });
 
     save && save();
@@ -422,7 +463,7 @@
 
   function attachImageBehaviors(editor, save) {
     // Restore behaviors for figures loaded from storage
-    editor.querySelectorAll('figure.nb-img').forEach(fig => { addDeleteButtonToFig(fig, save, editor); unstretchFig(fig, editor, save); });
+    editor.querySelectorAll('figure.nb-img').forEach(fig => { addDeleteButtonToFig(fig, save, editor); unstretchFig(fig, editor, save); addResizeHandles(fig, editor, save); });
 
     // ── Paste handler ─────────────────────────────────────────────────────
     editor.addEventListener('paste', async (e) => {

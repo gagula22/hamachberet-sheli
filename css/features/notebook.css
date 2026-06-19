@@ -1218,4 +1218,16 @@
 }
 
 /* תקרת A4: תמונה במחברת לעולם לא חורגת מרוחב דף A4 בהדפסה (~680px) */
-.nb-editor figure.nb-img { max-width: 680px; }
+.nb-editor figure.nb-img { max-width: 680px; 
+/* ידיות שינוי גודל לתמונה (גרירה) — גבול עליון קשיח: רוחב A4 (680px) */
+.nb-editor figure.nb-img { position: relative; }
+.nb-img-rz {
+  position: absolute; bottom: -7px; width: 14px; height: 14px;
+  background: var(--nb-accent, #B8762A); border: 2px solid #fff; border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0,0,0,.3); opacity: 0; transition: opacity .15s;
+  z-index: 12; touch-action: none;
+}
+.nb-img-rz.nb-rz-br { right: -7px; cursor: nwse-resize; }
+.nb-img-rz.nb-rz-bl { left: -7px; cursor: nesw-resize; }
+.nb-editor figure.nb-img:hover .nb-img-rz { opacity: 1; }
+@media print { .nb-img-rz { display: none !important; } }
