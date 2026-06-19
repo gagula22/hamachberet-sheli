@@ -149,9 +149,48 @@
       el('strong', { style: { fontSize: '13px' } }, '🖌️ תרגום שמצויר על גבי התמונה — כאילו נכתב במקור בעברית'),
       el('br', {}),
       el('span', { style: { fontSize: '12px', color: 'var(--ink-mute)' } },
-        'כל עמוד מרונדר → זיהוי טקסט מקומי (Tesseract) → תרגום (MyMemory) → הטקסט האנגלי מכוסה והעברית מצוירת במקומו. ' +
+        'כל עמוד מרונדר → זיהוי טקסט מקומי (Tesseract) → תרגום → הטקסט האנגלי מכוסה והעברית מצוירת במקומו. ' +
         'מספרים, מחירים ותאריכים נשמרים. בסיום בוחרים תיקיית יעד והקובץ נשמר שם. ' +
-        'הערה: ספר שלם איטי ועלול להיתקל במגבלת שירות התרגום — מומלץ להתחיל מטווח עמודים קטן לבדיקת איכות.')
+        'ברירת המחדל לתרגום היא MyMemory (חינמי, בסיסי); להוספת איכות גבוהה כמו הסקיל — הגדירו מפתח Gemini למטה. ' +
+        'הערה: ספר שלם איטי — מומלץ להתחיל מטווח עמודים קטן לבדיקת איכות.')
+    ]);
+
+    // ── הגדרת איכות תרגום (אופציונלי): מפתח Gemini פרטי, נשמר מקומית ──────────
+    function providerLabel() {
+      try { return (E().getApiKey && E().getApiKey()) ? 'Gemini — איכות גבוהה' : 'MyMemory — חינמי, בסיסי'; }
+      catch (e) { return 'MyMemory — חינמי, בסיסי'; }
+    }
+    var keyInput = el('input', {
+      type: 'password', placeholder: 'הדבק מפתח Google Gemini API…', autocomplete: 'off', spellcheck: 'false',
+      style: { width: '100%', boxSizing: 'border-box', padding: '9px 12px', border: '1px solid var(--line)', borderRadius: '8px', fontSize: '13px', direction: 'ltr', textAlign: 'left', marginTop: '8px' }
+    });
+    try { if (E().getApiKey) keyInput.value = E().getApiKey() || ''; } catch (e) {}
+    var keyStatus = el('div', { style: { fontSize: '12px', color: 'var(--ink-mute)', marginTop: '8px' } }, 'מנוע נוכחי: ' + providerLabel());
+    var saveKeyBtn = el('button', {
+      style: { padding: '7px 14px', background: 'var(--lavender)', border: '1px solid var(--line)', borderRadius: '8px', fontSize: '12px', cursor: 'pointer', fontWeight: '600' },
+      onClick: function () {
+        if (E().setApiKey) E().setApiKey(keyInput.value);
+        keyStatus.textContent = 'מנוע נוכחי: ' + providerLabel();
+        if (window.App && App.toast) App.toast((keyInput.value || '').trim() ? '✓ מפתח נשמר — תרגום באיכות גבוהה' : 'המפתח נמחק — חוזר ל-MyMemory');
+      }
+    }, '💾 שמור מפתח');
+    var clearKeyBtn = el('button', {
+      style: { marginInlineStart: '8px', padding: '7px 14px', background: '#fff', border: '1px solid var(--line)', borderRadius: '8px', fontSize: '12px', cursor: 'pointer' },
+      onClick: function () { keyInput.value = ''; if (E().setApiKey) E().setApiKey(''); keyStatus.textContent = 'מנוע נוכחי: ' + providerLabel(); }
+    }, 'מחק');
+
+    var keyDetails = el('details', {
+      style: { marginTop: '12px', background: '#faf7ff', border: '1px solid #e6ddf4', borderRadius: 'var(--r-sm)', padding: '10px 14px' }
+    }, [
+      el('summary', { style: { cursor: 'pointer', fontSize: '13px', fontWeight: '600', color: 'var(--ink)' } }, '⚙️ איכות תרגום (אופציונלי — מפתח Gemini)'),
+      el('p', { style: { fontSize: '12px', color: 'var(--ink-mute)', lineHeight: '1.65', margin: '8px 0 0' } },
+        'ברירת מחדל היא MyMemory חינמי (בסיסי, ועלול להיחסם בספר ארוך). להגעה לאיכות כמו הסקיל — הדביקו מפתח Google Gemini API חינמי. ' +
+        'המפתח נשמר רק בדפדפן שלכם (localStorage) ולא נדחף לגיט. מומלץ להגביל את המפתח לדומיין שלכם במסוף Google.'),
+      keyInput,
+      el('div', { style: { marginTop: '8px' } }, [saveKeyBtn, clearKeyBtn]),
+      keyStatus,
+      el('a', { href: 'https://aistudio.google.com/apikey', target: '_blank', rel: 'noopener',
+        style: { fontSize: '12px', color: '#6b4ea8', display: 'inline-block', marginTop: '8px' } }, '↗ קבלת מפתח Gemini חינם')
     ]);
 
     return el('div', { class: 'card' }, [
@@ -160,6 +199,7 @@
         el('span', { class: 'chip sage' }, 'מקומי · overlay · ללא עלות')
       ]),
       info,
+      keyDetails,
       el('label', { style: { display: 'block', fontSize: '13px', color: 'var(--ink-soft)', marginTop: '8px', fontWeight: '600' } }, 'טווח עמודים (אופציונלי):'),
       rangeInput,
       zone, status, barTrack, cancelBtn, saveBtn

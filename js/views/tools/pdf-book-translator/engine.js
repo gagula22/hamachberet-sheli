@@ -7,7 +7,8 @@
   // hebrew-image-overlay-translation — בלי Claude, בלי שרת תרגום שלנו:
   //   1. רינדור עמוד PDF ל-canvas (pdf.js).
   //   2. OCR מקומי עם תיבות-גבול לכל פסקה (Tesseract.js v5 המאורז — אפס העלאה).
-  //   3. תרגום EN→HE של כל פסקה (MyMemory — אותו שירות חינמי של כלי תרגום-PDF).
+  //   3. תרגום EN→HE של כל פסקה. ברירת מחדל: MyMemory (חינמי). אופציונלי: מנוע
+  //      איכותי (Google Gemini) עם המפתח הפרטי של המשתמש — נשמר מקומית בלבד.
   //   4. כיסוי הטקסט האנגלי במלבן בצבע-רקע נדגם, וציור העברית מעליו (RTL,
   //      התאמת גודל פונט וריווח כדי למלא את מסגרת הבלוק — מקביל ל-fill_column).
   //      דגימת-רקע חסינה (mode), כיסוי תיבה-צבעונית מלאה, ושומר-ניגודיות —
@@ -61,7 +62,7 @@
   function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
   function yield_() { return new Promise(function (r) { setTimeout(r, 0); }); }
 
-  // ── תרגום EN→HE דרך MyMemory (עצמאי לחלוטין — אפס תלות בכלי אחר) ───────────
+  // ── תרגום EN→HE דרך MyMemory (ברירת מחדל — עצמאי לחלוטין, ללא מפתח) ─────────
   var _cache = {};
   function splitChunks(text, MAX) {
     MAX = MAX || 450;
@@ -113,6 +114,78 @@
     }
     var out = res.join(' ');
     _cache[text] = out;
+    return out;
+  }
+
+  // ── מנוע איכותי (אופציונלי): Google Gemini עם המפתח הפרטי של המשתמש ─────────
+  // המפתח נשמר מקומית ב-localStorage בלבד (לא נדחף ל-git). בלי מפתח — נפילה
+  // אוטומטית ל-MyMemory, כך שהכלי עובד גם בלי הגדרה. עצמאי מ-Claude לחלוטין.
+  var LS_KEY = 'pbt_gemini_key', LS_MODEL = 'pbt_gemini_model';
+  function getApiKey() { try { return (localStorage.getItem(LS_KEY) || '').trim(); } catch (e) { return ''; } }
+  function setApiKey(k) { try { (k && k.trim()) ? localStorage.setItem(LS_KEY, k.trim()) : localStorage.removeItem(LS_KEY); } catch (e) {} }
+  function getModel() { try { return (localStorage.getItem(LS_MODEL) || '').trim() || 'gemini-2.0-flash'; } catch (e) { return 'gemini-2.0-flash'; } }
+  function provider() { return getApiKey() ? 'gemini' : 'mymemory'; }
+
+  // כללי התרגום של הסקיל hebrew-image-overlay-translation, מקודדים לפרומפט.
+  var GEMINI_RULES = [
+    'You are a professional English to Hebrew translator for trading and technical books (including the Wyckoff method).',
+    'Translate each item of the input JSON array into natural, fluent Hebrew.',
+    'Rules:',
+    '1. Keep UNCHANGED: numbers, prices, percentages, dates, times, axis values, ticker symbols, brand/logo names, URLs and copyright lines.',
+    '2. Keep standard Wyckoff abbreviations as-is (SC, AR, ST, UT, UTAD, LPS, LPSY, SOS, SOW, BU, PS, PSY, Spring; Phase A/B/C/D/E).',
+    '3. For trading/technical terms, write Hebrew followed by the English term in parentheses on first use, e.g. "שיא מכירות (Selling Climax)".',
+    '4. Do NOT add notes, explanations or extra text. Do NOT merge or split items.',
+    'Return ONLY a JSON array of strings, exactly the same length and order as the input array.'
+  ].join('\n');
+
+  async function geminiBatch(texts) {
+    var key = getApiKey();
+    if (!key) throw new Error('no-key');
+    var url = 'https://generativelanguage.googleapis.com/v1beta/models/'
+      + encodeURIComponent(getModel()) + ':generateContent?key=' + encodeURIComponent(key);
+    var body = {
+      contents: [{ parts: [{ text: GEMINI_RULES + '\n\nINPUT:\n' + JSON.stringify(texts) }] }],
+      generationConfig: { temperature: 0.2, response_mime_type: 'application/json' }
+    };
+    var resp = await fetch(url, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+    });
+    if (!resp.ok) throw new Error('Gemini HTTP ' + resp.status);
+    var data = await resp.json();
+    var txt = data && data.candidates && data.candidates[0] && data.candidates[0].content
+      && data.candidates[0].content.parts && data.candidates[0].content.parts[0]
+      && data.candidates[0].content.parts[0].text;
+    if (!txt) throw new Error('Gemini empty response');
+    var arr = JSON.parse(txt);
+    if (!Array.isArray(arr) && arr && Array.isArray(arr.translations)) arr = arr.translations;
+    if (!Array.isArray(arr) || arr.length !== texts.length) throw new Error('Gemini shape mismatch');
+    return arr.map(function (s) { return (s == null ? '' : String(s)); });
+  }
+
+  // תרגום מנה (כל הפסקאות של עמוד יחד): Gemini אם הוגדר מפתח, אחרת MyMemory.
+  // נפילה חיננית: כשל Gemini → MyMemory לכל פסקה. שימוש בקאש המשותף.
+  async function translateBatch(texts, cancelled) {
+    if (!texts || !texts.length) return [];
+    var out = new Array(texts.length), need = [], needIdx = [], i;
+    for (i = 0; i < texts.length; i++) {
+      if (_cache[texts[i]] !== undefined) out[i] = _cache[texts[i]];
+      else { need.push(texts[i]); needIdx.push(i); }
+    }
+    if (need.length) {
+      var done = null;
+      if (provider() === 'gemini') {
+        try { done = await geminiBatch(need); }
+        catch (e) { if (window.console && console.warn) console.warn('[PBT] Gemini נכשל → נפילה ל-MyMemory:', e && e.message); done = null; }
+      }
+      if (!done) {
+        done = [];
+        for (var j = 0; j < need.length; j++) {
+          if (cancelled && cancelled()) throw new Error('CANCELLED');
+          done.push(await translateText(need[j], cancelled));
+        }
+      }
+      for (var k = 0; k < needIdx.length; k++) { out[needIdx[k]] = done[k]; _cache[need[k]] = done[k]; }
+    }
     return out;
   }
 
@@ -354,14 +427,19 @@
         onStatus('progress', pct, 'עמוד ' + pageNo + ' / ' + total + ' — מזהה טקסט (OCR)…');
         var paras = await ocrParagraphs(worker, canvas);
 
-        onStatus('progress', pct, 'עמוד ' + pageNo + ' / ' + total + ' — מתרגם ' + paras.length + ' בלוקים…');
-        for (var pi = 0; pi < paras.length; pi++) {
+        // אוספים את כל הבלוקים הברי-תרגום ושולחים אותם יחד (מנה אחת לעמוד):
+        // איכות גבוהה יותר (הקשר מלא) ומהירות גבוהה (בקשה אחת במקום N).
+        var todo = [];
+        for (var pi = 0; pi < paras.length; pi++) { if (!shouldSkip(paras[pi].text)) todo.push(pi); }
+        onStatus('progress', pct, 'עמוד ' + pageNo + ' / ' + total + ' — מתרגם ' + todo.length + ' בלוקים…');
+        var srcTexts = todo.map(function (ix) { return paras[ix].text; });
+        var heTexts = await translateBatch(srcTexts, cancelled);
+        for (var ti = 0; ti < todo.length; ti++) {
           if (cancelled()) throw new Error('CANCELLED');
-          var p = paras[pi];
-          if (shouldSkip(p.text)) continue;
-          var he = await translateText(p.text, cancelled);
-          if (!he || !he.trim()) continue;
-          if (drawParagraph(ctx, p.bbox, he.trim(), p.lineCount, opts.font)) translatedCount++;
+          var p = paras[todo[ti]];
+          var he = (heTexts[ti] || '').trim();
+          if (!he) continue;
+          if (drawParagraph(ctx, p.bbox, he, p.lineCount, opts.font)) translatedCount++;
         }
 
         outPages.push({ jpeg: dataUrlToBytes(canvas.toDataURL('image/jpeg', 0.85)), wPt: vp1.width, hPt: vp1.height });
@@ -385,8 +463,11 @@
 
   window.PBT_ENGINE = {
     run: run,
+    // הגדרת מנוע איכותי (ל-UI):
+    getApiKey: getApiKey, setApiKey: setApiKey, getModel: getModel, provider: provider,
     // נחשפים גם לבדיקות/שימוש-חוזר:
-    translateText: translateText, ocrParagraphs: ocrParagraphs,
+    translateText: translateText, translateBatch: translateBatch, geminiBatch: geminiBatch,
+    ocrParagraphs: ocrParagraphs,
     drawParagraph: drawParagraph, shouldSkip: shouldSkip, splitChunks: splitChunks,
     dominantBg: dominantBg, colorBoxBounds: colorBoxBounds
   };

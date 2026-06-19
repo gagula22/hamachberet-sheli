@@ -4,6 +4,7 @@
   let db = null;
   let auth = null;
   let userId = null;
+  let storage = null;
 
   // ── Data model split ──────────────────────────────────────────────────────
   // SUBCOL_KEYS  → each item is its own Firestore document in a subcollection
@@ -48,6 +49,11 @@
       if (!firebase.apps.length) firebase.initializeApp(window.FIREBASE_CONFIG);
       db   = firebase.firestore();
       auth = firebase.auth();
+      // Firebase Storage — images in topic bodies are uploaded here (instead of
+      // being embedded as base64, which blows past Firestore's 1 MB doc limit).
+      // Graceful: if the Storage SDK/bucket isn't available yet, stays null and
+      // syncTopics falls back to the old size-safe behaviour (no crash).
+      try { storage = (firebase.storage ? firebase.storage() : null); } catch (e) { storage = null; }
       // Brave / ad-blockers / some proxies break Firestore's default streaming
       // (WebChannel) transport, so writes silently stay in the local cache —
       // shown as "synced" but never reaching the server (the "lock" on that
@@ -179,6 +185,71 @@
     return { ...slim, body: slim.body.slice(0, 60000) };
   }
 
+  // ── Image upload to Firebase Storage ──────────────────────────────────────
+  // The RIGHT fix for base64 images: upload them to Storage and keep only a
+  // small download URL in the topic body. The body then never approaches the
+  // 1 MB Firestore limit, so images both PERSIST and SYNC across devices
+  // (the old `_stripBase64Images` placeholder path destroyed them on refresh).
+
+  // data-URL → download URL, so the same image is never re-uploaded twice.
+  const _imgUrlCache = new Map();
+
+  async function _hashString(s) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 32);
+  }
+
+  // Upload one "data:image/...;base64,..." URL → returns its Storage download URL
+  // (or null on failure). Content-hashed filename → idempotent across syncs/devices.
+  async function _uploadDataUrl(dataUrl) {
+    if (_imgUrlCache.has(dataUrl)) return _imgUrlCache.get(dataUrl);
+    const m = /^data:(image\/[a-zA-Z0-9.+-]+);base64,/.exec(dataUrl);
+    if (!m || !storage || !userId) return null;
+    const ext = m[1].split('/')[1].replace('+xml', '').replace('jpeg', 'jpg').replace('svg', 'svg');
+    try {
+      const hash = await _hashString(dataUrl);
+      const ref  = storage.ref().child(`users/${userId}/images/${hash}.${ext}`);
+      let url;
+      try { url = await ref.getDownloadURL(); }            // already uploaded before
+      catch { await ref.putString(dataUrl, 'data_url'); url = await ref.getDownloadURL(); }
+      _imgUrlCache.set(dataUrl, url);
+      return url;
+    } catch (e) { console.warn('image upload failed:', e.message || e); return null; }
+  }
+
+  // Replace every base64 image src in an HTML body with its uploaded Storage URL.
+  // Returns the rewritten HTML (unchanged for any image that fails to upload).
+  async function _uploadBodyImages(html) {
+    if (!html || !storage) return html;
+    const re = /src="(data:image\/[^"]+)"/g;
+    const seen = new Set();
+    const jobs = [];
+    let m;
+    while ((m = re.exec(html))) {
+      const dataUrl = m[1];
+      if (seen.has(dataUrl)) continue;
+      seen.add(dataUrl);
+      jobs.push(_uploadDataUrl(dataUrl).then(url => ({ dataUrl, url })));
+    }
+    if (!jobs.length) return html;
+    let out = html;
+    for (const { dataUrl, url } of await Promise.all(jobs)) {
+      if (url) out = out.split('src="' + dataUrl + '"').join('src="' + url + '"');
+    }
+    return out;
+  }
+
+  // Prepare a topic for the cloud: upload its images → URL body. Only if upload
+  // is unavailable (Storage off) or the doc is STILL too big do we fall back to
+  // the old size-safe strip — so we never write a >1 MB doc (hard Firestore limit).
+  async function _cloudTopic(topic) {
+    if (storage && topic && topic.body && topic.body.indexOf('data:image') > -1) {
+      const body = await _uploadBodyImages(topic.body);
+      topic = { ...topic, body };
+    }
+    return _sizeSafeTopic(topic);
+  }
+
   // ── Diff-based write functions ────────────────────────────────────────────
 
   // Write only changed/added/deleted items in a subcollection
@@ -214,24 +285,34 @@
     const col    = db.collection(`users/${userId}/topics`);
     const prev   = lastPushed['topics'];
     const newMap = new Map(topics.map(t => [String(t.id), t]));
-    const batch  = db.batch();
-    let   writes = 0;
+
+    const changed = [];   // [id, topic] — added/edited since our last push
+    const deletes = [];   // ids the user removed on THIS device (real deletes)
 
     if (prev !== undefined) {
       const prevMap = new Map(prev.map(t => [String(t.id), JSON.stringify(t)]));
       for (const [id, topic] of newMap) {
-        if (prevMap.get(id) !== JSON.stringify(topic)) { batch.set(col.doc(id), _sizeSafeTopic(topic)); writes++; }
+        if (prevMap.get(id) !== JSON.stringify(topic)) changed.push([id, topic]);
       }
       for (const id of prevMap.keys()) {
-        if (!newMap.has(id)) { batch.delete(col.doc(id)); writes++; }
+        // Was pushed by us, now gone locally → a genuine user delete on this device.
+        if (!newMap.has(id)) deletes.push(id);
       }
     } else {
-      // First push — fetch cloud to detect deletes
-      const snap = await col.get();
-      const cloudIds = new Set(); snap.forEach(d => cloudIds.add(d.id));
-      for (const [id, topic] of newMap) { batch.set(col.doc(id), _sizeSafeTopic(topic)); writes++; }
-      for (const id of cloudIds) { if (!newMap.has(id)) { batch.delete(col.doc(id)); writes++; } }
+      // FIRST push (before the cloud listener's first snapshot has merged remote
+      // data in). ADD/UPDATE ONLY — never delete here. A stale local copy must not
+      // wipe a notebook created on another device (that was the cross-device bug).
+      for (const [id, topic] of newMap) changed.push([id, topic]);
     }
+
+    // Upload each changed topic's base64 images to Storage → small URL body
+    // (in parallel), so no topic doc ever approaches Firestore's 1 MB limit.
+    const safe = await Promise.all(changed.map(async ([id, t]) => [id, await _cloudTopic(t)]));
+
+    const batch = db.batch();
+    let   writes = 0;
+    for (const [id, t] of safe) { batch.set(col.doc(id), t); writes++; }
+    for (const id of deletes)   { batch.delete(col.doc(id)); writes++; }
 
     if (writes > 0) await batch.commit();
     lastPushed['topics'] = [...topics];
@@ -409,6 +490,9 @@
           checkDone();
         } else {
           Store._fromCloud('topics', cloud);
+          // Keep lastPushed aligned with what the cloud now holds (URL bodies),
+          // so the next local diff is accurate and we don't re-upload every topic.
+          lastPushed['topics'] = [...cloud];
         }
       }, () => { if (topicsFirst) { topicsFirst = false; checkDone(); } });
 

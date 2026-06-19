@@ -19,6 +19,10 @@
 
   // A4 printable width: 210mm − 2×25.4mm margins ≈ 602px at 96 DPI → rounded to 600.
   const A4_CONTENT_W = 600;
+  // Hard maximum width for ANY image in the notebook: the A4 printable content
+  // width used by the PDF/print pipeline (html-to-pdf HOST_W = 680). An image
+  // must never display, store, or print wider than this — so it always fits A4.
+  const A4_PRINT_W = 680;
 
   // Returns the editor's full content width (where the text flows), so a
   // full-width image spans the whole page exactly like the text — not just the
@@ -42,11 +46,16 @@
     img.alt = '';
     fig.appendChild(img);
 
-    // Default a pasted/inserted image to the full page width. It can be shrunk
-    // afterwards; clampFigToEditor stops it from growing past the page width.
-    // Fall back to the A4 page width if the editor isn't measured yet.
-    const maxW = editorContentWidth(editor);
-    fig.style.width = (maxW > 0 ? maxW : A4_CONTENT_W) + 'px';
+    // Width policy: an image must NEVER exceed the A4 printable width (so it fits
+    // on a printed page), and must NEVER be upscaled beyond its own pixels (which
+    // caused blur). Display width = min(A4 printable width, natural width).
+    fig.style.width = A4_PRINT_W + 'px';   // provisional cap; refined once loaded
+    img.addEventListener('load', function () {
+      const nat = img.naturalWidth || 0;
+      fig.style.width = (nat > 0 ? Math.min(A4_PRINT_W, nat) : A4_PRINT_W) + 'px';
+      clampFigToEditor(fig, editor);
+      save && save();
+    }, { once: true });
 
     const delBtn = document.createElement('button');
     delBtn.className = 'nb-img-del';
@@ -160,11 +169,31 @@
   function clampFigToEditor(fig, editor) {
     if (!window.ResizeObserver) return;
     new ResizeObserver(() => {
-      const maxW = editorContentWidth(editor);
-      if (maxW > 0 && fig.offsetWidth > maxW) {
-        fig.style.width = maxW + 'px';
+      const ew = editorContentWidth(editor);
+      const cap = Math.min(ew > 0 ? ew : A4_PRINT_W, A4_PRINT_W);
+      if (cap > 0 && fig.offsetWidth > cap) {
+        fig.style.width = cap + 'px';
       }
     }).observe(fig);
+  }
+
+  // Fix EXISTING images that were saved stretched wider than their real pixels
+  // (the old behavior). Shrinks an upscaled figure back to its natural width so
+  // it looks sharp — but never enlarges a figure the user intentionally made small.
+  function unstretchFig(fig, editor, save) {
+    const img = fig.querySelector('img');
+    if (!img) return;
+    const apply = function () {
+      const nat = img.naturalWidth || 0;
+      const cap = nat > 0 ? Math.min(nat, A4_PRINT_W) : A4_PRINT_W;
+      if (fig.offsetWidth > cap + 1) {
+        fig.style.width = cap + 'px';
+        if (editor) clampFigToEditor(fig, editor);
+        save && save();
+      }
+    };
+    if (img.complete && img.naturalHeight > 0) apply();
+    else img.addEventListener('load', apply, { once: true });
   }
 
   // ── Image drag-to-reposition ──────────────────────────────────────────────
@@ -381,11 +410,10 @@
         makeFigMovable(fig, editor, save);
         clampFigToEditor(fig, editor);
       }
-      // Set initial width if missing
-      if (!fig.style.width) {
-        const maxW = editorContentWidth(editor);
-        fig.style.width = (maxW > 0 ? maxW : A4_CONTENT_W) + 'px';
-      }
+      // Initial width capped to A4 printable width, then refined to
+      // min(A4, natural) and clamped once the image has loaded.
+      if (!fig.style.width) fig.style.width = A4_PRINT_W + 'px';
+      unstretchFig(fig, editor, save);
     });
 
     save && save();
@@ -394,7 +422,7 @@
 
   function attachImageBehaviors(editor, save) {
     // Restore behaviors for figures loaded from storage
-    editor.querySelectorAll('figure.nb-img').forEach(fig => addDeleteButtonToFig(fig, save, editor));
+    editor.querySelectorAll('figure.nb-img').forEach(fig => { addDeleteButtonToFig(fig, save, editor); unstretchFig(fig, editor, save); });
 
     // ── Paste handler ─────────────────────────────────────────────────────
     editor.addEventListener('paste', async (e) => {

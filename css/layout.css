@@ -11,6 +11,7 @@ body {
   display: grid;
   grid-template-columns: 1fr var(--sidebar-w);
   min-height: 100vh;
+  min-height: 100dvh;   /* iOS: real visible height (excludes the URL bar) */
 }
 
 .sidebar {
@@ -23,6 +24,7 @@ body {
   position: sticky;
   top: 0;
   height: 100vh;
+  height: 100dvh;   /* iOS: fill the visible viewport, not the URL-bar area */
   overflow-y: auto;
 }
 
@@ -218,7 +220,7 @@ body.nav-open .nav-overlay { display: block; }
   .page-title { font-size: 19px; margin-top: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .crumbs { display: none; }
   .topbar-right { gap: var(--sp-2); flex-shrink: 0; }
-  .search { width: 120px; padding: 6px 10px; font-size: 12px; }
+  .search { width: 120px; padding: 6px 10px; font-size: 16px; }  /* 16px ⇒ no iOS focus-zoom */
   .date-chip { display: none; }
 
   /* ── View ── */

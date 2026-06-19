@@ -1155,3 +1155,67 @@
   color: var(--nb-text-4);
   padding: 2px 4px;
 }
+
+/* ============================================================
+   MOBILE / TOUCH  (phones — iOS Safari + Android Chrome)
+   The notebook is a 2-column desktop layout. On phones it must
+   collapse to ONE scrollable column, fit the *dynamic* viewport
+   (so the iOS URL-bar doesn't clip the bottom), clear the fixed
+   bottom nav, and expose touch-only actions.
+============================================================ */
+@media (max-width: 600px) {
+  /* The whole notebook scrolls as one column instead of two
+     internally-scrolling full-height panes — those stacked to ~2× the
+     screen height on phones, pushing the editor far down.
+     NOTE: must match the desktop `.main:has(.nb-layout) .view:has(.nb-layout)`
+     specificity (it sets overflow:hidden) so this actually wins on mobile. */
+  .view:has(.nb-layout),
+  .main:has(.nb-layout) .view:has(.nb-layout) {
+    overflow: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .nb-layout,
+  .main:has(.nb-layout) .nb-layout {
+    height: auto !important;
+    min-height: 100dvh !important;   /* dvh = real visible height on iOS */
+    grid-template-columns: 1fr !important;
+    overflow: visible !important;
+  }
+  .nb-resizer { display: none !important; }
+
+  /* Topics list: a capped, self-scrolling strip on top */
+  .nb-topics-col {
+    height: auto !important;
+    max-height: 38vh !important;
+    overflow-y: auto !important;
+    border-inline-start: none !important;
+    border-bottom: 0.5px solid var(--nb-border-soft);
+  }
+
+  /* Editor: natural height; the page scrolls. Extra bottom padding so the
+     last lines clear the fixed bottom navigation bar. */
+  .nb-editor-col { height: auto !important; overflow-y: visible !important; }
+  .nb-editor { padding: 14px 16px calc(72px + var(--bottom-nav-h, 56px)); }
+  .nb-note-meta { padding-inline: 16px !important; }
+  .nb-editor-col .card.stack > div:first-child { padding-inline: 16px !important; }
+
+  /* Larger tap targets on the ribbon (28px → 34px ≈ comfortable for a finger) */
+  .nb-tb-btn { width: 34px; height: 34px; font-size: 15px; }
+  .nb-tb-dir, .nb-tb-select { height: 34px; }
+
+  /* iOS auto-zooms the page when a focused field is < 16px. Pin notebook
+     text fields to 16px so typing never triggers that zoom. (The editor
+     body & title are contenteditable, not inputs, so they're already safe.) */
+  .nb-tag-input, .nb-mood-input, .nb-mood-textarea { font-size: 16px; }
+}
+
+/* Touch devices have no hover, so the hover-only per-topic actions
+   (rename / delete) are unreachable by finger — reveal them always. */
+@media (hover: none) {
+  .nb-topic .t-actions { display: flex !important; }
+  .nb-topic:hover .t-count, .nb-topic .t-count { display: none !important; }
+}
+
+/* תקרת A4: תמונה במחברת לעולם לא חורגת מרוחב דף A4 בהדפסה (~680px) */
+.nb-editor figure.nb-img { max-width: 680px; }
