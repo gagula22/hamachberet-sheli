@@ -292,7 +292,7 @@
 
   // ── Word / rich-text HTML paste ───────────────────────────────────────────
   const ALLOWED_STYLE_PROPS = [
-    'font-weight','font-style','text-decoration','font-size',
+    'font-weight','font-style','text-decoration',
     'font-family','color','background-color','text-align','direction'
   ];
 

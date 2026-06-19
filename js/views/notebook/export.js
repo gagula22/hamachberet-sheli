@@ -709,7 +709,11 @@ ${gratitude ? `<div>
       else clonedImg.removeAttribute('height');
       // Inline 100% style — browsers (PDF/print) use this and ignore the px
       // attribute, so the image is full-width on the printed page.
-      clonedImg.setAttribute('style', `width:100%;height:auto;display:block;margin:0 auto;max-width:100%;`);
+      // INLINE (not display:block): Word ignores margin:0 auto on images, so a
+      // block image stays stuck to the side when resized. As an inline image it
+      // obeys the cell's align=center / text-align:center → reliably centered,
+      // and stays centered after the user resizes it in Word.
+      clonedImg.setAttribute('style', `width:100%;height:auto;max-width:100%;vertical-align:middle;`);
 
       // <table> is the only element Word reliably keeps on one page.
       // mso-pagination:widow-orphan keep-together = Word's native "keep together" flag.
