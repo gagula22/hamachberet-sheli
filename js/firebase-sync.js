@@ -4,7 +4,6 @@
   let db = null;
   let auth = null;
   let userId = null;
-  let storage = null;
 
   // ── Data model split ──────────────────────────────────────────────────────
   // SUBCOL_KEYS  → each item is its own Firestore document in a subcollection
@@ -49,11 +48,6 @@
       if (!firebase.apps.length) firebase.initializeApp(window.FIREBASE_CONFIG);
       db   = firebase.firestore();
       auth = firebase.auth();
-      // Firebase Storage — images in topic bodies are uploaded here (instead of
-      // being embedded as base64, which blows past Firestore's 1 MB doc limit).
-      // Graceful: if the Storage SDK/bucket isn't available yet, stays null and
-      // syncTopics falls back to the old size-safe behaviour (no crash).
-      try { storage = (firebase.storage ? firebase.storage() : null); } catch (e) { storage = null; }
       // Brave / ad-blockers / some proxies break Firestore's default streaming
       // (WebChannel) transport, so writes silently stay in the local cache —
       // shown as "synced" but never reaching the server (the "lock" on that
@@ -185,71 +179,6 @@
     return { ...slim, body: slim.body.slice(0, 60000) };
   }
 
-  // ── Image upload to Firebase Storage ──────────────────────────────────────
-  // The RIGHT fix for base64 images: upload them to Storage and keep only a
-  // small download URL in the topic body. The body then never approaches the
-  // 1 MB Firestore limit, so images both PERSIST and SYNC across devices
-  // (the old `_stripBase64Images` placeholder path destroyed them on refresh).
-
-  // data-URL → download URL, so the same image is never re-uploaded twice.
-  const _imgUrlCache = new Map();
-
-  async function _hashString(s) {
-    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
-    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 32);
-  }
-
-  // Upload one "data:image/...;base64,..." URL → returns its Storage download URL
-  // (or null on failure). Content-hashed filename → idempotent across syncs/devices.
-  async function _uploadDataUrl(dataUrl) {
-    if (_imgUrlCache.has(dataUrl)) return _imgUrlCache.get(dataUrl);
-    const m = /^data:(image\/[a-zA-Z0-9.+-]+);base64,/.exec(dataUrl);
-    if (!m || !storage || !userId) return null;
-    const ext = m[1].split('/')[1].replace('+xml', '').replace('jpeg', 'jpg').replace('svg', 'svg');
-    try {
-      const hash = await _hashString(dataUrl);
-      const ref  = storage.ref().child(`users/${userId}/images/${hash}.${ext}`);
-      let url;
-      try { url = await ref.getDownloadURL(); }            // already uploaded before
-      catch { await ref.putString(dataUrl, 'data_url'); url = await ref.getDownloadURL(); }
-      _imgUrlCache.set(dataUrl, url);
-      return url;
-    } catch (e) { console.warn('image upload failed:', e.message || e); return null; }
-  }
-
-  // Replace every base64 image src in an HTML body with its uploaded Storage URL.
-  // Returns the rewritten HTML (unchanged for any image that fails to upload).
-  async function _uploadBodyImages(html) {
-    if (!html || !storage) return html;
-    const re = /src="(data:image\/[^"]+)"/g;
-    const seen = new Set();
-    const jobs = [];
-    let m;
-    while ((m = re.exec(html))) {
-      const dataUrl = m[1];
-      if (seen.has(dataUrl)) continue;
-      seen.add(dataUrl);
-      jobs.push(_uploadDataUrl(dataUrl).then(url => ({ dataUrl, url })));
-    }
-    if (!jobs.length) return html;
-    let out = html;
-    for (const { dataUrl, url } of await Promise.all(jobs)) {
-      if (url) out = out.split('src="' + dataUrl + '"').join('src="' + url + '"');
-    }
-    return out;
-  }
-
-  // Prepare a topic for the cloud: upload its images → URL body. Only if upload
-  // is unavailable (Storage off) or the doc is STILL too big do we fall back to
-  // the old size-safe strip — so we never write a >1 MB doc (hard Firestore limit).
-  async function _cloudTopic(topic) {
-    if (storage && topic && topic.body && topic.body.indexOf('data:image') > -1) {
-      const body = await _uploadBodyImages(topic.body);
-      topic = { ...topic, body };
-    }
-    return _sizeSafeTopic(topic);
-  }
-
   // ── Diff-based write functions ────────────────────────────────────────────
 
   // Write only changed/added/deleted items in a subcollection
@@ -285,34 +214,24 @@
     const col    = db.collection(`users/${userId}/topics`);
     const prev   = lastPushed['topics'];
     const newMap = new Map(topics.map(t => [String(t.id), t]));
-
-    const changed = [];   // [id, topic] — added/edited since our last push
-    const deletes = [];   // ids the user removed on THIS device (real deletes)
+    const batch  = db.batch();
+    let   writes = 0;
 
     if (prev !== undefined) {
       const prevMap = new Map(prev.map(t => [String(t.id), JSON.stringify(t)]));
       for (const [id, topic] of newMap) {
-        if (prevMap.get(id) !== JSON.stringify(topic)) changed.push([id, topic]);
+        if (prevMap.get(id) !== JSON.stringify(topic)) { batch.set(col.doc(id), _sizeSafeTopic(topic)); writes++; }
       }
       for (const id of prevMap.keys()) {
-        // Was pushed by us, now gone locally → a genuine user delete on this device.
-        if (!newMap.has(id)) deletes.push(id);
+        if (!newMap.has(id)) { batch.delete(col.doc(id)); writes++; }
       }
     } else {
-      // FIRST push (before the cloud listener's first snapshot has merged remote
-      // data in). ADD/UPDATE ONLY — never delete here. A stale local copy must not
-      // wipe a notebook created on another device (that was the cross-device bug).
-      for (const [id, topic] of newMap) changed.push([id, topic]);
+      // First push — fetch cloud to detect deletes
+      const snap = await col.get();
+      const cloudIds = new Set(); snap.forEach(d => cloudIds.add(d.id));
+      for (const [id, topic] of newMap) { batch.set(col.doc(id), _sizeSafeTopic(topic)); writes++; }
+      for (const id of cloudIds) { if (!newMap.has(id)) { batch.delete(col.doc(id)); writes++; } }
     }
-
-    // Upload each changed topic's base64 images to Storage → small URL body
-    // (in parallel), so no topic doc ever approaches Firestore's 1 MB limit.
-    const safe = await Promise.all(changed.map(async ([id, t]) => [id, await _cloudTopic(t)]));
-
-    const batch = db.batch();
-    let   writes = 0;
-    for (const [id, t] of safe) { batch.set(col.doc(id), t); writes++; }
-    for (const id of deletes)   { batch.delete(col.doc(id)); writes++; }
 
     if (writes > 0) await batch.commit();
     lastPushed['topics'] = [...topics];
@@ -385,6 +304,39 @@
       if (lU >= cU) map.set(item.id, item);
     });
     return Array.from(map.values());
+  }
+
+  // ── Image-loss guard ───────────────────────────────────────────────────────
+  // A topic synced to the cloud may have had its large base64 images stripped to
+  // a 1×1 transparent-GIF placeholder (see _sizeSafeTopic — Firestore's 1MB doc
+  // limit forces this). That stripped copy must NEVER overwrite a local copy that
+  // still holds the real image — otherwise, on the next snapshot/refresh, the
+  // image silently becomes a white frame (the placeholder). These helpers detect
+  // a stripped cloud topic and keep the local full-image copy instead.
+  const _PLACEHOLDER_GIF_KEY = 'R0lGODlhAQABAIAAAAAAAP'; // start of the 1×1 GIF base64
+
+  function _isStrippedTopic(t) {
+    return !!(t && (t._imgStripped === true ||
+      (typeof t.body === 'string' && t.body.indexOf(_PLACEHOLDER_GIF_KEY) > -1)));
+  }
+
+  function _hasRealImage(t) {
+    if (!t || typeof t.body !== 'string') return false;
+    const m = t.body.match(/src="data:image\/[^"]{20,}"/g);
+    return !!m && m.some(s => s.indexOf(_PLACEHOLDER_GIF_KEY) === -1);
+  }
+
+  // Given the incoming cloud topics, return a list where any topic whose cloud
+  // copy is stripped but whose local copy still has the real image is replaced
+  // by the local copy. Deletions and non-image edits still flow through.
+  function preserveLocalImages(localTopics, cloudTopics) {
+    const localById = new Map();
+    (localTopics || []).forEach(t => { if (t && t.id != null) localById.set(String(t.id), t); });
+    return (cloudTopics || []).map(ct => {
+      if (!_isStrippedTopic(ct)) return ct;
+      const lt = localById.get(String(ct && ct.id));
+      return (lt && _hasRealImage(lt)) ? lt : ct;
+    });
   }
 
   function mergeByKey(key, local, cloud) {
@@ -479,7 +431,9 @@
             // First upload
             syncTopics(local).catch(() => {});
           } else if (cloud.length > 0) {
-            const merged = mergeArrayById(local, cloud);
+            // Restore real images for any topic the cloud has only as a stripped
+            // copy — prevents the white-frame-after-refresh image loss.
+            const merged = preserveLocalImages(local, mergeArrayById(local, cloud));
             Store._local('topics', merged);
             lastPushed['topics'] = [...cloud];
             if (differs(
@@ -489,10 +443,8 @@
           }
           checkDone();
         } else {
-          Store._fromCloud('topics', cloud);
-          // Keep lastPushed aligned with what the cloud now holds (URL bodies),
-          // so the next local diff is accurate and we don't re-upload every topic.
-          lastPushed['topics'] = [...cloud];
+          // Keep local full-image topics from being clobbered by stripped cloud copies.
+          Store._fromCloud('topics', preserveLocalImages(Store.get('topics') || [], cloud));
         }
       }, () => { if (topicsFirst) { topicsFirst = false; checkDone(); } });
 
