@@ -310,8 +310,8 @@
 
   function mergeArrayById(local, cloud) {
     const map = new Map();
-    (cloud || []).forEach(item => { if (item && item.id != null) map.set(item.id, item); });
-    (local || []).forEach(item => {
+    (Array.isArray(cloud) ? cloud : []).forEach(item => { if (item && item.id != null) map.set(item.id, item); });
+    (Array.isArray(local) ? local : []).forEach(item => {
       if (!item || item.id == null) return;
       const c = map.get(item.id);
       if (!c) { map.set(item.id, item); return; }
@@ -382,7 +382,14 @@
       case 'settings':
         return { ...cloud, ...local };
       default:
-        return mergeArrayById(local, cloud);
+        // Arrays -> merge by id. Objects (e.g. newer maindoc keys) -> shallow
+        // merge with local winning. Otherwise prefer local. Guards against the
+        // crash where a non-array value reached the array merger and killed the
+        // whole sync listener.
+        if (Array.isArray(local) || Array.isArray(cloud)) return mergeArrayById(local, cloud);
+        if (local && cloud && typeof local === 'object' && typeof cloud === 'object')
+          return { ...cloud, ...local };
+        return (local !== undefined && local !== null) ? local : cloud;
     }
   }
 
@@ -407,11 +414,13 @@
           if (snap.exists) {
             const cloud = snap.data();
             MAIN_DOC_KEYS.forEach(k => {
-              if (cloud[k] === undefined) return;
-              const merged = mergeByKey(k, Store.get(k), cloud[k]);
-              Store._local(k, merged);
-              if (differs(merged, cloud[k])) schedulePush(k, merged);
-              else lastPushed[k] = cloud[k];
+              try {
+                if (cloud[k] === undefined) return;
+                const merged = mergeByKey(k, Store.get(k), cloud[k]);
+                Store._local(k, merged);
+                if (differs(merged, cloud[k])) schedulePush(k, merged);
+                else lastPushed[k] = cloud[k];
+              } catch (e) { console.warn('main-doc merge failed for', k, e); }
             });
             // Legacy: if main doc still has SUBCOL arrays, merge them into
             // local store now — subcol listeners will handle cloud migration.
