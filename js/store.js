@@ -99,6 +99,33 @@
     listeners.forEach(fn => { try { fn(state); } catch {} });
   }
 
+  // Merge a set of topics into another by id (newer updatedAt/createdAt wins).
+  // Additive only: topics present in `existing` but absent from `incoming` are
+  // never removed — so importing one notebook can never wipe other notebooks.
+  function mergeTopicsById(existing, incoming) {
+    const map = new Map();
+    (existing || []).forEach(t => { if (t && t.id != null) map.set(t.id, t); });
+    (incoming || []).forEach(t => {
+      if (!t || t.id == null) return;
+      const cur = map.get(t.id);
+      if (!cur) { map.set(t.id, t); return; }
+      const curU = cur.updatedAt || cur.createdAt || 0;
+      const inU  = t.updatedAt   || t.createdAt   || 0;
+      if (inU >= curU) map.set(t.id, t);
+    });
+    return Array.from(map.values());
+  }
+
+  function downloadJSON(obj, filename) {
+    const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   const Store = {
     get(key) { return key ? state[key] : state; },
 
@@ -151,14 +178,18 @@
     },
 
     exportJSON() {
-      const json = JSON.stringify(state, null, 2);
-      const blob = new Blob([json], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `notebook-backup-${new Date().toISOString().slice(0, 10)}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
+      downloadJSON(state, `notebook-backup-${new Date().toISOString().slice(0, 10)}.json`);
+    },
+
+    // Export a SINGLE notebook (a root topic + its sub-topics) to a portable
+    // file. Importing it merges by id and never overwrites other data — the
+    // safe way to move one notebook between devices.
+    exportNotebook(topics, name) {
+      const safe = String(name || 'מחברת').replace(/[\\/:*?"<>|]+/g, '_').trim().slice(0, 40) || 'מחברת';
+      downloadJSON(
+        { _type: 'mahberet-notebook', version: 1, exportedAt: Date.now(), name: name || '', topics: topics || [] },
+        `notebook-${safe}-${new Date().toISOString().slice(0, 10)}.json`
+      );
     },
 
     importJSON(file) {
@@ -167,13 +198,26 @@
         reader.onload = () => {
           try {
             const parsed = JSON.parse(reader.result);
+            // Single-notebook file → merge into existing topics (additive, never
+            // wipes other notebooks or any other data). This is the safe path.
+            if (parsed && parsed._type === 'mahberet-notebook' && Array.isArray(parsed.topics)) {
+              const before = (state.topics || []).length;
+              const merged = mergeTopicsById(state.topics || [], parsed.topics);
+              state.topics = merged;
+              saveNow();
+              emit();
+              if (window.FirebaseSync && FirebaseSync.enabled) FirebaseSync.push('topics', merged);
+              resolve({ mode: 'notebook', incoming: parsed.topics.length, added: merged.length - before });
+              return;
+            }
+            // Full backup file → replace the entire state (legacy behavior).
             state = Object.assign(structuredClone(DEFAULTS), parsed);
             saveNow();
             emit();
             if (window.FirebaseSync && FirebaseSync.enabled) {
               Object.keys(state).forEach(k => FirebaseSync.push(k, state[k]));
             }
-            resolve();
+            resolve({ mode: 'full' });
           } catch (e) {
             reject(e);
           }

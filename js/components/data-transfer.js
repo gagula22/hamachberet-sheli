@@ -30,8 +30,10 @@
           const file = importInput.files && importInput.files[0];
           if (!file) return;
           try {
-            await Store.importJSON(file);
-            if (window.App) App.toast('הנתונים יובאו ✓ — מסנכרן לענן…');
+            const res = await Store.importJSON(file);
+            if (res && res.mode === 'notebook') {
+              if (window.App) App.toast(`מחברת יובאה ✓ (${res.incoming} פריטים, מוזגה ללא דריסה) — מסנכרן…`);
+            } else if (window.App) App.toast('הנתונים יובאו ✓ — מסנכרן לענן…');
           } catch {
             if (window.App) App.toast('שגיאה בקריאת הקובץ');
           }

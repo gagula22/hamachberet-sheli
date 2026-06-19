@@ -306,6 +306,39 @@
     return Array.from(map.values());
   }
 
+  // ── Image-loss guard ───────────────────────────────────────────────────────
+  // A topic synced to the cloud may have had its large base64 images stripped to
+  // a 1×1 transparent-GIF placeholder (see _sizeSafeTopic — Firestore's 1MB doc
+  // limit forces this). That stripped copy must NEVER overwrite a local copy that
+  // still holds the real image — otherwise, on the next snapshot/refresh, the
+  // image silently becomes a white frame (the placeholder). These helpers detect
+  // a stripped cloud topic and keep the local full-image copy instead.
+  const _PLACEHOLDER_GIF_KEY = 'R0lGODlhAQABAIAAAAAAAP'; // start of the 1×1 GIF base64
+
+  function _isStrippedTopic(t) {
+    return !!(t && (t._imgStripped === true ||
+      (typeof t.body === 'string' && t.body.indexOf(_PLACEHOLDER_GIF_KEY) > -1)));
+  }
+
+  function _hasRealImage(t) {
+    if (!t || typeof t.body !== 'string') return false;
+    const m = t.body.match(/src="data:image\/[^"]{20,}"/g);
+    return !!m && m.some(s => s.indexOf(_PLACEHOLDER_GIF_KEY) === -1);
+  }
+
+  // Given the incoming cloud topics, return a list where any topic whose cloud
+  // copy is stripped but whose local copy still has the real image is replaced
+  // by the local copy. Deletions and non-image edits still flow through.
+  function preserveLocalImages(localTopics, cloudTopics) {
+    const localById = new Map();
+    (localTopics || []).forEach(t => { if (t && t.id != null) localById.set(String(t.id), t); });
+    return (cloudTopics || []).map(ct => {
+      if (!_isStrippedTopic(ct)) return ct;
+      const lt = localById.get(String(ct && ct.id));
+      return (lt && _hasRealImage(lt)) ? lt : ct;
+    });
+  }
+
   function mergeByKey(key, local, cloud) {
     if (local === undefined || local === null) return cloud;
     if (cloud === undefined || cloud === null) return local;
@@ -398,7 +431,9 @@
             // First upload
             syncTopics(local).catch(() => {});
           } else if (cloud.length > 0) {
-            const merged = mergeArrayById(local, cloud);
+            // Restore real images for any topic the cloud has only as a stripped
+            // copy — prevents the white-frame-after-refresh image loss.
+            const merged = preserveLocalImages(local, mergeArrayById(local, cloud));
             Store._local('topics', merged);
             lastPushed['topics'] = [...cloud];
             if (differs(
@@ -408,7 +443,8 @@
           }
           checkDone();
         } else {
-          Store._fromCloud('topics', cloud);
+          // Keep local full-image topics from being clobbered by stripped cloud copies.
+          Store._fromCloud('topics', preserveLocalImages(Store.get('topics') || [], cloud));
         }
       }, () => { if (topicsFirst) { topicsFirst = false; checkDone(); } });
 
