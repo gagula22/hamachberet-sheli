@@ -1,6 +1,6 @@
-/* כפתור "העלה הכל לענן" — מעלה כל מחברת בנפרד ל-Firestore ומדווח תוצאה.
- * עוקף את לוגיקת ה-diff (מאלץ העלאה מלאה), ומראה גלוי כמה הצליחו / נכשלו ולמה.
- * שימושי לאבחון וגם כפעולה ידנית אמינה ("הכל לענן").
+/* כפתור "בדוק+העלה לענן" — בדיקת שרת אמיתית (source:'server', עוקף מטמון).
+ * קורא כמה מחברות באמת יש בשרת לפני ואחרי ההעלאה, ומדווח מספרים אמיתיים +
+ * כשלים עם קוד שגיאה. כך יודעים בוודאות אם המידע באמת בענן (לא ניחוש).
  */
 (function () {
   function bytes(o) { try { return new TextEncoder().encode(JSON.stringify(o)).length; } catch (e) { return 0; } }
@@ -15,30 +15,48 @@
     return Object.assign({}, s, { body: (s.body || '').slice(0, 60000) });
   }
 
-  async function forceUpload(btn) {
+  async function serverCount(col) {
+    var s = await col.get({ source: 'server' });   // forces a real SERVER read (no cache)
+    return s.size;
+  }
+
+  async function run(btn) {
     var orig = btn.textContent;
     try {
       var u = firebase.auth().currentUser;
-      if (!u) { alert('לא מחובר לחשבון. התחבר קודם ואז נסה שוב.'); return; }
+      if (!u) { alert('לא מחובר. התחבר קודם.'); return; }
       var db = firebase.firestore();
-      var topics = (window.Store && Store.get('topics')) || [];
-      if (!topics.length) { alert('אין מחברות מקומיות.'); return; }
-      btn.disabled = true; btn.textContent = '⬆️ מעלה… 0/' + topics.length;
-      var ok = 0, fail = 0, fails = [];
-      for (var i = 0; i < topics.length; i++) {
-        var t = topics[i];
-        try {
-          await db.collection('users/' + u.uid + '/topics').doc(String(t.id)).set(sizeSafe(t));
-          ok++;
-        } catch (e) {
-          fail++; fails.push((t.name || t.id) + ' → ' + (e && (e.code || e.message)));
-        }
-        btn.textContent = '⬆️ מעלה… ' + (i + 1) + '/' + topics.length;
+      var col = db.collection('users/' + u.uid + '/topics');
+      var local = (window.Store && Store.get('topics')) || [];
+
+      btn.disabled = true; btn.textContent = '🔎 בודק שרת…';
+      var before;
+      try { before = await serverCount(col); }
+      catch (e) {
+        alert('❌ קריאה מהשרת נכשלה: ' + (e && (e.code || e.message)) +
+          '\n\nכלומר החיבור לענן עדיין חסום (Brave Shields / חוסם / רשת).');
+        return;
       }
+
+      var ok = 0, fail = 0, fails = [];
+      for (var i = 0; i < local.length; i++) {
+        var t = local[i];
+        try { await col.doc(String(t.id)).set(sizeSafe(t)); ok++; }
+        catch (e) { fail++; fails.push((t.name || t.id) + ': ' + (e && (e.code || e.message))); }
+        btn.textContent = '⬆️ מעלה… ' + (i + 1) + '/' + local.length;
+      }
+
+      btn.textContent = '🔎 מאמת שרת…';
+      var after;
+      try { after = await serverCount(col); } catch (e) { after = '?'; }
+
       btn.disabled = false; btn.textContent = orig;
-      var msg = '✓ הועלו לענן: ' + ok + ' מתוך ' + topics.length;
-      if (fail) msg += '\n\n✗ נכשלו: ' + fail + '\n' + fails.slice(0, 12).join('\n');
-      else msg += '\n\nהכול בענן! רענן את הטלפון.';
+      var msg = '== בדיקת שרת אמיתית ==\n' +
+        'מקומי: ' + local.length + '\n' +
+        'בענן לפני: ' + before + '\n' +
+        'בענן אחרי: ' + after + '\n' +
+        'נכתבו: ' + ok + ' | נכשלו: ' + fail;
+      if (fail) msg += '\n' + fails.slice(0, 8).join('\n');
       alert(msg);
     } catch (e) {
       btn.disabled = false; btn.textContent = orig;
@@ -52,11 +70,11 @@
     if (!footer) { setTimeout(addBtn, 1000); return; }
     var b = document.createElement('button');
     b.id = 'forceSyncBtn';
-    b.textContent = '⬆️ העלה הכל לענן';
+    b.textContent = '🔎 בדוק והעלה לענן';
     b.style.cssText = 'display:block;width:calc(100% - 24px);margin:8px 12px;padding:10px;' +
       'background:#2d8c4f;color:#fff;border:none;border-radius:10px;font-family:Heebo,sans-serif;' +
       'font-size:13px;font-weight:600;cursor:pointer';
-    b.addEventListener('click', function () { forceUpload(b); });
+    b.addEventListener('click', function () { run(b); });
     footer.after(b);
   }
 
