@@ -155,31 +155,6 @@
       }
     }, '+');
 
-    // Import a notebook file (merge-safe — never overwrites existing notebooks).
-    // Lives here in the notebook view so it's reachable on mobile, where the
-    // sidebar-footer backup bar is pushed below the fold.
-    const importNbInput = App.el('input', {
-      type: 'file',
-      accept: '.json,application/json',
-      style: { display: 'none' },
-      onChange: async (e) => {
-        const file = e.target.files && e.target.files[0];
-        if (!file) return;
-        try {
-          const res = await Store.importJSON(file);
-          if (res && res.mode === 'notebook') App.toast(`⬆ מחברת יובאה (${res.incoming} פריטים, מוזגה ללא דריסה)`);
-          else App.toast('⬆ הנתונים יובאו ✓');
-          rerender();
-        } catch { App.toast('שגיאה בקריאת הקובץ'); }
-        e.target.value = '';
-      }
-    });
-    const importNbBtn = App.el('label', {
-      class: 'nb-sidebar-add-btn',
-      title: 'ייבוא מחברת מקובץ (מיזוג בטוח — לא דורס מחברות קיימות)',
-      style: { cursor: 'pointer' }
-    }, ['⬆', importNbInput]);
-
     // ── Topics list (supports tag filter) ───────────────────────────────
     let topicsContent;
     if (activeTagFilter) {
@@ -243,7 +218,7 @@
       App.el('div', { class: 'nb-sidebar-section' }, [
         App.el('div', { class: 'nb-sidebar-title' }, [
           App.el('span', {}, activeTagFilter ? ('📚 מחברות — #' + activeTagFilter) : '📚 מחברות'),
-          App.el('span', { style: { display: 'flex', gap: '4px' } }, [importNbBtn, addRootBtn])
+          addRootBtn
         ]),
         topicsEl
       ]),
@@ -375,19 +350,6 @@
           if (child) { activeId = child.id; rerender(); }
         }
       }, '+'),
-      App.el('button', {
-        class: 't-act-btn',
-        title: 'ייצוא מחברת זו לקובץ (כולל תתי-נושאים) — ייבוא ממזג ולא דורס',
-        onClick: (e) => {
-          e.stopPropagation();
-          // Re-root the exported subtree's top node so it lands as a standalone
-          // notebook on the target device (never an invisible orphan whose
-          // parent doesn't exist there).
-          const subtree = preorderSubtree(t.id).map(x => x.id === t.id ? { ...x, parentId: null } : x);
-          Store.exportNotebook(subtree, t.name);
-          App.toast(`⬇ "${t.name}" יוצאה (${subtree.length} פריטים)`);
-        }
-      }, '⬇'),
       App.el('button', {
         class: 't-act-btn danger',
         title: 'מחיקה',
