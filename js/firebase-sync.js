@@ -59,6 +59,16 @@
       // לכן הכפייה נדלקת רק פר-מכשיר, דרך דגל mahberet.forceLP שמופעל
       // אוטומטית כש-verifyCloud מאתר רשת חוסמת (מחשב העבודה). שני הדגלים
       // סותרים — לעולם לא להגדיר את שניהם יחד.
+      // טריגר פר-מכשיר לכפיית long-polling דרך כתובת ה-URL (?lp=1 / ?lp=0).
+      // נחוץ כשערוץ ה-Listen של Firestore נחסם (Brave/רשת סלולרית): get() עובד
+      // אבל onSnapshot לא — ולכן הזיהוי-האוטומטי ו-verifyCloud (שמשתמשים ב-get)
+      // לא תופסים את החסימה. הטריגר רק מעדכן דגל מקומי, לא נוגע בנתונים. רץ
+      // לפני קריאת הדגל למטה, כדי שכבר אותה טעינה תשתמש ב-long-polling.
+      try {
+        var _u = (location.search || '') + (location.hash || '');
+        if (_u.indexOf('lp=1') > -1) localStorage.setItem('mahberet.forceLP', '1');
+        else if (_u.indexOf('lp=0') > -1) localStorage.removeItem('mahberet.forceLP');
+      } catch (e) {}
       try {
         var forceLP = false;
         try { forceLP = localStorage.getItem('mahberet.forceLP') === '1'; } catch (e) {}
