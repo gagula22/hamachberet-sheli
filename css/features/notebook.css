@@ -1193,6 +1193,17 @@
     border-bottom: 0.5px solid var(--nb-border-soft);
   }
 
+  /* ⚠️ אבל כשפאנל ה-topics הוא הפאנל הפעיל במובייל (החלפת-פאנלים מציגה פאנל
+     אחד מלא בכל פעם — ה-editor-col מוסתר), רצועת 38vh חותכת את הרשימה באמצע
+     ומשאירה קו + ריק מתחת, בלי דרך לגלול לשאר המחברות. במצב הזה הרשימה צריכה
+     גובה טבעי מלא והעמוד גולל (בדיוק כמו פאנל העורך). */
+  .nb-mobile.nb-panel-topics .nb-topics-col {
+    max-height: none !important;
+    height: auto !important;
+    overflow-y: visible !important;
+    border-bottom: none !important;
+  }
+
   /* Editor: natural height; the page scrolls. Extra bottom padding so the
      last lines clear the fixed bottom navigation bar. */
   .nb-editor-col { height: auto !important; overflow-y: visible !important; }
