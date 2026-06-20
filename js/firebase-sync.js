@@ -483,6 +483,30 @@
         }
       }, () => { if (topicsFirst) { topicsFirst = false; checkDone(); } });
 
+      // ── 2b. גיבוי ל-topics דרך REST get (כשערוץ ה-Listen חסום) ──
+      // ה-topics נטענים רק דרך onSnapshot — ערוץ ה-Listen של Firestore. ברשתות
+      // מסוימות (Brave/סלולרי) הערוץ הזה נחסם (שגיאת 404 על .../Listen/channel),
+      // ואז onSnapshot לעולם לא מקבל את הרשימה והמכשיר תקוע על מצב חלקי/ישן
+      // (זו בדיוק "הטלפון מציג עד שבוע 23"). get({source:'server'}) פוגע ב-endpoint
+      // אחר (REST) שעובר את החסימה. קריאה חד-פעמית בטעינה, ממוזגת באיחוד ל-Store
+      // (לעולם לא מוחקת/מקטינה — mergeArrayById זה union). fire-and-forget, לא
+      // מעכב את checkDone, ולא דוחף לענן (_fromCloud לא כותב). זה תיקון השורש.
+      db.collection(`users/${userId}/topics`).get({ source: 'server' })
+        .then(function (snap) {
+          var cloud = [];
+          snap.forEach(function (d) { cloud.push(d.data()); });
+          if (!cloud.length) return;
+          var local = Store.get('topics') || [];
+          var merged = preserveLocalImages(local, mergeArrayById(local, cloud));
+          if (differs(
+            merged.slice().sort(function (a, b) { return String(a.id).localeCompare(b.id); }),
+            local.slice().sort(function (a, b)  { return String(a.id).localeCompare(b.id); })
+          )) {
+            Store._fromCloud('topics', merged); // emit + App.onCloudUpdate → רינדור
+          }
+        })
+        .catch(function () {}); // אופליין/חסום לגמרי — onSnapshot או הטעינה הבאה יטפלו
+
       // ── 3. Per-key subcollection listeners ──
       SUBCOL_KEYS.forEach(key => {
         let first = true;
