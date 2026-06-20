@@ -111,6 +111,9 @@
       state[key] = value;
       scheduleSave();
       emit();
+      // עדכון מהענן (בזמן-אמת ממכשיר אחר) — לבקש מ-App לצייר מחדש את המסך
+      // הנוכחי. emit() לבדו לא מספיק: App לא נרשם כמאזין Store.
+      if (window.App && App.onCloudUpdate) App.onCloudUpdate();
     },
 
     set(key, value) {

@@ -48,6 +48,12 @@
   // ב-js/features/navmode (window.NavMode), שקורא את שדה group של ה-SECTIONS.
   // sidebar.js + js/views/hub קוראים מ-NavMode; ה-views עצמם לא יודעים שהם מקובצים.
 
+  // Views שמנהלים בעצמם רענון-על-נתונים (נרשמים ל-Store.subscribe לבד) — אסור
+  // שה-hook הגלובלי onCloudUpdate יכפה עליהם App.render(): זה היה גורם לרינדור
+  // כפול (insights) או לבניית-מחדש של מפת ה-3D ואיפוס המצלמה (tripmap). הם
+  // שומרים על האחריות שלהם; ה-hook מדלג עליהם ומשאיר את ההתנהגות הקיימת.
+  const SELF_MANAGED_ROUTES = new Set(['tripmap', 'insights']);
+
   const App = {
     sections: SECTIONS,
     _routes: {},
@@ -66,6 +72,14 @@
       if (window.Store && Store.ready) {
         Store.ready().then(() => this.render()).catch(() => {});
       }
+      // אם נתוני ענן הגיעו בזמן עריכה, onCloudUpdate דחה את הרינדור (כדי לא
+      // לאבד את הסמן). ברגע שהעריכה מסתיימת — מציירים מחדש עם הנתונים הטריים.
+      document.addEventListener('focusout', () => {
+        if (this._cloudPending) {
+          this._cloudPending = false;
+          setTimeout(() => this.render(), 0);
+        }
+      });
     },
 
     syncTopbarHeight() {
@@ -154,6 +168,24 @@
       view.style.animation = 'none';
       void view.offsetWidth;
       view.style.animation = '';
+    },
+
+    // נתוני ענן נחתו אחרי הרינדור הראשוני (במיוחד במובייל, שם הענן מגיע מאוחר).
+    // ה-state כבר מעודכן — אבל המסך הנוכחי לא מצויר מחדש מעצמו (App לא נרשם
+    // ל-Store.subscribe, והסְנאפשוט הראשון משתמש ב-_local בלי emit). בלי זה,
+    // תצוגת המחברת נתקעת על הנתונים הישנים עד מעבר עמוד — זה הבאג של "הטלפון
+    // מציג רק 23". מרנדרים מחדש את המסך הנוכחי, אבל לא תוך כדי עריכה פעילה
+    // (contenteditable/input ממוקד) — רינדור היה מאבד את הסמן; דוחים ל-focusout.
+    onCloudUpdate() {
+      // views שמנהלים את עצמם — לא לכפות עליהם רינדור גלובלי (ראה SELF_MANAGED_ROUTES).
+      const route = (location.hash || '').replace(/^#\//, '').split('/')[0];
+      if (SELF_MANAGED_ROUTES.has(route)) return;
+      const ae = document.activeElement;
+      if (ae && (ae.isContentEditable || ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA')) {
+        this._cloudPending = true;
+        return;
+      }
+      this.render();
     },
 
     greeting() {

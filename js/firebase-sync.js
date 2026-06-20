@@ -552,6 +552,11 @@
       listenToCloud().then(function () {
         clearTimeout(chipTimer);
         if (chip.parentNode) chip.remove();
+        // הסְנאפשוטים הראשונים של כל אוסף נכנסו ל-Store דרך _local (בלי emit),
+        // כדי לא להבהב לפני הרינדור הראשוני. עכשיו כל נתוני הענן בפנים — מציירים
+        // מחדש פעם אחת כדי שמסך שכבר מוצג (כמו המחברת בטלפון) יראה את כל הנתונים
+        // הטריים מהענן, ולא יישאר תקוע על המטמון הישן. זה תיקון "הטלפון מציג 23".
+        if (window.App && App.onCloudUpdate) App.onCloudUpdate();
       }).catch(function () {});
       setTimeout(function () {
         try {
