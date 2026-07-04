@@ -84,6 +84,11 @@
 .bl-row { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: var(--r-sm); font-size: 13px; color: var(--nb-text-1, var(--ink)); width: 100%; text-align: start; transition: background 140ms; }
 .bl-row:hover { background: var(--nb-bg-hover, var(--paper)); }
 .bl-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* שורת אזכור: שם למעלה + קטע-הקשר מתחתיו */
+.bl-row-mention { flex-direction: column; align-items: stretch; gap: 3px; }
+.bl-row-head { display: flex; align-items: center; gap: 8px; }
+.bl-snippet { font-size: 12px; line-height: 1.5; color: var(--nb-text-3, var(--ink-mute)); white-space: normal; text-align: start; padding-inline-start: 24px; }
+.bl-hl { background: var(--nb-hl, #FFE9A8); color: inherit; border-radius: 3px; padding: 0 2px; font-weight: 600; }
 
 /* ── כרטיסיות זיכרון (js/views/flashcards) ── */
 .fc-head { margin-bottom: var(--sp-4); }
