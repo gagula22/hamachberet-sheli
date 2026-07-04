@@ -111,7 +111,7 @@
 | הדבקת/הוספת **צילום מסך** או תמונה (כללי) | `components/editable/image.js` |
 | תמונות/קבצים/טבלאות במחברת | `notebook/media.js` |
 | ייצוא מחברת ל-Word/PDF, תבניות, mood | `notebook/export.js` |
-| עריכת טקסט במחברת (עורך, toolbar, undo, טבלאות) | `notebook/editor.js` |
+| עריכת טקסט במחברת (עורך, toolbar, undo, טבלאות) | `notebook/editor.js` ⚠️ ראה §14 (מלכודת בחירה) |
 | עץ הנושאים / סרגל צד של המחברת | `notebook/index.js` |
 | כלי תמלול — לוגיקת אודיו / mp3 / whisper / ffmpeg | `tools/video-transcriber/<האחריות>.js` |
 | כלי המרת PDF↔Word / תרגום PDF | `tools/<הכלי>/index.js` |
@@ -420,3 +420,29 @@ canvas דרך `ctx.direction='rtl'` + `textAlign='right'` — **בלי** היפ�
   (`sync:'subcol'`, `merge:'by-id'` — מסונכרן, מגובה, additive-only כך שנתוני ענן לא נדרסים).
   כל מפתח subcol חדש חייב להופיע **גם** במערך ה-assertion `sub` ב-`firebase-sync.js` —
   אחרת ה-assertion זורק בכוונה ומגן על הנתונים. הוסף בשני המקומות יחד.
+
+## 14. מלכודת בחירה בעורך המחברת (`notebook/editor.js`) — יולי 2026
+
+> ⚠️ **הבאג שחזר וכדאי שלא יחזור שוב:** "כל הפקודות והלחצנים בעורך לא עובדים" (בעיקר
+> בטלפון) — לוחצים B/I/U/צבע/כיוון ושום דבר לא קורה, או שהעיצוב חל על טקסט אחר.
+
+**מה היה השורש:** `exec()` תמיד שיחזר את `savedRange` על הבחירה החיה לפני `execCommand`.
+אבל `savedRange` מתעדכן רק ב-`mouseup`/`keyup` של העורך, והופך ל**range "מת"** אחרי כל
+עיצוב (ה-DOM נבנה מחדש — צומת הטקסט מוחלף ב-`<span>`, וה-range מצביע על צמתים מנותקים).
+שחזור range מת מקריס את הבחירה → `execCommand` רץ על כלום. במגע ה-`mouseup` התופס לרוב
+מוחמץ והנגיעה בלחצן מקריסה את הבחירה → כמעט כל לחיצה no-op.
+
+**התיקון (commit `d24d8cb`, editor.js `?v=49`):**
+1. `exec()` **מעדיף בחירה חיה** בתוך העורך; נופל ל-`savedRange` רק אם הבחירה החיה איננה
+   **וגם** ה-range עדיין מחובר ל-DOM (`isRangeUsable`: `startContainer.isConnected` +
+   `editor.contains(commonAncestorContainer)`).
+2. `preventDefault` על `mousedown` של כל לחצני ה-ribbon (**לא** הבוררים — הם צריכים פוקוס).
+
+**כלל מניעה — לכל toolbar עם `contenteditable` + `execCommand`:**
+- לחצנים חייבים `preventDefault` על `mousedown` — לשמור את הבחירה חיה, לא להסתמך על שחזור.
+- **אף פעם לא לשחזר Range שמור בעיוורון.** להעדיף בחירה חיה; לשחזר שמור רק אחרי אימות
+  שהוא עדיין מחובר ל-DOM ובתוך העורך. Range שצמתיו הוחלפו = מת (`isConnected===false`).
+- `applyToSelection` כבר בטוח (מעדיף בחירה חיה); אל תחזיר `sel.addRange(savedRange)`
+  ללא-תנאי בשום כלי חדש — העתק את התבנית של `exec()`.
+- **לאמת את המסלול הישן (stale), לא רק בחירה טרייה:** לשחזר ע"י בחירה **בלי** לירות
+  `mouseup` על העורך ואז ללחוץ (מדמה מגע). בדיקת בחירה-טרייה עוברת גם כשהפיצ'ר שבור למשתמש.
