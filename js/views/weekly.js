@@ -74,7 +74,7 @@
         App.el('div', { class: 'card' }, [
           App.el('div', { class: 'row row-between' }, [
             App.el('h2', {}, 'השבוע שלי'),
-            App.el('span', { class: 'chip sage' }, 'אפשר לגרור משימות בין הימים')
+            App.el('span', { class: 'chip sage' }, 'גרירה מזיזה בין ימי השבוע · 📅 מעביר לכל תאריך')
           ]),
           App.el('div', { class: 'week-grid', style: { marginTop: '16px' } }, columns)
         ])
@@ -93,13 +93,38 @@
       }
     }, '✕');
 
+    // ── העברה לכל תאריך (לא רק בתוך השבוע המוצג) ──────────────────────────
+    // בורר תאריכים נייטיבי, נסתר; value בפורמט YYYY-MM-DD = בדיוק Store.dateKey.
+    const dateInput = App.el('input', {
+      type: 'date',
+      style: { position: 'absolute', width: '0', height: '0', opacity: '0', border: '0', padding: '0' }
+    });
+    dateInput.addEventListener('click', (e) => e.stopPropagation());
+    dateInput.addEventListener('change', () => {
+      const v = dateInput.value;
+      if (!v || v === t.date) return;
+      Store.set('tasks', (Store.get('tasks') || []).map(x => x.id === t.id ? { ...x, date: v } : x));
+      // עיגון T12:00 כדי שהתצוגה לא תגלוש יום אחורה באזור-זמן חיובי
+      App.toast('📅 המשימה הועברה ל' + new Date(v + 'T12:00').toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long' }));
+      rerender();
+    });
+    const moveBtn = App.el('span', {
+      class: 'pill-move', title: 'העבר לתאריך אחר — כל תאריך',
+      onClick: (e) => {
+        e.stopPropagation();
+        dateInput.value = t.date || Store.todayKey();
+        try { dateInput.showPicker(); } catch (_) { dateInput.click(); }
+      },
+      onDblclick: (e) => e.stopPropagation()
+    }, '📅');
+
     const el = App.el('div', {
       class: 'task-pill',
       draggable: 'true',
-      title: 'לחיצה: סימון כבוצע · לחיצה כפולה: עריכה',
+      title: 'לחיצה: סימון כבוצע · לחיצה כפולה: עריכה · 📅 העברה לכל תאריך',
       style: { display: 'flex', alignItems: 'center', gap: '4px' },
       onClick: (e) => {
-        if (e.target.classList.contains('pill-del')) return;
+        if (e.target.classList.contains('pill-del') || e.target.classList.contains('pill-move')) return;
         const list = (Store.get('tasks') || []).map(x => x.id === t.id ? { ...x, done: !x.done } : x);
         Store.set('tasks', list);
         rerender();
@@ -113,7 +138,7 @@
           rerender();
         }
       }
-    }, [textSpan, delBtn]);
+    }, [textSpan, moveBtn, delBtn, dateInput]);
 
     if (t.done) { textSpan.style.textDecoration = 'line-through'; el.style.opacity = '.6'; }
     el.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/plain', t.id); el.classList.add('dragging'); });

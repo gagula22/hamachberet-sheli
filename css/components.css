@@ -883,6 +883,18 @@ figure.nb-img.nb-img-dragging { opacity: 0.35; pointer-events: none; }
 .task-pill:hover .pill-del { opacity: 1; }
 .pill-del:hover { background: rgba(0,0,0,.08); color: var(--ink); }
 
+/* העברת משימה לכל תאריך (בורר תאריכים) — גלוי קלות גם בלי hover, למגע */
+.pill-move {
+  width: 18px; height: 16px;
+  display: grid; place-items: center;
+  font-size: 11px;
+  cursor: pointer;
+  opacity: .35;
+  transition: opacity 180ms, transform 180ms;
+}
+.task-pill:hover .pill-move { opacity: 1; }
+.pill-move:hover { transform: scale(1.2); }
+
 .day-detail {
   margin-top: var(--sp-4);
   padding: var(--sp-5);
