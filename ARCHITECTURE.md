@@ -117,6 +117,7 @@
 | ייצוא מחברת ל-Word/PDF, תבניות, mood | `notebook/export.js` |
 | עריכת טקסט במחברת (עורך, toolbar, undo, טבלאות) | `notebook/editor.js` ⚠️ ראה §14 (מלכודת בחירה) |
 | עץ הנושאים / סרגל צד של המחברת | `notebook/index.js` |
+| תצוגות יומן (יומי/שבועי/חודשי) | `views/daily.js` / `weekly.js` / `monthly.js` — בשבועי: 📅 על משימה מעביר לכל תאריך (בורר נייטיבי; value = `Store.dateKey`) |
 | כלי תמלול — לוגיקת אודיו / mp3 / whisper / ffmpeg | `tools/video-transcriber/<האחריות>.js` |
 | כלי המרת PDF↔Word / תרגום PDF | `tools/<הכלי>/index.js` |
 | יצירת קובץ PDF מ-HTML (מחברת + Word→PDF) | `components/html-to-pdf.js` (`window.HtmlToPdf`) |
@@ -494,4 +495,7 @@ canvas דרך `ctx.direction='rtl'` + `textAlign='right'` — **בלי** היפ�
    מכלל הגובה של סקשן 2 (שגם מחסיר `--topbar-h` מיותר — ה-topbar מוסתר במחברת). תיקון
    גובה המחברת חייב להיעשות **שם**.
 4. **ה-Service Worker (stale-while-revalidate) מגיש עריכה ישנה באותו URL** — אחרי כל
-   עריכת CSS/JS חובה להק
+   עריכת CSS/JS חובה להקפיץ `?v=N` **שוב**, גם אם כבר הוקפץ מוקדם יותר באותה סשן־עבודה
+   (v=20 "נשרף" כך ונדרש v=21).
+5. **מדידת layout בסביבת preview:** אנימציית `viewIn` (translateY 6px, ‏260ms) מוקפאת
+   בטאב-רקע — offset של ~5px במדידות הוא ארטיפקט של הסביבה, לא באג.

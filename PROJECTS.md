@@ -114,6 +114,10 @@
 ### P-20 · יומן
 - **בבעלות:** `js/views/calendar.js`, `daily.js`, `weekly.js`, `monthly.js`
 - **מהות:** ניתוב `#/planner/*`, ציר-זמן יומי, drag-drop שבועי, לוח חודשי.
+- **בוצע (5.7.2026, קומיט `5157453`):** בשבועי — כפתור 📅 על כל משימה מעביר ל**כל תאריך**
+  (בורר-תאריכים נייטיבי, `showPicker`; value בפורמט `YYYY-MM-DD` = בדיוק `Store.dateKey`,
+  אפס המרות). גרירה נשארה להזזה בתוך השבוע המוצג. CSS של `.pill-move` ב-`components.css`
+  (ליד `.pill-del`; opacity .35 גם בלי hover — נגיש במגע).
 
 ### P-21 · משימות וסדר-יום
 - **בבעלות:** `js/views/todos.js`, `js/views/eisenhower/` (מפתח `eisenhower`)
