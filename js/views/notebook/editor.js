@@ -399,6 +399,11 @@
         if (palette) { closePalette(); return; }
 
         palette = App.el('div', { class: 'nb-color-palette' });
+        // The palette lives in <body>, outside the ribbon, so it did NOT get the
+        // ribbon's mousedown-preventDefault. Clicking a colour dot would steal
+        // focus from the editor and collapse the selection → foreColor/hiliteColor
+        // acted on nothing. preventDefault here keeps the editor selection alive.
+        palette.addEventListener('mousedown', (ev) => ev.preventDefault());
         PALETTE.forEach(hex => {
           const dot = App.el('button', {
             class: 'cp-dot',

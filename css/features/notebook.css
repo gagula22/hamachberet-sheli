@@ -224,10 +224,16 @@
   background: var(--nb-bg-card);
   display: flex;
   flex-direction: column;
-  min-height: 100%;
+  /* Parent .nb-layout is a grid whose min-height is ~100vh; the default
+     align-self:stretch (components.css) stretched this column to the full
+     viewport, leaving a big white dead area below a short note. `start` sizes
+     it to its content; the cream page background shows below. */
+  min-height: auto;
+  align-self: start;
+  width: 100%;
 }
 .nb-editor-col > .card.stack {
-  flex: 1;
+  flex: 0 0 auto;
   border: none;
   border-radius: 0;
   box-shadow: none;
@@ -269,10 +275,10 @@
   font-size: 17px;
   line-height: 1.75;
   color: var(--nb-text-1);
-  padding: 16px 36px 80px;
+  padding: 16px 36px 28px;
   background: var(--nb-bg-card);
   background-image: none;
-  min-height: 400px;
+  min-height: 180px;
   border-radius: 0;
   box-shadow: none;
 }
@@ -738,10 +744,15 @@
   padding-bottom: 24px;
 }
 
-/* 4 ─ Editor column: fixed height, scrolls internally */
+/* 4 ─ Editor column: size to content (short notes → cream shows below, no white
+   dead area), but never exceed the viewport — long notes cap at 100% and scroll
+   internally. `align-self:start` (set above) keeps a short column at the top. */
 .nb-editor-col {
-  height: 100% !important;
+  height: auto !important;
+  min-height: 0 !important;      /* else the grid item keeps full track height */
+  max-height: 100% !important;
   overflow-y: auto !important;
+  align-self: start !important;  /* short note sits at top; cream shows below */
 }
 
 /* 5 ─ Ribbon is sticky WITHIN the scrolling editor column — stays at top */
