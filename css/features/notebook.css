@@ -725,9 +725,12 @@
   overflow: hidden !important;
 }
 
-/* 2 ─ Layout fills the remaining height below the topbar */
+/* 2 ─ Layout fills the remaining height below the topbar.
+   ×var(--page-unzoom): html{zoom:0.8} does NOT compensate vh units — without
+   the multiplier the layout renders at only 80% of the window, leaving a dead
+   strip at the bottom (see layout.css page-zoom note). */
 .nb-layout {
-  height: calc(100vh - var(--topbar-h));
+  height: calc(100vh * var(--page-unzoom, 1) - var(--topbar-h));
   min-height: unset !important;
   overflow: hidden !important;
   align-items: stretch !important;
@@ -1093,9 +1096,13 @@
 .main:has(.nb-layout) .topbar {
   display: none !important;
 }
-/* nb-layout takes the full viewport when topbar is gone */
+/* nb-layout takes the full viewport when topbar is gone.
+   ×var(--page-unzoom): html{zoom:0.8} does NOT compensate vh — a plain 100vh
+   here rendered at only 80% of the window, leaving a ~20% dead strip below
+   the notebook (this rule WINS the cascade — it out-specifies and follows the
+   section-2 height rule above, so fixing only that one changes nothing). */
 .main:has(.nb-layout) .nb-layout {
-  height: 100vh !important;
+  height: calc(100vh * var(--page-unzoom, 1)) !important;
 }
 /* Also cancel topbar-h offset from view padding rule */
 .main:has(.nb-layout) .view:has(.nb-layout) {

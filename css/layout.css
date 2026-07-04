@@ -1,17 +1,26 @@
 /* ── Page-level zoom: entire page scales as ONE unit, no per-component reflow ──
-   Desktop only — on mobile the device viewport is the source of truth.        */
+   Desktop only — on mobile the device viewport is the source of truth.
+   ⚠️ zoom does NOT compensate viewport units: 100vh inside zoom:0.8 renders at
+   only 80% of the window → a dead strip at the bottom of every full-height
+   element. --page-unzoom (=1/zoom) MUST multiply every 100vh/100dvh height so
+   it renders back to the real viewport size. Keep zoom and --page-unzoom in
+   sync — they live only here.                                                  */
+:root { --page-unzoom: 1; }
 @media (min-width: 901px) {
   html {
     zoom: 0.8;            /* scale everything uniformly — like browser 80% zoom   */
     min-width: 1280px;    /* prevent inner collapse; scrollbar appears if needed   */
   }
+  /* :root (not html) — :root out-specifies html, so defining the override on
+     html would silently lose to the :root default above. */
+  :root { --page-unzoom: 1.25; }  /* 1/0.8 — restores vh heights to full window */
 }
 
 body {
   display: grid;
   grid-template-columns: 1fr var(--sidebar-w);
-  min-height: 100vh;
-  min-height: 100dvh;   /* iOS: real visible height (excludes the URL bar) */
+  min-height: calc(100vh * var(--page-unzoom, 1));
+  min-height: calc(100dvh * var(--page-unzoom, 1));   /* iOS: real visible height */
 }
 
 .sidebar {
@@ -23,8 +32,8 @@ body {
   gap: var(--sp-4);
   position: sticky;
   top: 0;
-  height: 100vh;
-  height: 100dvh;   /* iOS: fill the visible viewport, not the URL-bar area */
+  height: calc(100vh * var(--page-unzoom, 1));
+  height: calc(100dvh * var(--page-unzoom, 1));   /* iOS: fill the visible viewport */
   overflow-y: auto;
 }
 
