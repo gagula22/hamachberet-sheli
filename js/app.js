@@ -21,6 +21,7 @@
     { id: 'insights',  title: 'תובנות',          icon: '📊', color: 'sage',     desc: 'גרפים ומגמות מהנתונים שלך' },
     { id: 'tripmap',   title: 'מפת טיולים',      icon: '🗺️', color: 'sky',      desc: 'מפת ישראל בתלת־מימד + תכנון מסלולים' },
     { id: 'wyckoff',   title: 'ניתוח לפי וויקוף', icon: '📈', color: 'sage',     desc: 'ניתוח קריפטו חי לפי וויקוף — ללא תוכנת טריידינג, רץ דרך הרשת מנתוני Binance' },
+    { id: 'docstudio', title: 'סטודיו מסמכים',    icon: '📄', color: 'butter',   desc: 'הצעות מחיר, חוזים, חשבוניות ומכתבים — PDF ו-Word בעברית תקינה' },
     { id: 'stickers',  title: 'כלים',             icon: '🛠️', color: 'lavender', desc: 'כלים שימושיים' },
     { id: 'assistant', title: 'עוזר חכם',         icon: '🤖', color: 'sage',     desc: 'שאל אותי כל דבר על האתר ועל התוכן שלך' },
     { id: 'prompts',   title: 'פרומטים',          icon: '📋', color: 'lavender', desc: 'פרומטים לשימוש חוזר — להעתקה' },
