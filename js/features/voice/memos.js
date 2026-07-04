@@ -45,7 +45,27 @@
   const delMemo = id => tx('readwrite', s => s.delete(id));
 
   // ── הקלטה ────────────────────────────────────────────────────────────────
-  let _mr = null, _chunks = [], _t0 = 0, _timerI = null;
+  // _ui = ה-ui של הרינדור האחרון של ה-view (מוחלף בכל כניסה לעמוד). ההקלטה
+  // חיה ברמת המודול וממשיכה גם כשעוזבים את העמוד/החלון — עד עצירה מפורשת.
+  let _mr = null, _chunks = [], _t0 = 0, _timerI = null, _ui = null;
+
+  // ── שלט הקלטה צף ─────────────────────────────────────────────────────────
+  // מוצג בכל עמוד בזמן הקלטה: חיווי חי + עצירה מכל מקום (ההקלטה כבר לא
+  // נעצרת במעבר עמוד, אז חייבת להיות דרך לעצור בלי לחזור ל-#/voice).
+  let _pill = null, _pillTime = null;
+  function showRecPill() {
+    if (_pill) return;
+    _pillTime = el('span', { class: 'vm-pill-time' }, '00:00');
+    const stopBtn = el('button', { class: 'vm-pill-stop', title: 'עצור ושמור' }, '⏹');
+    stopBtn.addEventListener('click', stopRec);
+    _pill = el('div', { class: 'vm-rec-pill', title: 'הקלטה פעילה — ממשיכה בכל עמוד וחלון' },
+      [el('span', { class: 'vm-pill-dot' }), _pillTime, stopBtn]);
+    document.body.appendChild(_pill);
+  }
+  function hideRecPill() { if (_pill) { _pill.remove(); _pill = null; _pillTime = null; } }
+
+  // אזהרה לפני סגירת הטאב בזמן הקלטה — סגירה מוחקת את מה שהוקלט עד כה
+  function _unloadGuard(e) { e.preventDefault(); e.returnValue = ''; }
 
   function pickMime() {
     const opts = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'];
@@ -77,7 +97,10 @@
       _chunks = [];
       _t0 = Date.now();
       _mr.ondataavailable = e => { if (e.data && e.data.size) _chunks.push(e.data); };
+      // onstop משתמש ב-_ui (ה-ui החי של הרינדור האחרון) ולא ב-ui שנתפס
+      // בסגירה — ההקלטה עשויה להסתיים כשהמשתמש בכלל בעמוד אחר.
       _mr.onstop = () => {
+        clearInterval(_timerI); // גם אם onstop הגיע בלי stopRec (למשל התקן נותק)
         stream.getTracks().forEach(t => t.stop());
         const dur = (Date.now() - _t0) / 1000;
         const blob = new Blob(_chunks, { type: _mr.mimeType || 'audio/webm' });
@@ -89,16 +112,24 @@
         };
         putMemo(memo).then(() => {
           App.toast('🎙️ ההקלטה נשמרה');
-          ui.refresh();
+          if (_ui) _ui.refresh();
         }).catch(() => App.toast('שמירת ההקלטה נכשלה'));
         _mr = null;
-        ui.setRecording(false);
+        hideRecPill();
+        window.removeEventListener('beforeunload', _unloadGuard);
+        if (_ui) _ui.setRecording(false);
       };
       // timeslice של שנייה: הנתונים נאספים שוטף ולא רק בעצירה — חיוני
       // להקלטות ארוכות (שעה וחצי ≈ 20MB בלבד ב-opus, אין מגבלת זמן)
       _mr.start(1000);
-      ui.setRecording(true);
-      _timerI = setInterval(() => ui.setTimer(fmtDur((Date.now() - _t0) / 1000)), 500);
+      if (_ui) _ui.setRecording(true);
+      showRecPill();
+      window.addEventListener('beforeunload', _unloadGuard);
+      _timerI = setInterval(() => {
+        const t = fmtDur((Date.now() - _t0) / 1000);
+        if (_ui) _ui.setTimer(t);
+        if (_pillTime) _pillTime.textContent = t;
+      }, 500);
     }).catch(() => App.toast('אין הרשאת מיקרופון — אפשר גישה בדפדפן'));
   }
   function stopRec() {
@@ -249,16 +280,24 @@
 
     root.appendChild(el('div', { class: 'card vm-card' }, [
       el('h2', {}, '🎙️ הערות קול'),
-      el('div', { class: 'vm-sub' }, 'תזכירים קוליים קצרים — מוקלטים ונשמרים מקומית בלבד. להכתבה לטקסט השתמש בכפתור 🎤 שבעורך המחברת.'),
+      el('div', { class: 'vm-sub' }, 'תזכירים קוליים — מוקלטים ונשמרים מקומית בלבד. ההקלטה ממשיכה ברקע גם במעבר לעמוד או לחלון אחר, עד שעוצרים אותה. להכתבה לטקסט השתמש בכפתור 🎤 שבעורך המחברת.'),
       el('div', { class: 'vm-controls' }, [recBtn, timer]),
       listWrap
     ]));
-    ui.setRecording(false);
+    // חיבור ה-ui החי + שחזור מצב: אם הקלטה רצה ברקע, הצג אותה נכון בחזרה לעמוד
+    _ui = ui;
+    if (_mr) {
+      ui.setRecording(true);
+      ui.setTimer(fmtDur((Date.now() - _t0) / 1000));
+    } else {
+      ui.setRecording(false);
+    }
     ui.refresh();
   }
 
-  // מעבר מסך עוצר הקלטה וניגון
-  window.addEventListener('hashchange', () => { stopRec(); stopPlayback(); });
+  // מעבר מסך עוצר ניגון בלבד. ⚠️ הקלטה ממשיכה בכוונה — נעצרת רק בעצירה
+  // מפורשת (כפתור העמוד או השלט הצף). אל תחזיר לכאן stopRec().
+  window.addEventListener('hashchange', () => { stopPlayback(); });
 
   if (window.App && App.register) App.register('voice', renderView);
   window.VoiceMemos = { list: listMemos };
