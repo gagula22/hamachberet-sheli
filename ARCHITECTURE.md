@@ -118,6 +118,7 @@
 | עריכת טקסט במחברת (עורך, toolbar, undo, טבלאות) | `notebook/editor.js` ⚠️ ראה §14 (מלכודת בחירה) |
 | עץ הנושאים / סרגל צד של המחברת | `notebook/index.js` |
 | תצוגות יומן (יומי/שבועי/חודשי) | `views/daily.js` / `weekly.js` / `monthly.js` — בשבועי: 📅 על משימה מעביר לכל תאריך (בורר נייטיבי; value = `Store.dateKey`) |
+| סטודיו מסמכים (תבניות/מדריך/ייצוא/UI) | `views/tools/doc-studio/<האחריות>.js` — ראה §16 |
 | כלי תמלול — לוגיקת אודיו / mp3 / whisper / ffmpeg | `tools/video-transcriber/<האחריות>.js` |
 | כלי המרת PDF↔Word / תרגום PDF | `tools/<הכלי>/index.js` |
 | יצירת קובץ PDF מ-HTML (מחברת + Word→PDF) | `components/html-to-pdf.js` (`window.HtmlToPdf`) |
@@ -499,3 +500,27 @@ canvas דרך `ctx.direction='rtl'` + `textAlign='right'` — **בלי** היפ�
    (v=20 "נשרף" כך ונדרש v=21).
 5. **מדידת layout בסביבת preview:** אנימציית `viewIn` (translateY 6px, ‏260ms) מוקפאת
    בטאב-רקע — offset של ~5px במדידות הוא ארטיפקט של הסביבה, לא באג.
+
+## 16. סטודיו מסמכים (`js/views/tools/doc-studio/`, view `docstudio`) — יולי 2026
+
+> פורט עצמאי של הסקיל hebrew-doc-studio: מסמכים עסקיים בעברית, 100% בדפדפן, אפס LLM.
+> commit `032ffbb`. פריט סרגל משלו (מעל "כלים").
+
+| רוצה לשנות... | גע רק בקובץ |
+|---|---|
+| תבנית (שדות/בונה-HTML), פלטות, גופנים, CSS-המסמך, מע״מ/סף-הקצאה | `doc-studio/templates.js` (`window.DS_DATA`) |
+| תוכן "הוראות ההפעלה" (כללי + פר-תבנית) | `doc-studio/guide.js` (`window.DS_GUIDE`) |
+| ייצוא PDF/Word/HTML | `doc-studio/export.js` (`window.DS_EXPORT`) |
+| ה-UI: גלריה, טופס, תצוגה חיה, טיוטות, מודאל המדריך | `doc-studio/index.js` (`window.DocStudio`) |
+| עיצוב הפיצ'ר (לא של המסמך!) | `css/features/docstudio.css` |
+
+**מבנה:** 8 תבניות (הצעת מחיר, חוזה, מכתב, דוח, one-pager, חשבונית מס, קבלה, פרוטוקול)
+כסכמות-שדות + פונקציות `build(data)→HTML` טהורות. הטופס נבנה גנרית מהסכמה; תצוגת A4
+חיה = בדיוק ה-HTML שמיוצא (WYSIWYG אמיתי). חשבונית: מע״מ 18%, אזהרת מספר-הקצאה
+אוטומטית מעל 5,000 ₪ לפני מע״מ (סף 1.6.2026 — לעדכן ב-`ALLOCATION_THRESHOLD` אם ישתנה).
+
+**עקרונות שנשמרו:** אפס מפתח Store (טיוטות ב-IndexedDB עצמאי `hamachberet-docstudio`,
+כמו הערות-קול) → אפס סיכון לסנכרון. ייצוא PDF דרך `window.HtmlToPdf` המשותף (רכיב מותר);
+Word בדפוס application/msword+mso המוכח של `notebook/export.js` (מומש מקומית, לא מיובא —
+כדי לא לצמד את שני המודולים). עיצוב המסמך (`.ds-doc`) מוזרק כ-`<style>` מ-`baseCss`
+בכל שלושת היעדים (תצוגה/PDF/Word) — מקור-אמת עיצובי אחד.

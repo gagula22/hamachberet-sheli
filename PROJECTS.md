@@ -179,6 +179,22 @@
 - **בבעלות:** `js/views/tools/video-transcriber/` — utils/audio/mp3/worker-api/ffmpeg/save/ui-toast/index
 - **מהות:** ענן נתחי 90ש ×3 במקביל → Whisper מקומי כ-fallback. סדר טעינה ב-index.html קריטי.
 
+### P-45 · מעבדת דשבורדים (file-dashboard) — 🔜 מתוכנן, טרם נבנה
+- **מהות:** פורט עצמאי של הסקיל file-dashboard: קובץ (Excel/CSV/PDF/Word/JSON) → דשבורד
+  HTML עם KPI/גרפים/תובנות ממנוע-חוקים. אושר ע"י המשתמש כולל דרישת מדריך מובנה.
+- **בבעלות (מתוכנן):** `js/views/tools/file-dashboard/{extract,analyze,render,guide,export,index}.js`,
+  `css/features/filedash.css`, vendor חדש: SheetJS. שימוש-חוזר מותר: Chart.js (vendor קיים),
+  pdf.js, mammoth. פריט סרגל מתחת ל"תובנות".
+
+### P-46 · סטודיו מסמכים (hebrew-doc-studio)
+- **בבעלות:** `js/views/tools/doc-studio/{templates,guide,export,index}.js`, `css/features/docstudio.css`
+- **מהות:** view `docstudio` — 8 תבניות מסמכים עסקיים ישראליים, טופס+תצוגת A4 חיה,
+  ייצוא PDF (HtmlToPdf המשותף) / Word (mso) / HTML, מדריך "הוראות הפעלה" מובנה,
+  טיוטות ב-IndexedDB עצמאי. ראה ARCHITECTURE §16.
+- **בוצע (5.7.2026, קומיט `032ffbb`):** הפיצ'ר כולו, מאומת חי.
+- **זהירות:** אפס מפתחות Store; עיצוב המסמך רק ב-baseCss שב-templates.js; סף מספר-ההקצאה
+  (`ALLOCATION_THRESHOLD=5000`) — לעדכן אם רשות המסים תשנה.
+
 ---
 
 ## §6. תחום קול (VOICE)
