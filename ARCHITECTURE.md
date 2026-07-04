@@ -449,3 +449,21 @@ canvas דרך `ctx.direction='rtl'` + `textAlign='right'` — **בלי** היפ�
   ללא-תנאי בשום כלי חדש — העתק את התבנית של `exec()`.
 - **לאמת את המסלול הישן (stale), לא רק בחירה טרייה:** לשחזר ע"י בחירה **בלי** לירות
   `mouseup` על העורך ואז ללחוץ (מדמה מגע). בדיקת בחירה-טרייה עוברת גם כשהפיצ'ר שבור למשתמש.
+
+**המשך (commit `22944de`, editor.js `?v=50`) — בוררי הצבע/הדגשה עדיין לא עבדו:** הפלטה
+(`makeColorPicker`) מצורפת ל-`<body>`, **מחוץ ל-`.nb-ribbon`**, ולכן לא קיבלה את מגן
+ה-mousedown של לחצני הסרגל. נגיעה בנקודת-צבע גזלה פוקוס והקריסה את הבחירה → `foreColor`/
+`hiliteColor` על כלום. תיקון: `palette.addEventListener('mousedown', e=>e.preventDefault())`.
+⚠️ **כלל:** כל פופאפ/פלטה/בורר שסרגל פותח ב-`<body>` חייב `preventDefault` על mousedown משלו —
+מגן ממוקד-ribbon לא מכסה אותו. ⚠️ אירועים סינתטיים לא גוזלים פוקוס — לאמת עם
+`evt.defaultPrevented===true` על mousedown בר-ביטול, לא רק שהפקודה חלה.
+
+## 15. שטח מת בתחתית העורך (`css/features/notebook.css`) — יולי 2026
+
+עמודת העורך (`.nb-editor-col`) היא grid-item **בגובה מלא עם גלילה פנימית** (`height:100%`,
+סעיף "4 ─ Editor column"). בנושא קצר זה השאיר שטח לבן מת גדול מתחת לטקסט (שורת הסטטוס
+נדבקה הרחק למטה). **תיקון (commit `22944de`, notebook.css `?v=48`):** `height:auto` +
+`min-height:0` + `max-height:100%` + `align-self:start` → נושא קצר מתכווץ לגובה-תוכן (רקע
+העמוד `--nb-bg-page` הקרם מציץ מתחת), ונושא ארוך עדיין נחסם ל-100% וגולל פנימית. ⚠️
+`min-height:0` הכרחי — בלעדיו ה-grid-item שומר על גובה ה-track המלא (align-self לבדו לא
+מכווץ). גם `.nb-editor` הוקטן: `min-height 400→180`, `padding-bottom 80→28`.
