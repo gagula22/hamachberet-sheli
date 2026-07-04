@@ -259,7 +259,10 @@ Web Speech he-IL; טקסט סופי דרך `execCommand('insertText')` → שמ�
 
 - **קישורים-חוזרים** `js/features/backlinks/` — פאנל "מי מקשר לכאן" מוזרק ל-`.nb-stage` דרך
   MutationObserver (אפס עריכה במחברת); קישורים מפורשים (data-tid) + אזכורי-שם. הנושא הפעיל
-  מזוהה מ-`.nb-topic.active` + `nbTree`.
+  מזוהה מ-`.nb-topic.active` + `nbTree`. **אזכורים ללא קישור** = התאמת שם כ**מילה שלמה**
+  (`mentionIndex`, גבולות עבריים ידניים כי `\b` של JS לא כולל עברית; מותרת קידומת עברית
+  בודדת כמו ב/ל/ה) — מסנן אזכורי-שווא של אמצע-מילה; כל אזכור מציג **קטע-הקשר עם המילה
+  מודגשת** (`<mark>`), בנוי מ-textNodes (בלי innerHTML — בטוח מהזרקה).
 - **מפת קשרים** `js/views/graph/` (view `graph`) — SVG ידני: פריסת-כוחות, צמתים=נושאים,
   קשתות=ויקי+היררכיה, זום/הזזה דרך viewBox, לחיצה → TopicOpen.
 - **"ביום הזה לפני…"** `js/features/onthisday/` — כרטיס DASHBOARD_WIDGETS: מצב רוח/הערות/נושאים
