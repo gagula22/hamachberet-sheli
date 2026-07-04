@@ -242,6 +242,11 @@ Web Speech he-IL; טקסט סופי דרך `execCommand('insertText')` → שמ�
 ביניים בבועה צפה בלבד. `memos.js` (view `voice`, `window.VoiceMemos`) — MediaRecorder
 (webm/opus→mp4 fallback), בלובים ב-**IndexedDB משלו (`hamachberet-voice`)** — אפס נגיעה
 ב-Store/סכימה כדי שאודיו לא ינפח localStorage/סנכרון.
+⚠️ **הקלטה רציפה (יולי 2026, commit `65107d3`):** ההקלטה חיה ברמת המודול וממשיכה
+במעבר עמוד/חלון עד עצירה מפורשת — `hashchange` עוצר **ניגון בלבד**; אסור להחזיר לשם
+`stopRec()`. בזמן הקלטה מוצג שלט צף (`.vm-rec-pill`, בכל עמוד) עם טיימר + עצירה;
+`renderView` נקשר ל-`_ui` חי ומשחזר מצב-הקלטה בחזרה לעמוד; `beforeunload` מזהיר לפני
+סגירת טאב (הצ'אנקים בזיכרון בלבד).
 
 **גיבוי אוטומטי (`js/features/autobackup/index.js`, `window.AutoBackup`):** צילום יומי מלא של
 `Store.get()` ל-IndexedDB משלו (`hamachberet-backups`), שמירת 14; שחזור = צילום-בטיחות ←
