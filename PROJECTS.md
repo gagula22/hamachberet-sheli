@@ -1,0 +1,267 @@
+# PROJECTS — מפת מיני-פרויקטים של "המחברת שלי"
+
+> **מסמך-העל לעבודה עם Claude Code / Cowork.** כל מיני-פרויקט כאן = אחריות אחת מ-ARCHITECTURE.md,
+> עם גבולות קבצים מדויקים. שני סוכנים יכולים לעבוד על שני מיני-פרויקטים שונים **בלי להתנגש**,
+> כל עוד מכבדים את "נקודות-המגע המשותפות" (ראה §0).
+>
+> **לפני כל עבודה:** קרא (1) את `UPDATES.md` — איפה עצרנו, (2) את הכרטיס של המיני-פרויקט כאן,
+> (3) את הסעיף הרלוונטי ב-`ARCHITECTURE.md`. **בסיום כל עבודה:** עדכן `UPDATES.md` + את המסמך הזה
+> (סטטוס/משימות) + את ARCHITECTURE.md אם השתנה משהו מבני. ראה פרוטוקול מלא ב-`UPDATES.md`.
+
+עודכן: 5.7.2026
+
+---
+
+## §0. נקודות-מגע משותפות — הכללים למניעת התנגשות
+
+שישה קבצים בלבד מותרים לנגיעה מחוץ לגבולות המיני-פרויקט (נגיעה = שורה/רשומה אחת, additive):
+
+| קובץ משותף | מה מותר | סיכון התנגשות |
+|---|---|---|
+| `js/app.js` | שורת SECTIONS בלבד | נמוך — שורה נפרדת לכל view |
+| `index.html` | תגיות `<script>`/`<link>` + הקפצת `?v=N` | **בינוני** — שני סוכנים במקביל = קונפליקט. עבודה טורית בלבד על index.html |
+| `js/store-schema.js` | רשומת מפתח חדשה | נמוך |
+| `js/firebase-sync.js` | עדכון מערכי האסרציה `sub`/`main` בלבד (יחד עם store-schema!) | נמוך |
+| `js/views/stickers.js` | אריח לכלי חדש בלבד | נמוך |
+| `js/views/assistant/knowledge.js` | רשומת HELP לפיצ'ר חדש | נמוך |
+
+**כללי ברזל (מ-RESPONSIBILITIES.md):**
+1. אחריות אחת = תיקייה משלה + CSS משלה + namespace אחד על `window`. שינוי בנושא אחד לא נוגע בקוד של נושא אחר.
+2. קומיט אחד לכל פיצ'ר/תיקון. `node --check` לכל JS לפני קומיט.
+3. כל קובץ ששונה → הקפצת `?v=N` ב-index.html (ה-Service Worker מגיש ישן בלי זה — גם אם כבר הוקפץ באותה סשן!).
+4. אימות חי לפני דחיפה (preview מקומי) + אפס שגיאות קונסול.
+5. **אסור לעבוד על שני מיני-פרויקטים באותו קומיט.** במקביל (worktrees/סוכנים) — רק אם אין חפיפה בקבצים כולל נקודות-המגע.
+6. state משתנה לא עובר בין קבצים; תקשורת רק דרך namespaces על `window`.
+
+---
+
+## §1. תחום ליבה ותשתית (CORE)
+
+### P-01 · מעטפת וניתוב
+- **בבעלות:** `js/app.js` (מלבד SECTIONS — כולו), `index.html` (מבנה), `sw.js`, `manifest.json`, `icons/`
+- **מהות:** bootstrap, hash-router, `App.register`, `App.onCloudUpdate` (רינדור-מחדש כשענן נוחת + הגנת-עריכה + SELF_MANAGED_ROUTES), PWA.
+- **סטטוס:** ✅ יציב (app v32+)
+- **זהירות:** זהו הקובץ שהכי הרבה פרויקטים נוגעים בו — כל שינוי כאן מחייב בדיקת כל המסכים.
+
+### P-02 · אחסון וסכימת נתונים
+- **בבעלות:** `js/store.js`, `js/store-schema.js`
+- **מהות:** IndexedDB/localStorage, state, ייצוא/ייבוא JSON, מקור-אמת יחיד לכל מפתחות ה-Store (default+sync+merge).
+- **סטטוס:** ✅ יציב (store v20)
+- **זהירות:** `Store.dateKey` הוא UTC — חישובי תאריך מחייבים עיגון `T12:00`.
+
+### P-03 · סנכרון ענן Firebase
+- **בבעלות:** `js/firebase-config.js`, `js/firebase-sync.js`, `js/firebase-ui.js`, `js/features/forcesync/`, `js/features/syncdiag/`, `js/features/imgfit/`
+- **מהות:** login, onSnapshot + REST-get fallback (טלפון/Listen חסום), long-polling ‎`?lp=1`, merge union, באנר/סטטוס, אבחון 🔬, דחיסת דפים >900KB.
+- **סטטוס:** ✅ הבעיה ההיסטורית ("טלפון עד שבוע 23") נסגרה (v34)
+- **משימות פתוחות:**
+  - [ ] מחוון "נשמר" כוזב — לאמת מול שרת (`verifyCloud`) ולהציג "ממתין/נחסם"
+  - [ ] זיהוי אוטומטי של חסימת Firestore (ERR_BLOCKED_BY_CLIENT) + אזהרה למשתמש
+  - [ ] שורת משתמש (אימייל/שם) נחתכת במובייל — CSS ב-firebase-ui
+  - [ ] אימות ש-imgfit באמת מוריד דפים כבדים מתחת ל-900KB באיכות סבירה
+
+### P-04 · גיבוי והעברת נתונים
+- **בבעלות:** `js/components/data-transfer.js` (`window.DataBackup`), `js/features/autobackup/` (`window.AutoBackup`)
+- **מהות:** ייצוא/ייבוא/הדבקת JSON; צילום יומי ל-IndexedDB `hamachberet-backups` (14 אחרונים) + שחזור בטוח.
+- **סטטוס:** ✅ יציב
+
+### P-05 · עיצוב גלובלי וערכות נושא
+- **בבעלות:** `css/tokens.css`, `css/layout.css`, `css/components.css`, `js/features/theme/` (`window.Theme`), `css/features/theme-dark.css`
+- **מהות:** טוקנים, grid, sidebar/topbar, מצב כהה (רק ב-theme-dark.css!), גודל גופן, boot סינכרוני בלי הבזק.
+- **סטטוס:** ✅ יציב
+- **זהירות (ARCHITECTURE §15):** `html{zoom:0.8}` + `--page-unzoom` חייבים להישאר מסונכרנים ב-layout.css; כל `100vh` חדש חייב `* var(--page-unzoom,1)`. דף העורך נשאר בהיר גם בכהה — בכוונה.
+
+### P-06 · ניווט, קיבוץ ו-hub
+- **בבעלות:** `js/components/sidebar.js`, `js/features/navmode/` (`window.NavMode`), `js/views/hub/`
+- **מהות:** רינדור התפריט, קבוצות (המרכז היומי / ידע ולכידה), צרורות, נתיבי `#/hub` ו-`#/bundle`, מצבי flat/group/hub.
+- **סטטוס:** ✅ יציב
+- **הרחבה:** קבוצה חדשה = עריכת GROUPS ב-navmode + `group:'<id>'` ב-SECTIONS. זהו.
+
+---
+
+## §2. תחום המחברת (NOTEBOOK) — הלב של האתר
+
+### P-10 · עץ נושאים ופריסה
+- **בבעלות:** `js/views/notebook/index.js` (`window.nbTree/nbCore/nbActive`)
+- **מהות:** עץ הנושאים, sidebar פנימי, layout, החלפת-פאנלים במובייל.
+
+### P-11 · עורך הטקסט
+- **בבעלות:** `js/views/notebook/editor.js` (`window.nbEditor`)
+- **מהות:** contenteditable, toolbar, undo/redo, טבלאות, שמירה-לענן (Ctrl+S).
+- **משימות פתוחות:**
+  - [ ] שינוי גופן גורף: סימון כל הטקסט + בחירת גודל עובד רק על פסקה בודדת
+  - [ ] תמיכת מגע משופרת במחברת (מפת הדרכים)
+- **זהירות (ARCHITECTURE §14 — חובה לקרוא):** מלכודת הבחירה. לחצני toolbar חייבים `preventDefault` על mousedown (כולל פופאפים שנפתחים ב-body!); לעולם לא לשחזר savedRange בעיוורון.
+
+### P-12 · מדיה ותמונות
+- **בבעלות:** `js/views/notebook/media.js` (`window.nbMedia`), `js/components/editable/` — `utils.js` (compressImage), `image.js`, `index.js` (`window.Editable*`)
+- **מהות:** המשפך היחיד לכל תמונה באתר (מחברת/הערות/סקירה): הדבקה, figures, גרירה, ידיות-גודל, snap, מדיניות איכות (ללא הקטנה עד 2560px).
+
+### P-13 · ייצוא מסמכים (Word/PDF)
+- **בבעלות:** `js/views/notebook/export.js` (`window.nbExport`), `js/components/html-to-pdf.js` (`window.HtmlToPdf`)
+- **מהות:** צינור exportDoc, טבלאות-עטיפה לתמונות, A4, scale אדפטיבי, fallback הדפסה.
+- **משימות פתוחות:**
+  - [ ] תוכן ישן שהודבק מ-Word עדיין מיוצא ב-13pt — לכפות 11pt בייצוא
+- **זהירות (ARCHITECTURE §6):** רינדור בפאס אחד עם windowWidth=680 — בלוק-בלוק שובר RTL.
+
+### P-14 · עיצוב המחברת
+- **בבעלות:** `css/features/notebook.css`
+- **זהירות (ARCHITECTURE §15):** גובה המחברת נקבע בכלל `.main:has(.nb-layout)` בסקשן "Hide global topbar" — תיקוני גובה רק שם.
+
+---
+
+## §3. תחום יומן ומעקב יומי (DAILY)
+
+### P-20 · יומן
+- **בבעלות:** `js/views/calendar.js`, `daily.js`, `weekly.js`, `monthly.js`
+- **מהות:** ניתוב `#/planner/*`, ציר-זמן יומי, drag-drop שבועי, לוח חודשי.
+
+### P-21 · משימות וסדר-יום
+- **בבעלות:** `js/views/todos.js`, `js/views/eisenhower/` (מפתח `eisenhower`)
+- **משימות פתוחות:**
+  - [ ] איחוד מערכת המשימות (מפת הדרכים — todos מפוזרים בין יומן/משימות)
+  - [ ] קנבן למשימות (backlog מאושר-מחקר)
+
+### P-22 · מעקב בריאות והרגלים
+- **בבעלות:** `js/views/habits.js`, `mood.js`, `water.js`
+- **backlog:** שנה-בפיקסלים · מתאמי מצב-רוח · הישגים/רצפים
+
+### P-23 · תקציב ומטרות
+- **בבעלות:** `js/views/budget.js`, `goals.js`
+- **backlog:** תקרות תקציב לקטגוריה · תנועות קבועות · דוח חודשי PDF
+
+### P-24 · סקירה שבועית
+- **בבעלות:** `js/views/weekly-review/` (מפתח `weeklyReviews`)
+- **מהות:** 3 שדות רפלקציה עשירים + תמונות, ארכיון + חיפוש, העברת משימות +7 ימים.
+- **זהירות:** dateKey הוא UTC — עיגון T12:00. כתיבה ל-tasks = רק כפעולת משתמש מפורשת.
+
+---
+
+## §4. תחום ידע ולכידה (KNOWLEDGE)
+
+### P-30 · הערות
+- **בבעלות:** `js/views/notes.js` (משתמש ב-`window.Editable` — לא לשכפל לוגיקת תמונות)
+
+### P-31 · קשרים בין נושאים
+- **בבעלות:** `js/features/backlinks/`, `js/views/graph/`, `js/components/topic-open.js` (`window.TopicOpen`)
+- **מהות:** פאנל "מי מקשר לכאן" (MutationObserver, אזכורי מילה-שלמה עם גבולות עבריים ידניים), מפת-קשרים SVG.
+
+### P-32 · מרכז הדגשות | P-33 · כרטיסיות זיכרון | P-34 · לוח שרטוט | P-35 · רשימת קריאה | P-37 · ביום הזה | P-38 · פרומטים
+- **בבעלות (בהתאמה):** `js/views/highlights/` · `js/views/flashcards/` (מפתח `flashcards`) · `js/views/sketch/` · `js/views/readinglist/` (מפתח `readingList`) · `js/features/onthisday/` · `js/views/prompts/` (מפתח `prompts`, `css/features/prompts.css`)
+- **CSS משותף ל-B7–B16:** `css/features/extras.css` — בלוק מבודד לכל אחריות; מותר לגעת רק בבלוק שלך.
+
+### P-36 · סריקת מסמך (OCR)
+- **בבעלות:** `js/views/tools/doc-scan/` (`window.Tools.docScan`)
+- **זהירות:** נתיבי Tesseract מוחלטים בלבד (`location.origin+…`) — יחסיים נשברים ב-Worker.
+- **backlog:** חיפוש OCR בתוך תמונות המחברת
+
+---
+
+## §5. תחום כלים (TOOLS) — כל כלי עצמאי לחלוטין
+
+### P-40 · מעטפת הכלים
+- **בבעלות:** `js/views/stickers.js` — hero + אריחים + מודאל; בנייה עצלה. נקודת-מגע לכל כלי חדש.
+
+### P-41 · המרות Word↔PDF
+- **בבעלות:** `js/views/tools/word-to-pdf/`, `tools/pdf-to-word/` (חילוץ PDF.js: טקסט+צבע+הדגשות+תמונות; זיהוי PDF-סרוק)
+
+### P-42 · פעולות PDF מקומיות
+- **בבעלות:** `js/views/tools/pdf-ops/` — shared/merge/split/delete/rotate/pdf-to-jpg/img-to-pdf/compress/flatten/unlock/ocr (pdf-lib+JSZip+Tesseract מאורזים, אפס העלאה)
+
+### P-43 · תרגום PDF
+- **בבעלות:** `js/views/tools/pdf-translator/` (`PTR_ENGINE`), `tools/pdf-book-translator/` (`PBT_ENGINE` — תרגום על-גבי-התמונה, MyMemory, דגימת-רקע dominantBg, שומר-ניגודיות)
+- **זהירות:** `appBase()` מ-location.href (תת-נתיב!); RTL על canvas בלי היפוך ידני.
+
+### P-44 · תמלול וידאו
+- **בבעלות:** `js/views/tools/video-transcriber/` — utils/audio/mp3/worker-api/ffmpeg/save/ui-toast/index
+- **מהות:** ענן נתחי 90ש ×3 במקביל → Whisper מקומי כ-fallback. סדר טעינה ב-index.html קריטי.
+
+---
+
+## §6. תחום קול (VOICE)
+
+### P-50 · הכתבה קולית
+- **בבעלות:** `js/features/voice/dictation.js` (`window.VoiceDictation`) — הזרקת 🎤 ב-MutationObserver, Web Speech he-IL.
+
+### P-51 · הקלטות ותמלול
+- **בבעלות:** `js/features/voice/memos.js` (`window.VoiceMemos`), `transcribe.js` — IndexedDB נפרד `hamachberet-voice`.
+- **זהירות (commit 65107d3):** הקלטה רציפה חיה ברמת המודול; `hashchange` עוצר ניגון בלבד — **אסור להחזיר לשם stopRec()**. שלט צף `.vm-rec-pill` בכל עמוד.
+
+---
+
+## §7. תחום עוזר וחיפוש (ASSIST)
+
+### P-60 · העוזר החכם
+- **בבעלות:** `js/views/assistant/` — knowledge.js / engine.js / ui.js + `css/features/assistant.css`
+- **חוזה תחזוקה:** כל פיצ'ר חדש באתר מוסיף רשומת HELP + מעדכן overview.
+
+### P-61 · חיפוש מהיר (Ctrl+K)
+- **בבעלות:** `js/features/palette/` (`window.Palette`)
+- **משימות פתוחות:** [ ] חיפוש גלובלי אמיתי בכל התוכן (מפת הדרכים)
+
+---
+
+## §8. תחום מסחר (WYCKOFF) — ⚠️ שני כלים נפרדים, לא לבלבל
+
+### P-70 · ניתוח וויקוף עצמאי (חדש)
+- **בבעלות:** `js/views/wyckoff/` — data/engine/chart/index + `css/features/wyckoff.css`
+- **מקור-אמת:** `js/views/wyckoff/CONTRACT.md` — לקרוא לפני כל שינוי. Binance חי, מנוע-חוקים בדפדפן, דוח 3 מטבעות.
+- **זהירות:** אסור לכתוב לתיקיית `wyckoff/` בשורש (נתוני הכלי הישן).
+
+### P-71 · כרטיס וויקוף ישן (Worker)
+- **בבעלות:** `js/views/dashboard/wyckoff/` — config/api/progress-modal/symbol-picker/card + תיקיית `wyckoff/` (נתונים)
+- **מהות:** Cloudflare Worker + TradingView מקומי.
+
+---
+
+## §9. תחום טיולים (TRIPMAP)
+
+### P-80 · מפה, ניווט ומסלולים
+- **בבעלות:** `js/views/tripmap/` — config/engine/street/controls/routing/trip-layer/index + `css/features/tripmap.css`
+- **מקור-אמת:** `js/views/tripmap/CONTRACT.md` — ממשקים ובעלות קבצים. מפתח Store: `trips`.
+
+### P-81 · מתכנן הטיולים העצמאי
+- **בבעלות:** `js/views/tripmap/planner-data.js` / `planner-engine.js` / `planner-ui.js` + `css/features/tripplanner.css`
+- **מהות:** אשף 4 מסלולים, מאגר 122 אטרקציות מאומתות, מסמך-תוכנית מלא + ייצוא HTML עצמאי.
+
+---
+
+## §10. תחום דשבורד, תובנות והגדרות (HOME)
+
+### P-90 · לוח הבקרה
+- **בבעלות:** `js/views/dashboard/index.js` — מארח גנרי של `window.DASHBOARD_WIDGETS` (מיון לפי `fn.order`). לא יודע דבר על הפיצ'רים.
+
+### P-91 · לוח תובנות
+- **בבעלות:** `js/views/insights/` — index/charts (Chart.js מקומי, טעינה עצלה)
+- **זהירות:** אין unmount-hook — הריסת גרפים בכל רינדור; subscribe בודק `document.contains`.
+
+### P-92 · הגדרות
+- **בבעלות:** `js/views/settings/` — חושף `window.SETTINGS_CARDS` (נקודת-הרחבה לכל מודול).
+
+---
+
+## §11. Backlog — רעיונות מאושרי-מחקר (טרם נבנו)
+
+| רעיון | ישויך לפרויקט |
+|---|---|
+| תזכורות | P-21 |
+| לכידה מהירה Ctrl+Shift+N | P-61 או feature חדש |
+| נעילת PIN | P-01/P-05 |
+| לוח עברי וחגים | P-20 |
+| חבר וירטואלי (Finch) | פרויקט חדש |
+| שנה-בפיקסלים · מתאמי מצב-רוח · הישגים/רצפים | P-22 |
+| תקרות תקציב · תנועות קבועות · דוח חודשי PDF | P-23 |
+| קנבן | P-21 |
+| חיפוש OCR בתמונות | P-36 |
+
+---
+
+## §12. איך פותחים מיני-פרויקט חדש (תבנית מ-RESPONSIBILITIES.md חלק ד')
+
+1. תיקייה: `js/features/<שם>/` (בלי מסך) / `js/views/<שם>/` (עם מסך) / `js/views/tools/<שם>/` (כלי).
+2. IIFE עם namespace אחד על `window`.
+3. מסך → `App.register` + שורת SECTIONS. כלי → אריח ב-stickers.js.
+4. נתונים → store-schema **וגם** אסרציה ב-firebase-sync (יחד!). בינארי גדול → IndexedDB נפרד.
+5. CSS → בלוק ב-extras.css או קובץ ב-css/features + link.
+6. רשומת HELP בבוט + עדכון overview.
+7. תיעוד: סעיף ב-ARCHITECTURE.md + כרטיס P-xx כאן + רשומה ב-UPDATES.md.
+8. אימות חי → קומיט אחד → דחיפה → אימות באתר החי.
