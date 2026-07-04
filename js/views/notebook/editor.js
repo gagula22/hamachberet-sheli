@@ -254,12 +254,28 @@
 
     try { document.execCommand('styleWithCSS', false, true); } catch {}
 
+    // A saved range is only usable if its nodes are still attached to the DOM
+    // AND still inside this editor. After any formatting op the DOM is rebuilt,
+    // which leaves the old savedRange pointing at detached nodes ("dead range").
+    // Restoring a dead range clobbers the real selection → execCommand no-ops.
+    function isRangeUsable(r) {
+      return !!(r && r.startContainer && r.startContainer.isConnected &&
+                editor.contains(r.commonAncestorContainer));
+    }
     function exec(cmd, val) {
       editor.focus();
-      if (savedRange) {
-        const sel = window.getSelection();
-        sel.removeAllRanges();
-        sel.addRange(savedRange);
+      const sel = window.getSelection();
+      const live = sel && sel.rangeCount ? sel.getRangeAt(0) : null;
+      // Prefer the LIVE selection when it's inside the editor. Only fall back to
+      // savedRange when the live selection is gone (focus stolen / touch dropped
+      // it) AND the saved one is still valid. This is the fix for "buttons don't
+      // work": previously we always overwrote the good live selection with a
+      // possibly-dead savedRange, so the command acted on nothing.
+      if (!(live && editor.contains(live.commonAncestorContainer))) {
+        if (isRangeUsable(savedRange)) {
+          sel.removeAllRanges();
+          sel.addRange(savedRange);
+        }
       }
       document.execCommand(cmd, false, val);
       save();
@@ -773,6 +789,15 @@
         fileInput, attachInput
       ])
     ]);
+
+    // Keep the editor selection alive when a toolbar BUTTON is pressed: default
+    // mousedown moves focus to the button and collapses the contenteditable
+    // selection (especially on touch), so execCommand/foreColor would act on
+    // nothing. preventDefault on mousedown stops the focus-steal; the click
+    // still fires. Buttons only — NOT selects (they need focus to open).
+    ribbon.querySelectorAll('button').forEach(b => {
+      b.addEventListener('mousedown', (e) => e.preventDefault());
+    });
 
     // ── Note meta header (entity-badge + title + tags) ──────────────────
     // Entity badge — shows root notebook name in amber
