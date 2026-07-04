@@ -458,12 +458,34 @@ canvas דרך `ctx.direction='rtl'` + `textAlign='right'` — **בלי** היפ�
 מגן ממוקד-ribbon לא מכסה אותו. ⚠️ אירועים סינתטיים לא גוזלים פוקוס — לאמת עם
 `evt.defaultPrevented===true` על mousedown בר-ביטול, לא רק שהפקודה חלה.
 
-## 15. שטח מת בתחתית העורך (`css/features/notebook.css`) — יולי 2026
+## 15. שטח מת בתחתית העורך — שני שורשים שונים (יולי 2026)
 
-עמודת העורך (`.nb-editor-col`) היא grid-item **בגובה מלא עם גלילה פנימית** (`height:100%`,
-סעיף "4 ─ Editor column"). בנושא קצר זה השאיר שטח לבן מת גדול מתחת לטקסט (שורת הסטטוס
-נדבקה הרחק למטה). **תיקון (commit `22944de`, notebook.css `?v=48`):** `height:auto` +
-`min-height:0` + `max-height:100%` + `align-self:start` → נושא קצר מתכווץ לגובה-תוכן (רקע
-העמוד `--nb-bg-page` הקרם מציץ מתחת), ונושא ארוך עדיין נחסם ל-100% וגולל פנימית. ⚠️
-`min-height:0` הכרחי — בלעדיו ה-grid-item שומר על גובה ה-track המלא (align-self לבדו לא
-מכווץ). גם `.nb-editor` הוקטן: `min-height 400→180`, `padding-bottom 80→28`.
+**שורש א' — בתוך עמודת העורך (commit `22944de`, notebook.css `?v=48`):** עמודת העורך
+(`.nb-editor-col`) היא grid-item **בגובה מלא עם גלילה פנימית** (`height:100%`, סעיף
+"4 ─ Editor column"). בנושא קצר זה השאיר שטח לבן מת מתחת לטקסט (שורת הסטטוס נדבקה הרחק
+למטה). תיקון: `height:auto` + `min-height:0` + `max-height:100%` + `align-self:start` →
+נושא קצר מתכווץ לגובה-תוכן, נושא ארוך עדיין נחסם ל-100% וגולל פנימית. ⚠️ `min-height:0`
+הכרחי — בלעדיו ה-grid-item שומר על גובה ה-track המלא. גם `.nb-editor` הוקטן:
+`min-height 400→180`, `padding-bottom 80→28`.
+
+**שורש ב' — פס מת של ~20% בתחתית *כל* האפליקציה (commit `b5d9e1f`, layout.css `?v=21`
++ notebook.css `?v=50`):** `layout.css` מחיל `html{zoom:0.8}` בדסקטופ, והדפדפן **לא מפצה
+יחידות viewport על zoom** — כל גובה מבוסס `100vh` (body, ‎.sidebar, ‎.nb-layout) התרנדר
+ב-80% מהחלון בלבד → פס לבן קבוע של ~20% בתחתית (188px בחלון 940). תיקון: משתנה
+`--page-unzoom` מוגדר **צמוד לכלל ה-zoom** ב-layout.css (ברירת-מחדל 1 ב-`:root`; ‏1.25
+באותה media query) וכל גובה vh מוכפל בו: `calc(100vh * var(--page-unzoom,1))`.
+
+⚠️ **מלכודות שהתגלו בדרך (חשוב לסוכן הבא):**
+1. **ה-zoom וה-`--page-unzoom` חייבים להישאר מסונכרנים** — שניהם רק ב-layout.css. משנים
+   zoom? משנים גם את המשתנה (1/zoom). כל גובה `100vh`/`100dvh` חדש חייב `* var(--page-unzoom,1)`.
+2. **`:root` גובר על `html`** (pseudo-class מול type selector) — הגדרת דריסת המשתנה על
+   `html{}` בתוך ה-media query נכשלת בשקט; חייבים `:root{}` גם שם.
+3. **מי שקובע בפועל את גובה המחברת** הוא הכלל בסקשן "Hide global topbar":
+   `.main:has(.nb-layout) .nb-layout{height:...!important}` — ספציפי יותר ומאוחר יותר
+   מכלל הגובה של סקשן 2 (שגם מחסיר `--topbar-h` מיותר — ה-topbar מוסתר במחברת). תיקון
+   גובה המחברת חייב להיעשות **שם**.
+4. **ה-Service Worker (stale-while-revalidate) מגיש עריכה ישנה באותו URL** — אחרי כל
+   עריכת CSS/JS חובה להקפיץ `?v=N` **שוב**, גם אם כבר הוקפץ מוקדם יותר באותה סשן־עבודה
+   (v=20 "נשרף" כך ונדרש v=21).
+5. **מדידת layout בסביבת preview:** אנימציית `viewIn` (translateY 6px, ‏260ms) מוקפאת
+   בטאב-רקע — offset של ~5px במדידות הוא ארטיפקט של הסביבה, לא באג.
