@@ -99,9 +99,13 @@
 ### P-13 · ייצוא מסמכים (Word/PDF)
 - **בבעלות:** `js/views/notebook/export.js` (`window.nbExport`), `js/components/html-to-pdf.js` (`window.HtmlToPdf`)
 - **מהות:** צינור exportDoc, טבלאות-עטיפה לתמונות, A4, scale אדפטיבי, fallback הדפסה.
+- **תיקון קבוע (5.7.2026, `09a44a1`, export.js v=55):** תמונות ב-Word דרך **MHTML** במקום
+  data-URI — סוף הבאג החוזר של "תמונה מקושרת שבורה" ב-Word. ראה ARCHITECTURE §6.
 - **משימות פתוחות:**
   - [ ] תוכן ישן שהודבק מ-Word עדיין מיוצא ב-13pt — לכפות 11pt בייצוא
-- **זהירות (ARCHITECTURE §6):** רינדור בפאס אחד עם windowWidth=680 — בלוק-בלוק שובר RTL.
+- **זהירות (ARCHITECTURE §6):** (1) רינדור PDF בפאס אחד עם windowWidth=680 — בלוק-בלוק שובר RTL.
+  (2) ⚠️ תמונות ב-Word = MHTML בלבד — **אסור** להחזיר ל-`<img src="data:…">` (הרגרסיה החוזרת);
+  לאמת בפתיחת ה-.doc ב-Word עצמו, לא בדפדפן.
 
 ### P-14 · עיצוב המחברת
 - **בבעלות:** `css/features/notebook.css`
