@@ -216,6 +216,15 @@
 - **מהות:** xlsx עם נוסחאות חיות (SheetJS): 3 תבניות פיננסיות + טבלה חופשית עם SUM.
 - **בוצע (5.7.2026, `94496a3`).** חולק vendor עם P-45 (בדיקת window.XLSX). ראה ARCHITECTURE §19.
 
+### P-51 · נווט שוק העבודה (job-nav)
+- **בבעלות:** `js/views/tools/job-nav/{data,cv,index}.js`, `css/features/jobnav.css`
+- **מהות:** view `jobnav` (ליד "סטודיו מסמכים") — פורט מלא של job-market-navat-haavoda:
+  4 מסלולים (קו"ח ישראלי עם כלל-הברזל [---למלא---] + ייצוא PDF/Word + מכתב מקדים / תוכנית
+  חיפוש / הכנה לראיון / שכר-ומו"מ). ראה ARCHITECTURE §20.
+- **בוצע (5.7.2026, קומיט `1501ca5`):** הפיצ'ר כולו, מאומת חי.
+- **זהירות:** אפס מפתחות Store (טיוטה ב-localStorage); כלל-הברזל ב-cv.js `ph()` — לא להסיר;
+  נתוני שכר = טווחים, לא להמציא תפקיד חסר; תלות בכיתות ds-* ובסכימת prompts של P-38.
+
 ### P-48 · סטודיו חיפוש ארגוני (search-studio)
 - **בבעלות:** `js/views/tools/search-studio/{data,index}.js`, בלוק ess ב-`css/features/pmkit.css`
 - **מהות:** view `searchstudio` — בונה פקודות /search+/digest (כל המסננים), הדגמת
