@@ -190,6 +190,22 @@
 - **זהירות:** אפס מפתחות Store; Chart.js נטען עצל עם בדיקת window.Chart (חולק vendor עם
   "תובנות"); מודאל המדריך ממחזר כיתות ds-guide-* של docstudio.
 
+### P-47 · ארגז PM (pm-toolkit)
+- **בבעלות:** `js/views/tools/pm-toolkit/{data,index}.js`, בלוק pmkit ב-`css/features/pmkit.css`
+- **מהות:** view `pmkit` — 8 מחוללי פרומפטים לניהול מוצר (טופס→פרומפט חי+צ'קליסט),
+  7 מסגרות, 4 תבניות. שמירה ל-Store('prompts') בסכימת עמוד הפרומטים. ראה ARCHITECTURE §18.
+- **בוצע (5.7.2026, קומיט `1095fb3`):** הפיצ'ר כולו, מאומת חי.
+- **זהירות:** data.js = המקור מ-`PM-Toolkit/` (מחוץ לריפו) עטוף IIFE — שינויי תוכן לערוך
+  כאן, לא במקור; תלות בכיתות ds-* של docstudio.css ובסכימת prompts של P-38.
+
+### P-48 · סטודיו חיפוש ארגוני (search-studio)
+- **בבעלות:** `js/views/tools/search-studio/{data,index}.js`, בלוק ess ב-`css/features/pmkit.css`
+- **מהות:** view `searchstudio` — בונה פקודות /search+/digest (כל המסננים), הדגמת
+  תשובה-מסונתזת/ייחוס/ביטחון + digest על נתוני-דמה, מדריך 5 הסקילים. ראה ARCHITECTURE §18.
+- **בוצע (5.7.2026, קומיט `1095fb3`):** הפיצ'ר כולו, מאומת חי.
+- **זהירות:** data.js = העתק verbatim מ-`Enterprise-Search-Studio/` (namespace window.ES);
+  אותן תלויות כמו P-47.
+
 ### P-46 · סטודיו מסמכים (hebrew-doc-studio)
 - **בבעלות:** `js/views/tools/doc-studio/{templates,guide,export,index}.js`, `css/features/docstudio.css`
 - **מהות:** view `docstudio` — 8 תבניות מסמכים עסקיים ישראליים, טופס+תצוגת A4 חיה,

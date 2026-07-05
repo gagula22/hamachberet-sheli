@@ -120,6 +120,7 @@
 | תצוגות יומן (יומי/שבועי/חודשי) | `views/daily.js` / `weekly.js` / `monthly.js` — בשבועי: 📅 על משימה מעביר לכל תאריך (בורר נייטיבי; value = `Store.dateKey`) |
 | סטודיו מסמכים (תבניות/מדריך/ייצוא/UI) | `views/tools/doc-studio/<האחריות>.js` — ראה §16 |
 | מעבדת דשבורדים (חילוץ/ניתוח/רינדור/ייצוא) | `views/tools/file-dashboard/<האחריות>.js` — ראה §17 |
+| ארגז PM / סטודיו חיפוש (מחוללי פרומפטים) | `views/tools/pm-toolkit/` · `views/tools/search-studio/` — ראה §18 |
 | כלי תמלול — לוגיקת אודיו / mp3 / whisper / ffmpeg | `tools/video-transcriber/<האחריות>.js` |
 | כלי המרת PDF↔Word / תרגום PDF | `tools/<הכלי>/index.js` |
 | יצירת קובץ PDF מ-HTML (מחברת + Word→PDF) | `components/html-to-pdf.js` (`window.HtmlToPdf`) |
@@ -547,3 +548,23 @@ Excel דרך **SheetJS** (vendor חדש `js/vendor/xlsx.full.min.js`, טעינה
 PDF/Word דרך pdf.js/mammoth הקיימים; Chart.js מאותו vendor של "תובנות" (בדיקת
 `window.Chart` לפני טעינה — אין התנגשות). דגימה עד 20K שורות. אפס מפתחות Store.
 ⚠️ מודאל המדריך ממחזר את כיתות `ds-guide-*` מ-docstudio.css — שינוי שם שם ישבור גם כאן.
+
+## 18. ארגז PM + סטודיו חיפוש ארגוני — מחוללי פרומפטים (יולי 2026)
+
+> פורטים של שתי אפליקציות-עזר שנבנו בנפרד (תיקיות `PM-Toolkit/` ו-
+> `Enterprise-Search-Studio/` שמחוץ לריפו — המקור נשאר שם). commit `1095fb3`.
+> מודל שונה מ-P-45/P-46: אלה **מחוללי-דיוק** — הפלט הוא פרומפט/פקודה מנוסחים
+> להדבקה אצל קלוד, לא תוצר סופי. שכבות הנתונים הועתקו מהמקור כלשונן.
+
+| רוצה לשנות... | גע רק בקובץ |
+|---|---|
+| סקילי PM (שדות/פרומפט/צ'קליסט), מסגרות, תבניות | `pm-toolkit/data.js` (`window.PMT_DATA`; עטיפת IIFE סביב המקור) |
+| ה-UI של ארגז PM (גלריה/טופס/פלט/מדריך) | `pm-toolkit/index.js` (view `pmkit`, `window.PMKit`) |
+| מקורות/מסננים/סקילים/נתוני-דמה של החיפוש | `search-studio/data.js` (`window.ES.data`; העתק verbatim) |
+| בונה הפקודות + הדגמה + מדריך | `search-studio/index.js` (view `searchstudio`) |
+| עיצוב שני הפיצ'רים (שני בלוקים בקובץ אחד) | `css/features/pmkit.css` |
+
+**סינרגיה מותרת עם P-38 (פרומטים):** שני הפיצ'רים שומרים תוצרים ל-`Store('prompts')`
+**בדיוק בסכימת הרשומה של עמוד הפרומטים** `{id, skill, title, body}` (unshift, additive).
+אם עמוד הפרומטים ישנה את הסכימה — לעדכן את שתי נקודות הכתיבה כאן.
+⚠️ שניהם ממחזרים את כיתות `ds-*` (טפסים/כרטיסים/מודאל) מ-docstudio.css — תלות מתועדת.
