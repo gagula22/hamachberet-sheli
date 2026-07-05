@@ -119,6 +119,7 @@
 | עץ הנושאים / סרגל צד של המחברת | `notebook/index.js` |
 | תצוגות יומן (יומי/שבועי/חודשי) | `views/daily.js` / `weekly.js` / `monthly.js` — בשבועי: 📅 על משימה מעביר לכל תאריך (בורר נייטיבי; value = `Store.dateKey`) |
 | סטודיו מסמכים (תבניות/מדריך/ייצוא/UI) | `views/tools/doc-studio/<האחריות>.js` — ראה §16 |
+| מעבדת דשבורדים (חילוץ/ניתוח/רינדור/ייצוא) | `views/tools/file-dashboard/<האחריות>.js` — ראה §17 |
 | כלי תמלול — לוגיקת אודיו / mp3 / whisper / ffmpeg | `tools/video-transcriber/<האחריות>.js` |
 | כלי המרת PDF↔Word / תרגום PDF | `tools/<הכלי>/index.js` |
 | יצירת קובץ PDF מ-HTML (מחברת + Word→PDF) | `components/html-to-pdf.js` (`window.HtmlToPdf`) |
@@ -524,3 +525,25 @@ canvas דרך `ctx.direction='rtl'` + `textAlign='right'` — **בלי** היפ�
 Word בדפוס application/msword+mso המוכח של `notebook/export.js` (מומש מקומית, לא מיובא —
 כדי לא לצמד את שני המודולים). עיצוב המסמך (`.ds-doc`) מוזרק כ-`<style>` מ-`baseCss`
 בכל שלושת היעדים (תצוגה/PDF/Word) — מקור-אמת עיצובי אחד.
+
+## 17. מעבדת דשבורדים (`js/views/tools/file-dashboard/`, view `filedash`) — יולי 2026
+
+> פורט עצמאי של הסקיל file-dashboard: קובץ → דשבורד, 100% בדפדפן, אפס LLM.
+> commits `55bb19e` (מנוע) + `1107888` (UI). פריט סרגל מתחת ל"תובנות".
+
+| רוצה לשנות... | גע רק בקובץ |
+|---|---|
+| קריאת קבצים, זיהוי טיפוסי-עמודות, ריבוי-גיליונות | `file-dashboard/extract.js` (`window.FDX`) |
+| הצעת זוויות, KPI, מפרטי גרפים, חוקי-תובנות | `file-dashboard/analyze.js` (`window.FDA`) — טהור, אפס DOM |
+| רינדור הדשבורד, פלטות, מחזור-חיים של Chart.js | `file-dashboard/render.js` (`window.FDR`) |
+| תוכן "הוראות ההפעלה" | `file-dashboard/guide.js` (`window.FD_GUIDE`) |
+| ייצוא HTML עצמאי (גרפים→PNG) | `file-dashboard/export.js` (`window.FDE`) |
+| ה-UI: העלאה, בחירת זווית/גיליון/פלטה | `file-dashboard/index.js` (`window.FileDash`) |
+| עיצוב המעטפת (הדשבורד צבוע דינמית מהפלטה) | `css/features/filedash.css` |
+
+**עקרונות:** "הזווית מובילה" — `suggestAngles` מציע רק שילובים שקיימים בנתונים (התחליף
+ל-LLM, כמו אשף מתכנן-הטיולים); "אף מספר לא מומצא" — כל KPI/תובנה מחושבים מהשורות.
+Excel דרך **SheetJS** (vendor חדש `js/vendor/xlsx.full.min.js`, טעינה עצלה + CDN גיבוי);
+PDF/Word דרך pdf.js/mammoth הקיימים; Chart.js מאותו vendor של "תובנות" (בדיקת
+`window.Chart` לפני טעינה — אין התנגשות). דגימה עד 20K שורות. אפס מפתחות Store.
+⚠️ מודאל המדריך ממחזר את כיתות `ds-guide-*` מ-docstudio.css — שינוי שם שם ישבור גם כאן.

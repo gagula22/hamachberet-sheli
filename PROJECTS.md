@@ -179,12 +179,16 @@
 - **בבעלות:** `js/views/tools/video-transcriber/` — utils/audio/mp3/worker-api/ffmpeg/save/ui-toast/index
 - **מהות:** ענן נתחי 90ש ×3 במקביל → Whisper מקומי כ-fallback. סדר טעינה ב-index.html קריטי.
 
-### P-45 · מעבדת דשבורדים (file-dashboard) — 🔜 מתוכנן, טרם נבנה
-- **מהות:** פורט עצמאי של הסקיל file-dashboard: קובץ (Excel/CSV/PDF/Word/JSON) → דשבורד
-  HTML עם KPI/גרפים/תובנות ממנוע-חוקים. אושר ע"י המשתמש כולל דרישת מדריך מובנה.
-- **בבעלות (מתוכנן):** `js/views/tools/file-dashboard/{extract,analyze,render,guide,export,index}.js`,
-  `css/features/filedash.css`, vendor חדש: SheetJS. שימוש-חוזר מותר: Chart.js (vendor קיים),
-  pdf.js, mammoth. פריט סרגל מתחת ל"תובנות".
+### P-45 · מעבדת דשבורדים (file-dashboard)
+- **בבעלות:** `js/views/tools/file-dashboard/{extract,analyze,render,guide,export,index}.js`,
+  `css/features/filedash.css`, vendor: `js/vendor/xlsx.full.min.js` (SheetJS 0.20.3).
+- **מהות:** view `filedash` (מתחת ל"תובנות") — קובץ (Excel/CSV/PDF/Word/JSON/TXT) → זוויות
+  אמיתיות מהנתונים → דשבורד חי (KPI/גרפים/תובנות-מחוקים) → ייצוא HTML עצמאי (גרפים כ-PNG).
+  מדריך "הוראות הפעלה" מובנה. ראה ARCHITECTURE §17.
+- **בוצע (5.7.2026, קומיטים `55bb19e`+`1107888`):** הפיצ'ר כולו, מאומת חי עם CSV אמיתי
+  (מספרים נבדקו ידנית: סכום/ממוצע/נתח-מוביל/מגמה).
+- **זהירות:** אפס מפתחות Store; Chart.js נטען עצל עם בדיקת window.Chart (חולק vendor עם
+  "תובנות"); מודאל המדריך ממחזר כיתות ds-guide-* של docstudio.
 
 ### P-46 · סטודיו מסמכים (hebrew-doc-studio)
 - **בבעלות:** `js/views/tools/doc-studio/{templates,guide,export,index}.js`, `css/features/docstudio.css`
