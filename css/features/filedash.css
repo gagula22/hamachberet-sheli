@@ -1,0 +1,50 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   מעבדת דשבורדים (view filedash, P-45) — עיצוב הפיצ'ר בלבד.
+   הדשבורד עצמו צבוע דינמית לפי הפלטה (render.js) — כאן רק המעטפת.
+   משתמש בכיתות המודאל של docstudio (ds-guide-*) — מותר: אותו דפוס מדריך.
+   ───────────────────────────────────────────────────────────────────────── */
+
+.fd-card { display: flex; flex-direction: column; gap: 16px; }
+
+.fd-drop {
+  border: 2px dashed var(--line); border-radius: var(--r-md, 12px);
+  padding: 34px 20px; text-align: center; cursor: pointer; color: var(--ink-soft);
+  transition: border-color 150ms, background 150ms; font-size: 15px;
+}
+.fd-drop:hover, .fd-drop.over { border-color: var(--lavender-deep, #B9A7E6); background: rgba(185, 167, 230, .07); }
+.fd-drop-ic { font-size: 30px; margin-bottom: 6px; }
+.fd-drop-sub { font-size: 12px; color: var(--ink-mute); margin-top: 4px; }
+.fd-drop-mini { padding: 12px 16px; display: flex; align-items: center; gap: 10px; text-align: start; font-size: 13px; }
+.fd-drop-mini .fd-drop-ic { font-size: 18px; margin: 0; }
+.fd-drop-mini .fd-drop-sub { margin: 0; margin-inline-start: auto; }
+
+.fd-controls { display: flex; flex-direction: column; gap: 10px; }
+.fd-ctrl { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.fd-ctrl-l { font-size: 13px; color: var(--ink-soft); font-weight: 600; }
+.fd-angle {
+  border: 1px solid var(--line); background: var(--paper, #fff); border-radius: 99px;
+  padding: 6px 14px; font-size: 13px; cursor: pointer; color: var(--ink-soft);
+  transition: all 140ms;
+}
+.fd-angle:hover { border-color: var(--lavender-deep, #B9A7E6); }
+.fd-angle.on { background: var(--lavender, #E6DDF4); border-color: var(--lavender-deep, #B9A7E6); color: var(--ink); font-weight: 600; }
+
+/* ── הדשבורד (המעטפת; צבעים דינמיים מהפלטה) ── */
+.fd-dash-title { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; font-size: 17px; }
+.fd-dash-sub { font-size: 12.5px; }
+.fd-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 11px; margin-bottom: 14px; }
+.fd-kpi { border: 1px solid; border-radius: 12px; padding: 12px 14px; }
+.fd-kpi-v { font-size: 24px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.fd-kpi-l { font-size: 12px; margin-top: 2px; }
+.fd-charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin-bottom: 14px; }
+.fd-chart { border: 1px solid; border-radius: 12px; padding: 12px; height: 240px; display: flex; flex-direction: column; }
+.fd-chart canvas { flex: 1; min-height: 0; }
+.fd-chart-t { font-size: 12px; margin-bottom: 6px; }
+.fd-insights { border: 1px solid; border-radius: 12px; padding: 12px 16px; margin-bottom: 12px; }
+.fd-sec-t { font-size: 12px; letter-spacing: .04em; margin-bottom: 8px; }
+.fd-insight { margin-bottom: 6px; line-height: 1.6; font-size: 13.5px; }
+.fd-quote { border-inline-start: 3px solid; padding: 3px 12px; margin-bottom: 7px; font-style: italic; font-size: 13px; opacity: .85; }
+.fd-samplewrap { overflow-x: auto; }
+.fd-sample { border-collapse: collapse; width: 100%; font-size: 12px; min-width: 460px; }
+.fd-sample th { padding: 6px 10px; text-align: right; border-bottom: 1px solid; }
+.fd-sample td { padding: 5px 10px; border-bottom: 1px solid; }

@@ -19,6 +19,7 @@
     { id: 'budget',    title: 'תקציב',           icon: '💰', color: 'butter',   desc: 'עקוב אחרי הכסף' },
     { id: 'goals',     title: 'מטרות',           icon: '🎯', color: 'blush',    desc: 'לחלום, להגשים', group: 'daily' },
     { id: 'insights',  title: 'תובנות',          icon: '📊', color: 'sage',     desc: 'גרפים ומגמות מהנתונים שלך' },
+    { id: 'filedash',  title: 'מעבדת דשבורדים',  icon: '🧪', color: 'sky',      desc: 'כל קובץ — Excel, CSV, PDF, Word — הופך לדשבורד עם תובנות' },
     { id: 'tripmap',   title: 'מפת טיולים',      icon: '🗺️', color: 'sky',      desc: 'מפת ישראל בתלת־מימד + תכנון מסלולים' },
     { id: 'wyckoff',   title: 'ניתוח לפי וויקוף', icon: '📈', color: 'sage',     desc: 'ניתוח קריפטו חי לפי וויקוף — ללא תוכנת טריידינג, רץ דרך הרשת מנתוני Binance' },
     { id: 'docstudio', title: 'סטודיו מסמכים',    icon: '📄', color: 'butter',   desc: 'הצעות מחיר, חוזים, חשבוניות ומכתבים — PDF ו-Word בעברית תקינה' },
