@@ -23,6 +23,7 @@
     { id: 'tripmap',   title: 'מפת טיולים',      icon: '🗺️', color: 'sky',      desc: 'מפת ישראל בתלת־מימד + תכנון מסלולים' },
     { id: 'wyckoff',   title: 'ניתוח לפי וויקוף', icon: '📈', color: 'sage',     desc: 'ניתוח קריפטו חי לפי וויקוף — ללא תוכנת טריידינג, רץ דרך הרשת מנתוני Binance' },
     { id: 'docstudio', title: 'סטודיו מסמכים',    icon: '📄', color: 'butter',   desc: 'הצעות מחיר, חוזים, חשבוניות ומכתבים — PDF ו-Word בעברית תקינה' },
+    { id: 'jobnav',    title: 'נווט שוק העבודה',  icon: '💼', color: 'sage',     desc: 'קורות חיים ישראליים, חיפוש עבודה, הכנה לראיון, שכר ומו"מ' },
     { id: 'stickers',  title: 'כלים',             icon: '🛠️', color: 'lavender', desc: 'כלים שימושיים' },
     { id: 'assistant', title: 'עוזר חכם',         icon: '🤖', color: 'sage',     desc: 'שאל אותי כל דבר על האתר ועל התוכן שלך' },
     { id: 'pmkit',     title: 'ארגז PM',           icon: '🧰', color: 'lavender', desc: 'מחוללי פרומפטים לניהול מוצר: מפרט, roadmap, ספרינט, מדדים ועוד' },
