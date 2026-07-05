@@ -34,7 +34,8 @@
         t('🔗', 'מזג PDF', '#D9F0E3,#A9D8BE', 'מאחד כמה קובצי PDF לקובץ אחד, לפי הסדר שתבחרי.', function () { return window.Tools.pdfMerge(); }),
         t('✂️', 'פצל PDF', '#D9E8F5,#A9C9E8', 'מחלץ דפים נבחרים (למשל 1-3,5) לקובץ PDF חדש.', function () { return window.Tools.pdfSplit(); }),
         t('🗑️', 'מחק דפים', '#F5DCDC,#E8AEAE', 'מסיר דפים נבחרים מה-PDF ושומר את כל השאר.', function () { return window.Tools.pdfDelete(); }),
-        t('🔄', 'סובב PDF', '#F0E6D2,#D8C39A', 'מסובב דפים ב-90/180/270 מעלות — את כל הדפים או חלק.', function () { return window.Tools.pdfRotate(); })
+        t('🔄', 'סובב PDF', '#F0E6D2,#D8C39A', 'מסובב דפים ב-90/180/270 מעלות — את כל הדפים או חלק.', function () { return window.Tools.pdfRotate(); }),
+        t('🔀', 'סדר עמודים מחדש', '#E2EAD9,#BED8A9', 'קובע סדר חדש לעמודים — אפשר גם להשמיט או לשכפל.', function () { return window.Tools.pdfReorder(); })
       ] },
       { title: '🖼️ תמונות', tools: [
         t('🖼️', 'PDF ל-JPG', '#E3DCF5,#BFA9E8', 'ממיר כל עמוד לתמונת JPG. כמה עמודים → קובץ zip.', function () { return window.Tools.pdfToJpg(); }),
@@ -43,7 +44,13 @@
       { title: '🛠️ אופטימיזציה ואבטחה', tools: [
         t('🗜️', 'דחס PDF', '#E8E2D2,#CFC0A0', 'מקטין נפח של PDF סרוק/כבד — בחירת רמת איכות.', function () { return window.Tools.pdfCompress(); }),
         t('📑', 'שטח טופס', '#DCEFE2,#AED8BF', 'מקבע שדות טופס כך שלא ניתן לערוך אותם יותר.', function () { return window.Tools.pdfFlatten(); }),
-        t('🔓', 'בטל נעילה', '#F5E2DC,#E8BFA9', 'מסיר הגבלות הדפסה/העתקה מ-PDF נעול (לא סיסמת פתיחה).', function () { return window.Tools.pdfUnlock(); })
+        t('🔓', 'בטל נעילה', '#F5E2DC,#E8BFA9', 'מסיר הגבלות הדפסה/העתקה מ-PDF נעול (לא סיסמת פתיחה).', function () { return window.Tools.pdfUnlock(); }),
+        t('💧', 'סימן מים', '#D9E5F0,#A9C4E8', 'מוסיף סימן מים (טיוטה/סודי/מותג) לכל העמודים — עברית נתמכת.', function () { return window.Tools.pdfWatermark(); }),
+        t('🖊️', 'מילוי טופס PDF', '#EFE0F0,#D8A9D8', 'ממלא טפסי PDF עם שדות — כולל ערכים בעברית.', function () { return window.Tools.pdfFillForm(); })
+      ]},
+      { title: '📇 עריכה ויצירה', tools: [
+        t('📝', 'עריכת Word', '#DCE8F5,#A9C9E8', 'חיפוש-והחלפה בכל המסמך, קבלת שינויים-במעקב וחילוץ טקסט — בלי לאבד עיצוב.', function () { return window.Tools.docxEdit(); }),
+        t('🧮', 'יוצר אקסל', '#DCF0E2,#A9D8B8', 'גיליונות עם נוסחאות אמיתיות: מעקב הוצאות עם מע״מ, תקציב, תשלומים וטבלה חופשית.', function () { return window.Tools.xlsxMaker(); })
       ] }
     ];
   }
