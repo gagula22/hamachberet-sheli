@@ -25,6 +25,8 @@
     { id: 'docstudio', title: 'סטודיו מסמכים',    icon: '📄', color: 'butter',   desc: 'הצעות מחיר, חוזים, חשבוניות ומכתבים — PDF ו-Word בעברית תקינה' },
     { id: 'stickers',  title: 'כלים',             icon: '🛠️', color: 'lavender', desc: 'כלים שימושיים' },
     { id: 'assistant', title: 'עוזר חכם',         icon: '🤖', color: 'sage',     desc: 'שאל אותי כל דבר על האתר ועל התוכן שלך' },
+    { id: 'pmkit',     title: 'ארגז PM',           icon: '🧰', color: 'lavender', desc: 'מחוללי פרומפטים לניהול מוצר: מפרט, roadmap, ספרינט, מדדים ועוד' },
+    { id: 'searchstudio', title: 'סטודיו חיפוש',   icon: '🔎', color: 'sky',      desc: 'בונה פקודות /search ו-/digest לחיפוש הארגוני של Cowork' },
     { id: 'prompts',   title: 'פרומטים',          icon: '📋', color: 'lavender', desc: 'פרומטים לשימוש חוזר — להעתקה' },
     { id: 'settings',  title: 'הגדרות',           icon: '⚙️', color: 'sky',      desc: 'שם, ערכת נושא וגודל טקסט' },
     // עמוד-המרכז (אפשרות ב) — מנותב כ-#/hub/<כלי>. navHidden: לא מוצג כפריט

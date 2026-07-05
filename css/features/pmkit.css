@@ -1,0 +1,67 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   ארגז PM (view pmkit, P-47) — עיצוב הפיצ'ר בלבד.
+   ממחזר במכוון: ds-card/ds-grid/ds-form/ds-in/ds-guide-* (docstudio.css).
+   ───────────────────────────────────────────────────────────────────────── */
+
+.pmk-caps { font-size: 11px; color: var(--ink-mute); border-top: 1px dashed var(--line); padding-top: 6px; margin-top: 4px; width: 100%; }
+.pmk-cmd {
+  font-family: Consolas, monospace; font-size: 11.5px; direction: ltr;
+  background: var(--paper-2, #F1EBE1); border: 1px solid var(--line);
+  border-radius: 6px; padding: 2px 8px; color: var(--ink-soft);
+}
+.pmk-skill { display: flex; flex-direction: column; gap: 14px; }
+.pmk-grid { display: grid; grid-template-columns: minmax(300px, 420px) 1fr; gap: 16px; align-items: start; }
+@media (max-width: 900px) { .pmk-grid { grid-template-columns: 1fr; } }
+.pmk-when {
+  background: var(--butter, #FFF3C4); border-radius: 10px; padding: 10px 14px;
+  font-size: 12.5px; line-height: 1.6; margin-bottom: 10px; color: var(--ink);
+}
+.pmk-out {
+  width: 100%; box-sizing: border-box; border: 1px solid var(--line); border-radius: 10px;
+  padding: 12px 14px; font-size: 13px; font-family: inherit; line-height: 1.7;
+  background: var(--paper, #fff); color: var(--ink); resize: vertical; min-height: 220px;
+}
+.pmk-check { margin-top: 14px; background: var(--paper, #fff); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; font-size: 13px; }
+.pmk-check-row { display: flex; gap: 8px; align-items: flex-start; margin-top: 7px; cursor: pointer; color: var(--ink-soft); }
+.pmk-check-row input:checked + span { text-decoration: line-through; opacity: .6; }
+.pmk-fw-list { display: flex; flex-direction: column; gap: 12px; margin-top: 14px; }
+.pmk-fw { background: var(--paper, #fff); border: 1px solid var(--line); border-radius: 12px; padding: 14px 18px; }
+.pmk-fw-h { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; justify-content: space-between; }
+.pmk-fw-use { font-size: 13px; font-weight: 600; margin-bottom: 3px; }
+.pmk-tpl-body {
+  background: var(--paper-2, #F1EBE1); border-radius: 8px; padding: 10px 14px;
+  font-family: inherit; font-size: 12.5px; white-space: pre-wrap; margin-top: 6px; line-height: 1.7;
+}
+
+/* ── סטודיו חיפוש (view searchstudio, P-48) — אותו קובץ, בלוק נפרד ── */
+.ess-builder { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
+.ess-chips { display: flex; flex-wrap: wrap; gap: 7px; margin: 8px 0; }
+.ess-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+.ess-out { background: var(--paper, #fff); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+.ess-out-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 8px 0; }
+.ess-cmd {
+  flex: 1; min-width: 200px; direction: ltr; text-align: left;
+  font-family: Consolas, monospace; font-size: 13.5px;
+  background: var(--paper-2, #F1EBE1); border: 1px solid var(--line);
+  border-radius: 8px; padding: 9px 13px; overflow-x: auto; white-space: nowrap;
+}
+.ess-stage { margin-top: 14px; }
+.ess-answer, .ess-dsec { background: var(--paper, #fff); border: 1px solid var(--line); border-radius: 12px; padding: 13px 16px; margin-bottom: 10px; font-size: 13.5px; }
+.ess-conf { display: inline-block; font-size: 12px; font-weight: 700; border-radius: 99px; padding: 3px 11px; margin-bottom: 8px; }
+.ess-conf.high { background: #E7F3EA; color: #2E6B44; }
+.ess-conf.medium { background: #FBF3DC; color: #8A6D1F; }
+.ess-hit { display: flex; gap: 9px; align-items: flex-start; padding: 7px 0; border-top: 1px dashed var(--line); font-size: 13px; }
+.ess-hit-ic { font-size: 15px; }
+.ess-hit-meta { color: var(--ink-mute); font-size: 12px; }
+.ess-stats { font-size: 12.5px; color: var(--ink-soft); background: var(--paper-2, #F1EBE1); border-radius: 10px; padding: 9px 14px; }
+.ess-guide { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
+.ess-feat { margin: 6px 18px 0 0; padding: 0; font-size: 12.5px; color: var(--ink-soft); }
+.ess-feat li { margin-bottom: 3px; }
+.ess-exs { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.ess-ex { display: flex; align-items: center; gap: 8px; }
+.ess-ex code { direction: ltr; font-size: 12px; background: var(--paper-2, #F1EBE1); border-radius: 6px; padding: 4px 10px; flex: 1; overflow-x: auto; white-space: nowrap; }
+.ess-qt { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.ess-qt-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13px; border-top: 1px dashed var(--line); padding-top: 6px; }
+.ess-qt-pri { margin-inline-start: auto; font-size: 14px; letter-spacing: 2px; direction: ltr; }
+.ess-flow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.ess-flow .step { font-size: 12.5px; background: var(--paper-2, #F1EBE1); border: 1px solid var(--line); border-radius: 99px; padding: 5px 12px; }
