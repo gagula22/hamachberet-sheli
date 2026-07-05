@@ -568,3 +568,20 @@ PDF/Word דרך pdf.js/mammoth הקיימים; Chart.js מאותו vendor של "
 **בדיוק בסכימת הרשומה של עמוד הפרומטים** `{id, skill, title, body}` (unshift, additive).
 אם עמוד הפרומטים ישנה את הסכימה — לעדכן את שתי נקודות הכתיבה כאן.
 ⚠️ שניהם ממחזרים את כיתות `ds-*` (טפסים/כרטיסים/מודאל) מ-docstudio.css — תלות מתועדת.
+
+## 19. השלמות שלישיית docx/pdf/xlsx — חמישה כלים חדשים (יולי 2026)
+
+> סגירת הפערים מול דף-היכולות של סקילי המסמכים של קלוד (skills-capabilities.html).
+> commits `e68799c` (PDF) · `b73a665` (Word) · `94496a3` (אקסל+חיווט).
+
+| כלי (אריח ב"כלים") | קובץ | נקודות מפתח |
+|---|---|---|
+| 💧 סימן מים | `pdf-ops/watermark.js` | עברית דרך canvas→PNG (לגופני pdf-lib אין עברית!) |
+| 🔀 סדר עמודים מחדש | `pdf-ops/reorder.js` | `parseOrder` משלו — שומר סדר+כפילויות (parseRanges ממיין!) |
+| 🖊️ מילוי טופס PDF | `pdf-ops/fill-form.js` | עברית = ציור PNG על מלבן ה-widget (עמוד לפי `widget.P()`); לטינית = שדה אמיתי |
+| 📝 עריכת Word | `docx-edit/index.js` (P-49) | zip+XML (JSZip+DOMParser, ‏namespace ‏w:) — החלפה גלובלית, קבלת Track-Changes, חילוץ. מגבלה: ביטוי שפוצל בין ריצות לא יוחלף (מדווח) |
+| 🧮 יוצר אקסל | `xlsx-maker/index.js` (P-50) | SheetJS עם **נוסחאות חיות** (`{t:'n',f:'SUM…'}`); 3 תבניות פיננסיות + טבלה חופשית |
+
+**ידע שנצבר:** pdf-lib לא תומך הצפנת-סיסמה — יכולת ההצפנה שבדף-היכולות לא נוטמעה
+(דורש qpdf-wasm כבד; מתועד כפער מודע). כלי ה-docx/xlsx משתמשים ב-`window.PdfOps`
+(dropzone/download/status) — תלות רכה מתועדת ברכיבי העזר של P-42.

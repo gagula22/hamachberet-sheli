@@ -171,6 +171,10 @@
 ### P-42 · פעולות PDF מקומיות
 - **בבעלות:** `js/views/tools/pdf-ops/` — shared/merge/split/delete/rotate/pdf-to-jpg/img-to-pdf/compress/flatten/unlock/ocr (pdf-lib+JSZip+Tesseract מאורזים, אפס העלאה)
 
+> **עדכון P-42 (5.7.2026, `e68799c`):** נוספו `watermark.js` (סימן-מים, עברית דרך canvas→PNG),
+> `reorder.js` (סדר-מחדש עם parseOrder משלו), `fill-form.js` (מילוי AcroForm; עברית = ציור על
+> ה-widget). ראה ARCHITECTURE §19.
+
 ### P-43 · תרגום PDF
 - **בבעלות:** `js/views/tools/pdf-translator/` (`PTR_ENGINE`), `tools/pdf-book-translator/` (`PBT_ENGINE` — תרגום על-גבי-התמונה, MyMemory, דגימת-רקע dominantBg, שומר-ניגודיות)
 - **זהירות:** `appBase()` מ-location.href (תת-נתיב!); RTL על canvas בלי היפוך ידני.
@@ -197,6 +201,16 @@
 - **בוצע (5.7.2026, קומיט `1095fb3`):** הפיצ'ר כולו, מאומת חי.
 - **זהירות:** data.js = המקור מ-`PM-Toolkit/` (מחוץ לריפו) עטוף IIFE — שינויי תוכן לערוך
   כאן, לא במקור; תלות בכיתות ds-* של docstudio.css ובסכימת prompts של P-38.
+
+### P-49 · עריכת Word (docx-edit)
+- **בבעלות:** `js/views/tools/docx-edit/index.js` (→ `Tools.docxEdit`)
+- **מהות:** docx=zip+XML: החלפה גלובלית (שימור עיצוב), קבלת שינויים-במעקב, חילוץ טקסט.
+- **בוצע (5.7.2026, `b73a665`).** תלות רכה: window.PdfOps (עזרי UI). ראה ARCHITECTURE §19.
+
+### P-50 · יוצר אקסל (xlsx-maker)
+- **בבעלות:** `js/views/tools/xlsx-maker/index.js` (→ `Tools.xlsxMaker`)
+- **מהות:** xlsx עם נוסחאות חיות (SheetJS): 3 תבניות פיננסיות + טבלה חופשית עם SUM.
+- **בוצע (5.7.2026, `94496a3`).** חולק vendor עם P-45 (בדיקת window.XLSX). ראה ARCHITECTURE §19.
 
 ### P-48 · סטודיו חיפוש ארגוני (search-studio)
 - **בבעלות:** `js/views/tools/search-studio/{data,index}.js`, בלוק ess ב-`css/features/pmkit.css`
