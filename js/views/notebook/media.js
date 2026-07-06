@@ -306,30 +306,11 @@
       + '<button class="file-remove" title="הסר">×</button></span>&nbsp;';
   }
 
-  // Wire the download + remove buttons. Double-click-to-OPEN is delegated on the
-  // editor (editor.js) so it survives reload; only the buttons need per-card
-  // wiring, re-applied on load via wireAttachments(). (No per-card dblclick here
-  // — that would fire twice with the editor delegation and open two tabs.)
-  function _wireAttachment(node, editor, save) {
-    if (!node || node.getAttribute('data-wired')) return;
-    node.setAttribute('data-wired', '1');
-    var dl = node.querySelector('.file-download');
-    if (dl) dl.addEventListener('click', function (e) { e.stopPropagation(); e.preventDefault(); downloadAttachment(node); });
-    var rm = node.querySelector('.file-remove');
-    if (rm) rm.addEventListener('click', function (e) {
-      e.stopPropagation(); e.preventDefault();
-      var path = node.dataset.path;
-      if (path && window.CloudFiles) CloudFiles.remove(path);   // best-effort cloud delete
-      node.remove(); save();
-    });
-  }
-
-  // Re-wire all attachment cards in a freshly-loaded editor (buttons lose their
-  // handlers when editor.innerHTML is set on load). Called from editor.js.
-  function wireAttachments(editor, save) {
-    if (!editor) return;
-    editor.querySelectorAll('.file-attachment:not([data-wired])').forEach(function (n) { _wireAttachment(n, editor, save); });
-  }
+  // NOTE: the ⬇ download / × remove buttons and double-click-to-open are ALL
+  // delegated on the editor element (editor.js), NOT wired per-card. Delegation
+  // survives reload for free — per-card handlers would be wiped when the editor's
+  // innerHTML is rebuilt on load, and a persisted `data-wired` flag would then
+  // block re-wiring. So freshly-inserted cards need no wiring call at all.
 
   // Download the file to the browser's downloads folder (the ⬇ button).
   function downloadAttachment(el) {
@@ -414,7 +395,7 @@
         var node = editor.querySelector('.file-attachment[data-att-id="' + id + '"]');
         if (node) {
           var tmp = document.createElement('div'); tmp.innerHTML = _attachHtml(meta);
-          var real = tmp.firstChild; node.replaceWith(real); _wireAttachment(real, editor, save);
+          var real = tmp.firstChild; node.replaceWith(real);   // buttons handled by editor delegation
         }
         save();
         App.toast('☁️ הקובץ נשמר בענן: ' + file.name);
@@ -446,8 +427,7 @@
         document.execCommand('insertHTML', false, _attachHtml(meta));
         real = editor.querySelector('.file-attachment[data-att-id="' + id + '"]');
       }
-      if (real) _wireAttachment(real, editor, save);
-      save();
+      save();   // buttons handled by editor delegation — no per-card wiring
       App.toast('📎 צורף: ' + file.name);
     };
     reader.onerror = function () { App.toast('שגיאה בקריאת הקובץ'); };
@@ -468,6 +448,6 @@
     insertImageFile: function (file, editor, save) { return window.Editable.insertImageFromFile(file, editor, save); },
     attachTableResizers: attachTableResizers, wrapImagesInEditor: wrapImagesInEditor,
     startImageResize: startImageResize, openAttachment: openAttachment, downloadAttachment: downloadAttachment,
-    insertFileAttachment: insertFileAttachment, wireAttachments: wireAttachments, _fmtSize: _fmtSize
+    insertFileAttachment: insertFileAttachment, _fmtSize: _fmtSize
   };
 })();

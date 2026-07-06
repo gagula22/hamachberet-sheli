@@ -5,7 +5,7 @@
   var _T = window.nbTree;
   var getById=_T.getById, getChildren=_T.getChildren, updateTopic=_T.updateTopic, getPageContext=_T.getPageContext, getRootAncestor=_T.getRootAncestor, getTopics=_T.getTopics;
   var _MED = window.nbMedia;
-  var insertImage=_MED.insertImage, restoreMoodBlocks=_MED.restoreMoodBlocks, attachMoodBehaviors=_MED.attachMoodBehaviors, insertImageFile=_MED.insertImageFile, attachTableResizers=_MED.attachTableResizers, wrapImagesInEditor=_MED.wrapImagesInEditor, startImageResize=_MED.startImageResize, openAttachment=_MED.openAttachment, insertFileAttachment=_MED.insertFileAttachment, wireAttachments=_MED.wireAttachments, _fmtSize=_MED._fmtSize;
+  var insertImage=_MED.insertImage, restoreMoodBlocks=_MED.restoreMoodBlocks, attachMoodBehaviors=_MED.attachMoodBehaviors, insertImageFile=_MED.insertImageFile, attachTableResizers=_MED.attachTableResizers, wrapImagesInEditor=_MED.wrapImagesInEditor, startImageResize=_MED.startImageResize, openAttachment=_MED.openAttachment, downloadAttachment=_MED.downloadAttachment, insertFileAttachment=_MED.insertFileAttachment, _fmtSize=_MED._fmtSize;
   function rerender(){ return window.nbCore.rerender(); }
   function buildEditor(topic, backBtn) {
     const editor = App.el('div', {
@@ -146,7 +146,6 @@
     Editable.attachImageBehaviors(editor, save);
     attachMoodBehaviors(editor, save);
     wrapImagesInEditor(editor);
-    wireAttachments(editor, save);     // re-bind ⬇ download / × remove buttons on load
     attachTableResizers(editor, save); // uses RAF internally — safe at load time
 
     // Clipboard image/screenshot paste is owned by editable/image.js
@@ -206,6 +205,25 @@
 
     // ── Image: click to select, dblclick to open, resize handles ─────────
     editor.addEventListener('click', (e) => {
+      // Attachment buttons — delegated on the editor so they survive reload
+      // (per-card wiring is wiped when editor.innerHTML is rebuilt on load).
+      const dl = e.target.closest('.file-download');
+      if (dl) {
+        e.preventDefault(); e.stopPropagation();
+        const att = dl.closest('.file-attachment'); if (att) downloadAttachment(att);
+        return;
+      }
+      const rm = e.target.closest('.file-remove');
+      if (rm) {
+        e.preventDefault(); e.stopPropagation();
+        const att = rm.closest('.file-attachment');
+        if (att) {
+          const path = att.dataset.path;
+          if (path && window.CloudFiles) CloudFiles.remove(path);  // best-effort cloud delete
+          att.remove(); save();
+        }
+        return;
+      }
       const wrap = e.target.closest('.img-wrap');
       if (wrap && !e.target.classList.contains('img-resize-handle')) {
         editor.querySelectorAll('.img-wrap.selected').forEach(w => { if (w !== wrap) w.classList.remove('selected'); });
@@ -222,7 +240,13 @@
     });
     editor.addEventListener('dblclick', (e) => {
       const att = e.target.closest('.file-attachment');
-      if (att) { e.preventDefault(); openAttachment(att); return; }
+      if (att) {
+        e.preventDefault();
+        // Double-clicking the ⬇/× buttons is handled by their click delegation —
+        // don't also open the file.
+        if (e.target.closest('.file-download') || e.target.closest('.file-remove')) return;
+        openAttachment(att); return;
+      }
       if (e.target.tagName === 'IMG' && !e.target.classList.contains('file-thumb')) {
         e.preventDefault();
         const w = window.open('', '_blank');
