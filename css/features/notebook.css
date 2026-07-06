@@ -511,6 +511,10 @@
   transition: background 0.15s, color 0.15s;
 }
 .file-download:hover { background: var(--nb-accent, #6b8f71); color: #fff; border-color: transparent; }
+.file-uploading { border-color: var(--nb-accent, #6b8f71); border-style: dashed; }
+.file-uploading .file-icon { animation: file-uploading-pulse 1s ease-in-out infinite; }
+.file-uploading .file-size { color: var(--nb-accent, #6b8f71); font-weight: 600; }
+@keyframes file-uploading-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
 
 /* ── Image wrap with corner resize handles ────────────────────────────── */
 .img-wrap {

@@ -387,10 +387,15 @@
       // placeholder → upload → swap in the real (URL-based) card
       var ph = '<span class="file-attachment file-uploading" contenteditable="false" data-att-id="' + id + '">'
         + '<span class="file-icon">⏳</span><span class="file-name">' + _escAttr(file.name) + '</span>'
-        + '<span class="file-size">מעלה לענן…</span></span>&nbsp;';
+        + '<span class="file-size">מעלה 0%…</span></span>&nbsp;';
       editor.focus();
       document.execCommand('insertHTML', false, ph);
-      CloudFiles.upload(file, id).then(function (meta) {
+      // live progress on the placeholder so a slow upload looks like it's moving
+      var onProgress = function (frac) {
+        var sz = editor.querySelector('.file-attachment[data-att-id="' + id + '"] .file-size');
+        if (sz) sz.textContent = 'מעלה ' + Math.round(frac * 100) + '%…';
+      };
+      CloudFiles.upload(file, id, onProgress).then(function (meta) {
         meta.id = id;
         var node = editor.querySelector('.file-attachment[data-att-id="' + id + '"]');
         if (node) {

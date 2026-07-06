@@ -34,15 +34,29 @@
 
   // מעלה קובץ ומחזיר { url, path, name, type, size }. זורק אם ההעלאה נכשלת
   // (רשת/הרשאות) — הקורא אחראי לנפילה חיננית.
-  async function upload(file, id) {
+  // onProgress(frac, transferred, total) נקרא תוך כדי ההעלאה (0..1) כדי להציג
+  // אחוזי-התקדמות — כך שהעלאה איטית נראית מתקדמת ולא "תקועה".
+  async function upload(file, id, onProgress) {
     var fb = _fb();
     if (!fb || !fb.storage) throw new Error('storage-unavailable');
     var user = _user();
     if (!user) throw new Error('not-signed-in');
     var path = 'users/' + user.uid + '/attachments/' + (id || Date.now().toString(36)) + '-' + _safeName(file.name);
     var ref = fb.storage().ref(path);
-    var snap = await ref.put(file, { contentType: file.type || 'application/octet-stream' });
-    var url = await snap.ref.getDownloadURL();
+    var task = ref.put(file, { contentType: file.type || 'application/octet-stream' });
+    // ref.put מחזיר UploadTask (resumable) שמשדר התקדמות דרך state_changed.
+    await new Promise(function (resolve, reject) {
+      task.on('state_changed',
+        function (snap) {
+          if (onProgress && snap.totalBytes) {
+            try { onProgress(snap.bytesTransferred / snap.totalBytes, snap.bytesTransferred, snap.totalBytes); } catch (e) {}
+          }
+        },
+        reject,      // כשל רשת/הרשאות → הקורא נופל למקומי
+        resolve      // הושלם
+      );
+    });
+    var url = await task.snapshot.ref.getDownloadURL();
     return { url: url, path: path, name: file.name, type: file.type || '', size: file.size };
   }
 
