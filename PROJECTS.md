@@ -51,10 +51,14 @@
 
 ### P-03 · סנכרון ענן Firebase
 - **בבעלות:** `js/firebase-config.js`, `js/firebase-sync.js`, `js/firebase-ui.js`, `js/features/forcesync/`, `js/features/syncdiag/`, `js/features/imgfit/`
-- **מהות:** login, onSnapshot + REST-get fallback (טלפון/Listen חסום), long-polling ‎`?lp=1`, merge union, באנר/סטטוס, אבחון 🔬, דחיסת דפים >900KB.
+- **מהות:** login, onSnapshot + REST-get fallback (טלפון/Listen חסום), long-polling ‎`?lp=1`, merge union, באנר/סטטוס, אבחון 🔬, דחיסת מדיה >900KB, מגן אובדן-מדיה (תמונות+קבצים).
 - **סטטוס:** ✅ הבעיה ההיסטורית ("טלפון עד שבוע 23") נסגרה (v34)
+- **תיקון (6.7.2026, `bdcb8b4`, v=35):** קובץ מודבק "נעלם אחרי רענון" — ה-strip והמגן
+  לא כיסו `data-content` של קבצים מצורפים (רק תמונות) → הנושא נחתך ל-60KB בענן והֵד-הענן
+  הקטוע דרס את המקומי. `_stripBase64Images` + `_hasRealImage` הורחבו לכסות גם קבצים.
+  ARCHITECTURE §6. ⚠️ אל תצמצמו בחזרה ל"תמונות בלבד".
 - **משימות פתוחות:**
-  - [ ] מחוון "נשמר" כוזב — לאמת מול שרת (`verifyCloud`) ולהציג "ממתין/נחסם"
+  - [x] מחוון "נשמר" כוזב — כפתור 💾 עכשiv קורא `verifyCloud` (אימות-שרת) לפני "נשמר בענן" (`8840664`, P-11/editor.js v=51)
   - [ ] זיהוי אוטומטי של חסימת Firestore (ERR_BLOCKED_BY_CLIENT) + אזהרה למשתמש
   - [ ] שורת משתמש (אימייל/שם) נחתכת במובייל — CSS ב-firebase-ui
   - [ ] אימות ש-imgfit באמת מוריד דפים כבדים מתחת ל-900KB באיכות סבירה
