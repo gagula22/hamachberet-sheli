@@ -405,8 +405,9 @@
         save();
         App.toast('☁️ הקובץ נשמר בענן: ' + file.name);
       }).catch(function (err) {
-        console.warn('[cloud-files] upload failed → local fallback', err);
-        App.toast('⚠️ העלאה לענן נכשלה — נשמר מקומית');
+        var code = (err && (err.code || err.message)) || 'unknown';
+        console.warn('[cloud-files] upload failed (' + code + ') → local fallback', err);
+        App.toast('⚠️ העלאה לענן נכשלה (' + code + ') — נשמר מקומית');
         _embedLocalAttachment(file, editor, save, id);
       });
       return;
