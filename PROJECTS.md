@@ -103,6 +103,7 @@
 - **בבעלות:** `js/views/notebook/media.js` (`window.nbMedia`), `js/components/editable/` — `utils.js` (compressImage), `image.js`, `index.js` (`window.Editable*`), `js/features/cloud-files/` (`window.CloudFiles`)
 - **מהות:** המשפך היחיד לכל תמונה באתר (מחברת/הערות/סקירה): הדבקה, figures, גרירה, ידיות-גודל, snap, מדיניות איכות. **קבצים מצורפים** (לא-תמונה): עולים ל-Firebase Storage (הנושא שומר קישור בלבד → מסתנכרן מלא, זמין מכל מכשיר), עם נפילה ל-base64 מקומי אם לא-מחובר.
 - **בוצע (6.7.2026, `82c393c`, media v=49 + cloud-files v=1):** קובץ מצורף לענן (Storage) + תיקון פתיחה: Blob URL במקום data-URI-ב-iframe (שנכשל על קבצים גדולים = "טאב ריק").
+- **בוצע (6.7.2026, `951ef0e`, media v=50 · editor v=52 · notebook.css v=51):** **כפתור הורדה ⬇ גלוי** בכל כרטיס קובץ → הורדה לתיקיית ההורדות (מקומי: Blob URL + `<a download>`; ענן: `<a download target=_blank>`). **לחיצה כפולה = פתיחה** (dblclick מואצל על העורך, שורד רענון). `wireAttachments(editor,save)` מחבר מחדש ⬇/× בכל טעינה (נקרא מ-buildEditor). ⚠️ נתיב התמונות לא נגע.
 - **⚠️ תלות חיצונית:** דורש כללי-הרשאה ב-Firebase Storage שמתירים כתיבה ל-`users/{uid}/attachments/` למשתמש מחובר; אם ההעלאה נכשלת → נפילה מקומית + toast. **אסור לגעת בנתיב שמירת התמונות** (media.js insertImage/Editable) — הוא לא קשור לקבצים.
 
 ### P-13 · ייצוא מסמכים (Word/PDF)
