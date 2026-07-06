@@ -160,9 +160,18 @@
 
   // ── Document size safety ──────────────────────────────────────────────────
   // Firestore hard limit: 1 048 576 bytes per document.
-  // Base64 images embedded in topic.body can easily exceed this.
-  // Strategy: if a topic doc > 900 KB, strip base64 image data before syncing
-  // (images are already stored safely in local IndexedDB — no data loss).
+  // Base64 MEDIA embedded in topic.body — both <img src="data:image/…"> AND file
+  // attachments <span class="file-attachment" data-content="data:…"> (PDF/Word/
+  // Excel/etc.) — can easily exceed this. A 3.5 MB PDF → ~4.7 MB body.
+  // Strategy: if a topic doc > 900 KB, strip the heavy base64 (image src AND
+  // attachment data-content) before syncing. The full media stays safely in
+  // local IndexedDB — only the cloud copy is slimmed down.
+  // ⚠️ CRITICAL (do not narrow back to images-only): if this strips ONLY images,
+  // a note whose only heavy content is a file attachment stays > 900 KB and hits
+  // the 60 KB truncation below — which DESTROYS the attachment (and the note text
+  // after it) in the cloud copy. Combined with the guard below only recognising
+  // images, the truncated cloud echo then overwrote the full LOCAL copy → the
+  // pasted file vanished after refresh. Stripping attachments too fixes both.
 
   const MAX_DOC_BYTES = 900 * 1024; // 900 KB safety margin
 
@@ -170,20 +179,22 @@
     try { return new TextEncoder().encode(JSON.stringify(obj)).length; } catch { return 0; }
   }
 
-  // Replace base64 image src values with a tiny transparent 1×1 GIF placeholder.
-  // The full image data stays in IndexedDB — only the cloud copy is slimmed down.
+  // Replace heavy base64 MEDIA with lightweight placeholders: image src → a 1×1
+  // transparent GIF; file-attachment data-content → empty. The full data stays in
+  // IndexedDB — only the cloud copy is slimmed. (Kept the historical name; now
+  // covers attachments too so every call site is protected.)
   function _stripBase64Images(html) {
-    return (html || '').replace(
-      /src="data:image\/[^"]{20,}"/g,
-      'src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"'
-    );
+    return (html || '')
+      .replace(/src="data:image\/[^"]{20,}"/g,
+        'src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"')
+      .replace(/data-content="data:[^"]{20,}"/g, 'data-content=""');
   }
 
   function _sizeSafeTopic(topic) {
     if (_docBytes(topic) <= MAX_DOC_BYTES) return topic;
     // Strip images from body — keeps text + metadata intact
     const slim = { ...topic, body: _stripBase64Images(topic.body || ''), _imgStripped: true };
-    if (window.App) App.toast('⚠️ הנושא מכיל תמונות גדולות — הטקסט יסונכרן, התמונות נשמרות מקומית');
+    if (window.App) App.toast('⚠️ הנושא מכיל מדיה כבדה (תמונות/קבצים) — הטקסט יסונכרן, הקבצים נשמרים מקומית');
     if (_docBytes(slim) <= MAX_DOC_BYTES) return slim;
     // Extreme case: even text is too long — truncate
     return { ...slim, body: slim.body.slice(0, 60000) };
@@ -332,13 +343,15 @@
     return Array.from(map.values());
   }
 
-  // ── Image-loss guard ───────────────────────────────────────────────────────
-  // A topic synced to the cloud may have had its large base64 images stripped to
-  // a 1×1 transparent-GIF placeholder (see _sizeSafeTopic — Firestore's 1MB doc
-  // limit forces this). That stripped copy must NEVER overwrite a local copy that
-  // still holds the real image — otherwise, on the next snapshot/refresh, the
-  // image silently becomes a white frame (the placeholder). These helpers detect
-  // a stripped cloud topic and keep the local full-image copy instead.
+  // ── Media-loss guard (images AND file attachments) ──────────────────────────
+  // A topic synced to the cloud may have had its large base64 MEDIA stripped to a
+  // placeholder (see _sizeSafeTopic — Firestore's 1MB doc limit forces this):
+  // images → 1×1 GIF, file attachments → empty data-content. That stripped copy
+  // must NEVER overwrite a local copy that still holds the real media — otherwise,
+  // on the next snapshot/refresh, the image becomes a white frame and (the bug
+  // this fixes) the pasted FILE silently vanishes. These helpers detect a stripped
+  // cloud topic and keep the local full copy instead. ⚠️ _hasRealImage must check
+  // attachments too — narrowing it to images-only re-opens the file-loss bug.
   const _PLACEHOLDER_GIF_KEY = 'R0lGODlhAQABAIAAAAAAAP'; // start of the 1×1 GIF base64
 
   function _isStrippedTopic(t) {
@@ -346,10 +359,16 @@
       (typeof t.body === 'string' && t.body.indexOf(_PLACEHOLDER_GIF_KEY) > -1)));
   }
 
+  // True if the topic still holds REAL (non-placeholder) media locally — a real
+  // base64 image OR a real file attachment (data-content). Name kept for its call
+  // sites; it now guards attachments as well as images.
   function _hasRealImage(t) {
     if (!t || typeof t.body !== 'string') return false;
-    const m = t.body.match(/src="data:image\/[^"]{20,}"/g);
-    return !!m && m.some(s => s.indexOf(_PLACEHOLDER_GIF_KEY) === -1);
+    const imgs = t.body.match(/src="data:image\/[^"]{20,}"/g);
+    if (imgs && imgs.some(s => s.indexOf(_PLACEHOLDER_GIF_KEY) === -1)) return true;
+    // real (non-empty) file attachment — a stripped copy has data-content=""
+    if (/data-content="data:[^"]{20,}"/.test(t.body)) return true;
+    return false;
   }
 
   // Given the incoming cloud topics, return a list where any topic whose cloud
