@@ -5,7 +5,7 @@
   var _T = window.nbTree;
   var getById=_T.getById, getChildren=_T.getChildren, updateTopic=_T.updateTopic, getPageContext=_T.getPageContext, getRootAncestor=_T.getRootAncestor, getTopics=_T.getTopics;
   var _MED = window.nbMedia;
-  var insertImage=_MED.insertImage, restoreMoodBlocks=_MED.restoreMoodBlocks, attachMoodBehaviors=_MED.attachMoodBehaviors, insertImageFile=_MED.insertImageFile, attachTableResizers=_MED.attachTableResizers, wrapImagesInEditor=_MED.wrapImagesInEditor, startImageResize=_MED.startImageResize, openAttachment=_MED.openAttachment, insertFileAttachment=_MED.insertFileAttachment, _fmtSize=_MED._fmtSize;
+  var insertImage=_MED.insertImage, restoreMoodBlocks=_MED.restoreMoodBlocks, attachMoodBehaviors=_MED.attachMoodBehaviors, insertImageFile=_MED.insertImageFile, attachTableResizers=_MED.attachTableResizers, wrapImagesInEditor=_MED.wrapImagesInEditor, startImageResize=_MED.startImageResize, openAttachment=_MED.openAttachment, insertFileAttachment=_MED.insertFileAttachment, wireAttachments=_MED.wireAttachments, _fmtSize=_MED._fmtSize;
   function rerender(){ return window.nbCore.rerender(); }
   function buildEditor(topic, backBtn) {
     const editor = App.el('div', {
@@ -146,6 +146,7 @@
     Editable.attachImageBehaviors(editor, save);
     attachMoodBehaviors(editor, save);
     wrapImagesInEditor(editor);
+    wireAttachments(editor, save);     // re-bind ⬇ download / × remove buttons on load
     attachTableResizers(editor, save); // uses RAF internally — safe at load time
 
     // Clipboard image/screenshot paste is owned by editable/image.js

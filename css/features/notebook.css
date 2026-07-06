@@ -501,6 +501,16 @@
 .file-attachment:hover .file-remove { display: flex; }
 .file-thumb { width: 24px; height: 24px; object-fit: cover; border-radius: 3px; flex-shrink: 0; }
 .file-hint { font-size: 10px; color: var(--nb-text-4); flex-shrink: 0; margin-inline-end: 4px; }
+.file-download {
+  flex-shrink: 0; margin-inline-start: 2px;
+  width: 22px; height: 22px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--nb-bg-hover); color: var(--nb-text-2);
+  border: 0.5px solid var(--nb-border-soft); border-radius: 6px;
+  font-size: 12px; line-height: 1; cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.file-download:hover { background: var(--nb-accent, #6b8f71); color: #fff; border-color: transparent; }
 
 /* ── Image wrap with corner resize handles ────────────────────────────── */
 .img-wrap {

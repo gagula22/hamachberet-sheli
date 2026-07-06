@@ -300,22 +300,57 @@
       : 'data-content="' + (meta.dataUrl || '') + '"';
     return '<span class="file-attachment" contenteditable="false" data-att-id="' + (meta.id || '') + '" '
       + 'data-name="' + esc + '" data-type="' + _escAttr(meta.type) + '" ' + srcAttr
-      + ' title="לחץ פעמיים לפתיחה / הורדה">' + visual
+      + ' title="⬇ הורדה · לחיצה כפולה לפתיחה">' + visual
       + '<span class="file-name">' + esc + '</span><span class="file-size">' + _fmtSize(meta.size) + '</span>'
-      + '<span class="file-hint">↗</span><button class="file-remove" title="הסר">×</button></span>&nbsp;';
+      + '<button class="file-download" title="הורד לתיקיית ההורדות">⬇</button>'
+      + '<button class="file-remove" title="הסר">×</button></span>&nbsp;';
   }
 
+  // Wire the download + remove buttons. Double-click-to-OPEN is delegated on the
+  // editor (editor.js) so it survives reload; only the buttons need per-card
+  // wiring, re-applied on load via wireAttachments(). (No per-card dblclick here
+  // — that would fire twice with the editor delegation and open two tabs.)
   function _wireAttachment(node, editor, save) {
     if (!node || node.getAttribute('data-wired')) return;
     node.setAttribute('data-wired', '1');
-    node.addEventListener('dblclick', function (ev) { ev.preventDefault(); openAttachment(node); });
+    var dl = node.querySelector('.file-download');
+    if (dl) dl.addEventListener('click', function (e) { e.stopPropagation(); e.preventDefault(); downloadAttachment(node); });
     var rm = node.querySelector('.file-remove');
     if (rm) rm.addEventListener('click', function (e) {
-      e.stopPropagation();
+      e.stopPropagation(); e.preventDefault();
       var path = node.dataset.path;
       if (path && window.CloudFiles) CloudFiles.remove(path);   // best-effort cloud delete
       node.remove(); save();
     });
+  }
+
+  // Re-wire all attachment cards in a freshly-loaded editor (buttons lose their
+  // handlers when editor.innerHTML is set on load). Called from editor.js.
+  function wireAttachments(editor, save) {
+    if (!editor) return;
+    editor.querySelectorAll('.file-attachment:not([data-wired])').forEach(function (n) { _wireAttachment(n, editor, save); });
+  }
+
+  // Download the file to the browser's downloads folder (the ⬇ button).
+  function downloadAttachment(el) {
+    var name = el.dataset.name || 'file';
+    var url = el.dataset.url;
+    if (url) {
+      // Cloud file: a cross-origin download attribute is ignored by browsers, so
+      // this may open in a tab where the user saves it. (True forced-download of a
+      // cloud file needs bucket CORS — a tab is the reliable no-setup fallback.)
+      var a = document.createElement('a'); a.href = url; a.download = name; a.target = '_blank'; a.rel = 'noopener';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      App.toast('⬇ ' + name);
+      return;
+    }
+    var dataUrl = el.dataset.content;
+    if (!dataUrl) { App.toast('תוכן הקובץ אינו זמין'); return; }
+    var blob; try { blob = _dataUrlToBlob(dataUrl); } catch (e) { App.toast('שגיאה בהורדה'); return; }
+    var burl = URL.createObjectURL(blob);
+    _download(burl, name);
+    setTimeout(function () { URL.revokeObjectURL(burl); }, 4000);
+    App.toast('⬇ הורד: ' + name);
   }
 
   function _dataUrlToBlob(dataUrl) {
@@ -432,6 +467,7 @@
     restoreMoodBlocks: restoreMoodBlocks, attachMoodBehaviors: attachMoodBehaviors,
     insertImageFile: function (file, editor, save) { return window.Editable.insertImageFromFile(file, editor, save); },
     attachTableResizers: attachTableResizers, wrapImagesInEditor: wrapImagesInEditor,
-    startImageResize: startImageResize, openAttachment: openAttachment, insertFileAttachment: insertFileAttachment, _fmtSize: _fmtSize
+    startImageResize: startImageResize, openAttachment: openAttachment, downloadAttachment: downloadAttachment,
+    insertFileAttachment: insertFileAttachment, wireAttachments: wireAttachments, _fmtSize: _fmtSize
   };
 })();
