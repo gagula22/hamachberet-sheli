@@ -100,8 +100,10 @@
 - **זהירות (ARCHITECTURE §14 — חובה לקרוא):** מלכודת הבחירה. לחצני toolbar חייבים `preventDefault` על mousedown (כולל פופאפים שנפתחים ב-body!); לעולם לא לשחזר savedRange בעיוורון.
 
 ### P-12 · מדיה ותמונות
-- **בבעלות:** `js/views/notebook/media.js` (`window.nbMedia`), `js/components/editable/` — `utils.js` (compressImage), `image.js`, `index.js` (`window.Editable*`)
-- **מהות:** המשפך היחיד לכל תמונה באתר (מחברת/הערות/סקירה): הדבקה, figures, גרירה, ידיות-גודל, snap, מדיניות איכות (ללא הקטנה עד 2560px).
+- **בבעלות:** `js/views/notebook/media.js` (`window.nbMedia`), `js/components/editable/` — `utils.js` (compressImage), `image.js`, `index.js` (`window.Editable*`), `js/features/cloud-files/` (`window.CloudFiles`)
+- **מהות:** המשפך היחיד לכל תמונה באתר (מחברת/הערות/סקירה): הדבקה, figures, גרירה, ידיות-גודל, snap, מדיניות איכות. **קבצים מצורפים** (לא-תמונה): עולים ל-Firebase Storage (הנושא שומר קישור בלבד → מסתנכרן מלא, זמין מכל מכשיר), עם נפילה ל-base64 מקומי אם לא-מחובר.
+- **בוצע (6.7.2026, `82c393c`, media v=49 + cloud-files v=1):** קובץ מצורף לענן (Storage) + תיקון פתיחה: Blob URL במקום data-URI-ב-iframe (שנכשל על קבצים גדולים = "טאב ריק").
+- **⚠️ תלות חיצונית:** דורש כללי-הרשאה ב-Firebase Storage שמתירים כתיבה ל-`users/{uid}/attachments/` למשתמש מחובר; אם ההעלאה נכשלת → נפילה מקומית + toast. **אסור לגעת בנתיב שמירת התמונות** (media.js insertImage/Editable) — הוא לא קשור לקבצים.
 
 ### P-13 · ייצוא מסמכים (Word/PDF)
 - **בבעלות:** `js/views/notebook/export.js` (`window.nbExport`), `js/components/html-to-pdf.js` (`window.HtmlToPdf`)

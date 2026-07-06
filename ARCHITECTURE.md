@@ -167,6 +167,23 @@
 
 ---
 
+## 5א. קבצים מצורפים בענן (`js/features/cloud-files/`, `window.CloudFiles`) — יולי 2026
+
+> קובץ שמדביקים במחברת (PDF/Word/וכו') עולה ל-**Firebase Storage** (ללא מגבלת ה-1MB של
+> Firestore), והנושא שומר רק **קישור-הורדה** קטן (`data-url`) — לא base64. commit `82c393c`.
+> **⛔ אין קשר לתמונות** — נתיב שמירת התמונות (`media.js insertImage`/`Editable`) לא נגע.
+
+- **`CloudFiles.upload(file,id)`** → מעלה ל-`users/{uid}/attachments/{id}-{name}` ומחזיר
+  `{url,path,name,type,size}`. `ref.put()` נפתר רק אחרי **אישור-שרת אמיתי** (בניגוד ל-Firestore
+  `set()` תחת offline-persistence). `enabled()` = SDK+storage+משתמש-מחובר.
+- **`media.js insertFileAttachment`:** מחובר → placeholder → העלאה → כרטיס עם `data-url`.
+  לא-מחובר/כשל → נפילה חיננית ל-base64 מקומי (`data-content`, ההתנהגות הקודמת) — כלום לא נשבר.
+- **`openAttachment`:** ענן (`data-url`) → פתיחה ישירה בטאב; מדיה מקומית (`data-content`) →
+  **Blob URL** (data-URI ב-iframe נכשל על קבצים גדולים = הבאג "טאב ריק"; Blob URL עובד).
+- **⚠️ תלות חיצונית:** כללי-הרשאה ב-Firebase Storage חייבים להתיר כתיבה למשתמש מחובר; אחרת
+  ההעלאה נכשלת ונופלת למקומי. הבאג ההיסטורי "קובץ נעלם אחרי רענון" (§6, מגן-המדיה) עדיין
+  רלוונטי לקבצים מקומיים ישנים (base64) — קבצי-ענן חדשים לא סובלים ממנו (הנושא קטן).
+
 ## 6. ייצוא מסמכים — פרטי מימוש (`notebook/export.js`, `window.nbExport`)
 
 > כל מה שקשור לייצוא Word/PDF נמצא **רק כאן**. אל תיגע בעורך (`editor.js`) או בתמונות
