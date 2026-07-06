@@ -145,13 +145,44 @@
         'בחר כלי — הוא נפתח בחלון. הכל רץ מקומית בדפדפן, בלי להעלות קבצים לאף שרת.')
     ]);
 
-    var sections = categories().map(function (c) {
-      return App.el('div', {}, [
-        App.el('div', { style: { fontSize: '15px', fontWeight: '600', color: 'var(--ink)',
-          fontFamily: 'var(--font-head)', margin: '4px 0 12px' } }, c.title),
-        App.el('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(140px,1fr))', gap: '12px' } },
-          c.tools.map(tile))
+    // ── קטגוריות כאקורדיון: כל כותרת מתקפלת; ברירת מחדל — הראשונה פתוחה, השאר
+    // סגורות. המצב פתוח/סגור נשמר פר-קטגוריה ב-localStorage. כך העמוד לא עמוס:
+    // רואים 5 כותרות, ופותחים רק את הרלוונטית.
+    function catKey(i) { return 'mahberet.toolcat.' + i; }
+    function catOpen(i) { try { var v = localStorage.getItem(catKey(i)); return v === null ? (i === 0) : v === '1'; } catch (e) { return i === 0; } }
+    function setCatOpen(i, v) { try { localStorage.setItem(catKey(i), v ? '1' : '0'); } catch (e) {} }
+
+    var sections = categories().map(function (c, i) {
+      var open = catOpen(i);
+      var grid = App.el('div', {
+        style: { display: open ? 'grid' : 'none', gridTemplateColumns: 'repeat(auto-fill,minmax(140px,1fr))',
+                 gap: '12px', marginTop: '10px' }
+      }, c.tools.map(tile));
+
+      var caret = App.el('span', {
+        style: { fontSize: '13px', color: 'var(--ink-mute)', transition: 'transform 180ms',
+                 transform: open ? 'rotate(0deg)' : 'rotate(-90deg)', display: 'inline-block' }
+      }, '▾');
+
+      var head = App.el('button', {
+        style: { display: 'flex', alignItems: 'center', gap: '10px', width: '100%', textAlign: 'start',
+                 background: '#fff', border: '1px solid var(--line)', borderRadius: '12px',
+                 padding: '13px 16px', cursor: 'pointer', fontFamily: 'inherit', boxShadow: 'var(--shadow-sm)' },
+        onClick: function () {
+          var willOpen = grid.style.display === 'none';
+          grid.style.display = willOpen ? 'grid' : 'none';
+          caret.style.transform = willOpen ? 'rotate(0deg)' : 'rotate(-90deg)';
+          setCatOpen(i, willOpen);
+        }
+      }, [
+        App.el('span', { style: { fontSize: '15px', fontWeight: '600', color: 'var(--ink)', flex: '1',
+          fontFamily: 'var(--font-head)' } }, c.title),
+        App.el('span', { style: { fontSize: '12px', color: 'var(--ink-mute)', background: 'var(--cream)',
+          borderRadius: '99px', padding: '2px 10px', flexShrink: '0' } }, c.tools.length + ' כלים'),
+        caret
       ]);
+
+      return App.el('div', {}, [head, grid]);
     });
 
     root.append(App.el('div', { class: 'stack stack-lg' }, [hero].concat(sections)));
