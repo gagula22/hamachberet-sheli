@@ -61,12 +61,18 @@
       try {
         if (window.FirebaseSync && FirebaseSync.enabled && FirebaseSync.flush) {
           await FirebaseSync.flush();
-          App.toast('☁️ נשמר בענן');
+          // "נשמר בענן" רק אחרי אימות-שרת אמיתי. flush() לבדו מסתפק בכתיבה
+          // למטמון-ההתמדה המקומי של Firestore (offline persistence) והכתיבה
+          // עשויה עדיין להיות בתור — לכן "נשמר בענן" בלי אימות היה אופטימי
+          // ולא הבטחה. verifyCloud קורא מהשרת (source:'server') ומוודא שהחיבור
+          // באמת עובר; אם הוא נכשל — נשמר מקומית ויעלה כשהרשת תאפשר.
+          if (FirebaseSync.verifyCloud) await FirebaseSync.verifyCloud(8000);
+          App.toast('☁️ נשמר ואומת בענן');
         } else {
           App.toast('✓ נשמר (יסונכרן כשתתחבר)');
         }
       } catch (e) {
-        App.toast('⚠️ נשמר מקומית — יעלה לענן כשתהיה רשת');
+        App.toast('✓ נשמר מקומית — יעלה לענן כשהרשת תאפשר');
       }
       if (btn) { delete btn.dataset.saving; btn.classList.remove('syncing'); }
     }
