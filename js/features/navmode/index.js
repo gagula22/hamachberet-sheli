@@ -2,7 +2,8 @@
   'use strict';
   // ─────────────────────────────────────────────────────────────────────────
   // מצב ניווט — אחריות עצמאית (window.NavMode).
-  // מאחד כלים לקבוצות. שתי קבוצות (GROUPS): "המרכז היומי" ו"ידע ולכידה".
+  // מאחד כלים לקבוצות. 5 קבוצות (GROUPS): "המרכז היומי", "ידע ולכידה",
+  // "כסף ותובנות", "מסמכים ויצירה", "עוזרי AI".
   // המתג (mahberet.navMode) קובע איך כל הקבוצות מוצגות בסרגל:
   //   'flat'  — כל כלי פריט נפרד (המצב המקורי).
   //   'group' — כל קבוצה נפתחת בסרגל (פריט-אב מתקפל עם הילדים).
@@ -44,7 +45,24 @@
         { view: 'sketch', title: 'לוח שרטוט', icon: '✏️', color: 'lavender' },
         { view: 'highlights', title: 'מרכז הדגשות', icon: '🖍️', color: 'butter' },
         { view: 'flashcards', title: 'כרטיסיות זיכרון', icon: '🧠', color: 'sage' },
-        { view: 'voice', title: 'הערות קול', icon: '🎙️', color: 'blush' }
+        { view: 'voice', title: 'הערות קול', icon: '🎙️', color: 'blush' },
+        { view: 'readinglist', title: 'רשימת קריאה', icon: '🔖', color: 'sky' }
+    ] },
+    { id: 'money', title: 'כסף ותובנות', icon: '💰', color: 'butter', children: [
+        { view: 'budget', title: 'תקציב', icon: '💰', color: 'butter' },
+        { view: 'insights', title: 'תובנות', icon: '📊', color: 'sage' }
+    ] },
+    { id: 'docs', title: 'מסמכים ויצירה', icon: '📄', color: 'sky', children: [
+        { view: 'docstudio', title: 'סטודיו מסמכים', icon: '📄', color: 'butter' },
+        { view: 'filedash', title: 'מעבדת דשבורדים', icon: '🧪', color: 'sky' },
+        { view: 'jobnav', title: 'נווט שוק העבודה', icon: '💼', color: 'sage' },
+        { view: 'stickers', title: 'כלים', icon: '🛠️', color: 'lavender' }
+    ] },
+    { id: 'ai', title: 'עוזרי AI', icon: '🤖', color: 'sage', children: [
+        { view: 'pmkit', title: 'ארגז PM', icon: '🧰', color: 'lavender' },
+        { view: 'searchstudio', title: 'סטודיו חיפוש', icon: '🔎', color: 'sky' },
+        { view: 'prompts', title: 'פרומטים', icon: '📋', color: 'lavender' },
+        { view: 'assistant', title: 'עוזר חכם', icon: '🤖', color: 'sage' }
     ] }
   ];
   function groupById(id) { return GROUPS.filter(function (g) { return g.id === id; })[0] || null; }
@@ -105,7 +123,7 @@
     });
     return el('div', { class: 'card settings-card' }, [
       el('h2', { class: 'settings-card-title' }, '🧭 סגנון התפריט'),
-      el('div', { class: 'settings-card-sub' }, 'איך להציג את קבוצות הכלים — "המרכז היומי" ו"ידע ולכידה": כל כלי בנפרד, מקובצים ונפתחים, או בעמוד-מרכז עם לשוניות.'),
+      el('div', { class: 'settings-card-sub' }, 'איך להציג את קבוצות הכלים בסרגל (המרכז היומי, ידע ולכידה, כסף ותובנות, מסמכים ויצירה, עוזרי AI): כל כלי בנפרד, מקובצים ונפתחים, או בעמוד-מרכז עם לשוניות.'),
       row
     ]);
   }
