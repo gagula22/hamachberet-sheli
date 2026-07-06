@@ -59,16 +59,18 @@
 - **⬇ (הורדה):** קובץ מקומי (base64) → `_dataUrlToBlob` → **Blob URL** עם `<a download>` = הורדה
   אמיתית לתיקיית ההורדות (לא טאב). קובץ-ענן (`data-url`) → `<a download target=_blank>` (טאב
   שבו הדפדפן שומר — הורדה כפויה חוצת-מקור דורשת CORS על ה-bucket, טאב הוא הנפילה האמינה בלי הגדרה).
-- **לחיצה כפולה על הכרטיס:** ממשיכה לפתוח/להציג (openAttachment) — ה-dblclick **מואצל על העורך**
-  (editor.js) כדי לשרוד רענון; הוסר ה-dblclick הפר-כרטיס כדי לא לפתוח פעמיים.
-- **`wireAttachments(editor, save)`** חדש: מחבר מחדש את כפתורי ⬇/× בכל טעינה (innerHTML של העורך
-  מוחק handlers פר-כרטיס). נקרא מ-`buildEditor` אחרי `wrapImagesInEditor`.
-**⚠️ נתיב שמירת התמונות לא נגע** (רק media.js attachment helpers + חיווט העורך).
-**אימות (preview מחובר-לא):** אפס שגיאות קונסול; כרטיס מחווט (`data-wired=1`), ⬇+× נוכחים; לחיצה על
-⬇ יצרה עוגן Blob עם `download="note.txt"` (הורדה, לא טאב) + toast; לחיצה-כפולה פתחה Blob URL; ⬇ גלוי
-(display:flex, 22×22). אתר חי מגיש media.js?v=50 עם downloadAttachment/wireAttachments.
-**קבצים + גרסאות:** media.js v=50 · editor.js v=52 · notebook.css v=51 · index.html.
-**קומיטים:** `951ef0e`.
+- **לחיצה כפולה על הכרטיס:** פותחת/מציגה (openAttachment).
+- **כל האינטראקציות (⬇ הורדה, × הסרה, dblclick פתיחה) מואצלות על אלמנט העורך** ב-`editor.js`,
+  **לא** מחווטות פר-כרטיס — האצלה שורדת רענון בחינם. ה-dblclick על כפתור חסום כדי לא לפתוח בטעות.
+**⚠️ באג שנתפס בביקורת הפונקציונלית (לפני שהמשתמש נתקל בו):** הגרסה הראשונה (commit `951ef0e`)
+חיווטה פר-כרטיס עם `data-wired=1` — הדגל **דלף לתוך ה-body הנשמר**, ואחרי רענון `wireAttachments`
+דילג על הכרטיס (`:not([data-wired])`) → **כפתורי ⬇/× מתים אחרי רענון**. **תוקן (commit `f70b19e`)**
+במעבר להאצלה מלאה על העורך (הוסרו `_wireAttachment`/`wireAttachments` לגמרי). ⚠️ נתיב התמונות לא נגע.
+**אימות (preview, נגד editor אמיתי מ-buildEditor במצב אחרי-רענון, כרטיס בלי `data-wired`):** אפס
+שגיאות קונסול; ⬇ יצר עוגן Blob עם `download` (הורדה, לא טאב); dblclick פתח; dblclick-על-כפתור לא
+פתח; × הסיר. אתר חי מגיש media.js?v=51 · editor.js?v=53.
+**קבצים + גרסאות:** media.js v=51 · editor.js v=53 · notebook.css v=51 · index.html.
+**קומיטים:** `951ef0e` (פיצ'ר) → `f70b19e` (תיקון האצלה) + docs.
 **איפה ממשיכים / פתוח:** תלות חיצונית פתוחה (לא חוסמת): המשתמש צריך לאמת/להגדיר Firebase Storage
 security rules ל-`users/{uid}/attachments/` כדי שנתיב העלאת-הענן יעבוד (אחרת נפילה חיננית ל-base64 מקומי).
 
