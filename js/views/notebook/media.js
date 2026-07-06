@@ -275,72 +275,147 @@
     document.addEventListener('mouseup', onUp);
   }
 
-  // Open a file-attachment card in a new tab (or download if not previewable)
-  function openAttachment(el) {
-    const dataUrl = el.dataset.content;
-    const name = el.dataset.name || 'file';
-    const type = el.dataset.type || '';
-    if (!dataUrl) { App.toast('תוכן הקובץ חסר'); return; }
-    const previewable = type.startsWith('image/') || type === 'application/pdf'
-      || type.startsWith('text/') || type.startsWith('video/') || type.startsWith('audio/');
-    if (previewable) {
-      const w = window.open('', '_blank');
-      if (w) {
-        const safe = name.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        if (type.startsWith('image/'))
-          w.document.write('<!DOCTYPE html><html><body style="margin:0;background:#222;display:flex;align-items:center;justify-content:center;min-height:100vh;"><img src="' + dataUrl + '" alt="' + safe + '" style="max-width:100%;max-height:100vh;"></body></html>');
-        else if (type.startsWith('video/'))
-          w.document.write('<!DOCTYPE html><html><body style="margin:0;background:#222;display:flex;align-items:center;justify-content:center;min-height:100vh;"><video src="' + dataUrl + '" controls autoplay style="max-width:100%;max-height:100vh;"></video></body></html>');
-        else if (type.startsWith('audio/'))
-          w.document.write('<!DOCTYPE html><html><body style="margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#FAF6EE;"><audio src="' + dataUrl + '" controls autoplay></audio></body></html>');
-        else
-          w.document.write('<!DOCTYPE html><html><body style="margin:0;"><iframe src="' + dataUrl + '" style="width:100%;height:100vh;border:none;"></iframe></body></html>');
-        w.document.close();
-        return;
-      }
-    }
-    // Download fallback
-    const a = document.createElement('a');
-    a.href = dataUrl; a.download = name;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    App.toast('הורד: ' + name);
+  // ── File-attachment helpers (shared by cloud + local paths) ──────────────
+  function _fileIcon(name, type) {
+    type = type || ''; name = name || '';
+    return type.startsWith('image/') ? '🖼️'
+      : type.includes('pdf') ? '📕'
+      : (type.includes('word') || /\.docx?$/i.test(name)) ? '📄'
+      : (type.includes('excel') || /\.xlsx?$/i.test(name)) ? '📊'
+      : type.includes('video') ? '🎬'
+      : type.includes('audio') ? '🎵'
+      : '📎';
+  }
+  function _escAttr(s) { return String(s == null ? '' : s).replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
+  // meta: { name, type, size, id, dataUrl? (local base64) | url?+path? (cloud) }
+  function _attachHtml(meta) {
+    var esc = _escAttr(meta.name);
+    var isImg = (meta.type || '').startsWith('image/');
+    var thumb = meta.dataUrl || meta.url || '';
+    var visual = isImg && thumb ? '<img class="file-thumb" src="' + thumb + '" alt="" />'
+      : '<span class="file-icon">' + _fileIcon(meta.name, meta.type) + '</span>';
+    var srcAttr = meta.url
+      ? 'data-url="' + _escAttr(meta.url) + '" data-path="' + _escAttr(meta.path || '') + '"'
+      : 'data-content="' + (meta.dataUrl || '') + '"';
+    return '<span class="file-attachment" contenteditable="false" data-att-id="' + (meta.id || '') + '" '
+      + 'data-name="' + esc + '" data-type="' + _escAttr(meta.type) + '" ' + srcAttr
+      + ' title="לחץ פעמיים לפתיחה / הורדה">' + visual
+      + '<span class="file-name">' + esc + '</span><span class="file-size">' + _fmtSize(meta.size) + '</span>'
+      + '<span class="file-hint">↗</span><button class="file-remove" title="הסר">×</button></span>&nbsp;';
   }
 
-  // ── File attachment (any file type, embedded as card) ────────────────────
+  function _wireAttachment(node, editor, save) {
+    if (!node || node.getAttribute('data-wired')) return;
+    node.setAttribute('data-wired', '1');
+    node.addEventListener('dblclick', function (ev) { ev.preventDefault(); openAttachment(node); });
+    var rm = node.querySelector('.file-remove');
+    if (rm) rm.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var path = node.dataset.path;
+      if (path && window.CloudFiles) CloudFiles.remove(path);   // best-effort cloud delete
+      node.remove(); save();
+    });
+  }
+
+  function _dataUrlToBlob(dataUrl) {
+    var m = /^data:([^;,]*)(;base64)?,([\s\S]*)$/.exec(dataUrl) || [];
+    var mime = m[1] || 'application/octet-stream';
+    var bytes;
+    if (m[2]) { var bin = atob(m[3] || ''); bytes = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i); }
+    else { bytes = new TextEncoder().encode(decodeURIComponent(m[3] || '')); }
+    return new Blob([bytes], { type: mime });
+  }
+  function _download(url, name) {
+    var a = document.createElement('a'); a.href = url; a.download = name || 'file';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  }
+
+  // Open/preview an attachment. Cloud files (data-url) open in a new tab (browser
+  // previews PDF/image natively). Legacy base64 (data-content) is converted to a
+  // Blob URL — a data-URI in an iframe FAILS to render for large files (the
+  // "blank tab" bug); a Blob URL renders reliably and can be downloaded.
+  function openAttachment(el) {
+    var url = el.dataset.url;
+    var name = el.dataset.name || 'file';
+    var type = el.dataset.type || '';
+    if (url) { var wc = window.open(url, '_blank', 'noopener'); if (!wc) _download(url, name); return; }
+    var dataUrl = el.dataset.content;
+    if (!dataUrl) { App.toast('תוכן הקובץ אינו זמין (ייתכן שנשמר במכשיר אחר)'); return; }
+    var blob; try { blob = _dataUrlToBlob(dataUrl); } catch (e) { App.toast('שגיאה בפתיחת הקובץ'); return; }
+    var burl = URL.createObjectURL(blob);
+    var previewable = type.startsWith('image/') || type === 'application/pdf'
+      || type.startsWith('text/') || type.startsWith('video/') || type.startsWith('audio/');
+    if (previewable) {
+      var w = window.open(burl, '_blank', 'noopener');
+      if (!w) _download(burl, name);
+      setTimeout(function () { URL.revokeObjectURL(burl); }, 60000);
+    } else {
+      _download(burl, name);
+      setTimeout(function () { URL.revokeObjectURL(burl); }, 4000);
+      App.toast('הורד: ' + name);
+    }
+  }
+
+  // ── Insert a file attachment. Prefers Firebase Storage: the FILE goes to the
+  // CLOUD and the note stores only a small URL → the note syncs fully to
+  // Firestore and the file is available from every device. Falls back to a local
+  // base64 embed when not signed in / Storage unavailable — the previous
+  // behaviour, so nothing breaks. (Owner: P-12; cloud upload via window.CloudFiles.)
   function insertFileAttachment(file, editor, save) {
-    const MAX = 5 * 1024 * 1024;
-    if (file.size > MAX && !confirm('הקובץ גדול (' + _fmtSize(file.size) + '). להמשיך?')) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const dataUrl = String(ev.target.result);
-      const icon = file.type.startsWith('image/') ? '🖼️'
-        : file.type.includes('pdf') ? '📕'
-        : (file.type.includes('word') || file.name.endsWith('.doc') || file.name.endsWith('.docx')) ? '📄'
-        : (file.type.includes('excel') || file.name.endsWith('.xls') || file.name.endsWith('.xlsx')) ? '📊'
-        : file.type.includes('video') ? '🎬'
-        : file.type.includes('audio') ? '🎵'
-        : '📎';
-      const sizeStr = _fmtSize(file.size);
-      const escName = file.name.replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-      const visual = file.type.startsWith('image/')
-        ? `<img class="file-thumb" src="${dataUrl}" alt="" />`
-        : `<span class="file-icon">${icon}</span>`;
-      const html = `<span class="file-attachment" contenteditable="false"
-        data-name="${escName}" data-type="${file.type.replace(/"/g,'')}" data-content="${dataUrl}"
-        title="לחץ פעמיים לפתיחה">${visual}<span class="file-name">${escName}</span><span class="file-size">${sizeStr}</span><span class="file-hint">↗</span><button class="file-remove" title="הסר">×</button></span>&nbsp;`;
+    var HARD_CAP = 50 * 1024 * 1024; // 50 MB
+    if (file.size > HARD_CAP) { App.toast('הקובץ גדול מדי (מעל 50MB)'); return; }
+    var id = 'att' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
+    if (window.CloudFiles && CloudFiles.enabled()) {
+      // placeholder → upload → swap in the real (URL-based) card
+      var ph = '<span class="file-attachment file-uploading" contenteditable="false" data-att-id="' + id + '">'
+        + '<span class="file-icon">⏳</span><span class="file-name">' + _escAttr(file.name) + '</span>'
+        + '<span class="file-size">מעלה לענן…</span></span>&nbsp;';
       editor.focus();
-      document.execCommand('insertHTML', false, html);
-      // Wire up interactions
-      editor.querySelectorAll('.file-attachment:not([data-wired])').forEach(el => {
-        el.setAttribute('data-wired', '1');
-        el.addEventListener('dblclick', (ev) => { ev.preventDefault(); openAttachment(el); });
-        const rm = el.querySelector('.file-remove');
-        if (rm) rm.addEventListener('click', (e) => { e.stopPropagation(); el.remove(); save(); });
+      document.execCommand('insertHTML', false, ph);
+      CloudFiles.upload(file, id).then(function (meta) {
+        meta.id = id;
+        var node = editor.querySelector('.file-attachment[data-att-id="' + id + '"]');
+        if (node) {
+          var tmp = document.createElement('div'); tmp.innerHTML = _attachHtml(meta);
+          var real = tmp.firstChild; node.replaceWith(real); _wireAttachment(real, editor, save);
+        }
+        save();
+        App.toast('☁️ הקובץ נשמר בענן: ' + file.name);
+      }).catch(function (err) {
+        console.warn('[cloud-files] upload failed → local fallback', err);
+        App.toast('⚠️ העלאה לענן נכשלה — נשמר מקומית');
+        _embedLocalAttachment(file, editor, save, id);
       });
+      return;
+    }
+    _embedLocalAttachment(file, editor, save, id);   // not signed in / Storage off
+  }
+
+  function _embedLocalAttachment(file, editor, save, id) {
+    if (file.size > 5 * 1024 * 1024 && !confirm('הקובץ גדול (' + _fmtSize(file.size) + ') ויישמר מקומית בלבד. להמשיך?')) {
+      var p = editor.querySelector('.file-attachment[data-att-id="' + id + '"]'); if (p) p.remove();
+      return;
+    }
+    var reader = new FileReader();
+    reader.onload = function (ev) {
+      var meta = { name: file.name, type: file.type || '', size: file.size, id: id, dataUrl: String(ev.target.result) };
+      var existing = editor.querySelector('.file-attachment[data-att-id="' + id + '"]');
+      var real;
+      if (existing) {
+        var tmp = document.createElement('div'); tmp.innerHTML = _attachHtml(meta);
+        real = tmp.firstChild; existing.replaceWith(real);
+      } else {
+        editor.focus();
+        document.execCommand('insertHTML', false, _attachHtml(meta));
+        real = editor.querySelector('.file-attachment[data-att-id="' + id + '"]');
+      }
+      if (real) _wireAttachment(real, editor, save);
       save();
       App.toast('📎 צורף: ' + file.name);
     };
-    reader.onerror = () => App.toast('שגיאה בקריאת הקובץ');
+    reader.onerror = function () { App.toast('שגיאה בקריאת הקובץ'); };
     reader.readAsDataURL(file);
   }
   function _fmtSize(b) {
