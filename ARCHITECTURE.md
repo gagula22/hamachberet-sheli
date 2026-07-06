@@ -90,7 +90,7 @@
 │       │   ├── knowledge.js         ידע-עזרה סטטי על כל פיצ'ר/כפתור        → window.AsstKnowledge
 │       │   ├── engine.js            טוקנייזר עברי + אינדוקס Store + חיפוש מדורג + תשובות מחושבות → window.AsstEngine
 │       │   └── ui.js                כפתור צף + פאנל צ'אט + view 'assistant'  → window.Assistant
-│       ├── stickers.js              מעטפת "כלים": hero + רשת אריחים לפי קטגוריה; כל אריח פותח את הכלי ב-MODAL מוקפץ (✕/ESC/רקע). הכרטיסים נבנים lazily ונשמרים. קורא ל-window.Tools.*
+│       ├── stickers.js              מעטפת "כלים": hero + 5 קטגוריות כ**אקורדיון מתקפל** (מצב פתוח/סגור פר-קטגוריה ב-localStorage `mahberet.toolcat.<i>`, הראשונה פתוחה כברירת-מחדל); כל אריח פותח את הכלי ב-MODAL מוקפץ (✕/ESC/רקע). קורא ל-window.Tools.*
 │       ├── calendar.js              ניתוב יומן → daily/weekly/monthly
 │       ├── daily.js weekly.js monthly.js   תצוגות יומן
 │       └── notes.js todos.js habits.js mood.js water.js budget.js goals.js
@@ -380,14 +380,18 @@ embed ללא מפתח (`/maps/embed?pb=!6m7…`) — ה-endpoint היחיד בל
 
 ## 11. קיבוץ הניווט (`js/features/navmode/` + `js/components/sidebar.js` + `js/views/hub/`) — יוני 2026
 
-מאגד את הכלים לשתי **קבוצות** לפי נושא, מבלי לשנות אף `view`. אפס שינוי בקוד ה-views —
+מאגד את הכלים ל**קבוצות** לפי נושא, מבלי לשנות אף `view`. אפס שינוי בקוד ה-views —
 הקיבוץ נגזר משדה `group` של ה-SECTIONS ב-app.js בלבד.
 
 - **`js/features/navmode/index.js` (`window.NavMode`)** — מקור-האמת לקבוצות. מגדיר
-  `GROUPS` (כיום שתיים) ו-`BUNDLES` (כלי-אב עם לשוניות-משנה):
+  `GROUPS` (כיום **חמש**, יולי 2026 — commit `e594e04`) ו-`BUNDLES` (כלי-אב עם לשוניות-משנה):
   - 🗓️ **המרכז היומי** (`daily`): יומן · צרור *משימות* (רשימה + מטריצת סדר יום) ·
     צרור *מעקב יומי* (מצב רוח + שתייה ושינה + הרגלים) · מטרות.
-  - 📚 **ידע ולכידה** (`knowledge`): הערות · לוח שרטוט · מרכז הדגשות · כרטיסיות זיכרון · הערות קול.
+  - 📚 **ידע ולכידה** (`knowledge`): הערות · לוח שרטוט · מרכז הדגשות · כרטיסיות זיכרון · הערות קול · רשימת קריאה.
+  - 💰 **כסף ותובנות** (`money`): תקציב · תובנות.
+  - 📄 **מסמכים ויצירה** (`docs`): סטודיו מסמכים · מעבדת דשבורדים · נווט שוק העבודה · כלים.
+  - 🤖 **עוזרי AI** (`ai`): ארגז PM · סטודיו חיפוש · פרומטים · עוזר חכם.
+  - נשארים פריטים בודדים (flat): לוח בקרה · מחברת · מפת קשרים · סקירה שבועית · מפת טיולים · ניתוח וויקוף · הגדרות.
   - API: `groups()`, `groupById(id)`, `groupChildren(id)`, `groupOf(sectionId)`,
     `bundles()`, `bundleById(id)`, `get()/set()`. מצב נשמר ב-`localStorage` (`mahberet.navMode`).
 - **`sidebar.js`** — מרנדר N קבוצות לפי `NavMode.get()`: `flat` (כל כלי בנפרד) /
