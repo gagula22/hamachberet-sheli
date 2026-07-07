@@ -23,6 +23,37 @@
     if (document.visibilityState === 'hidden') flushActiveEditor();
   });
 
+  // ── Scroll-position memory ────────────────────────────────────────────────
+  // The note scrolls the whole WINDOW (body grid grows; .main has no overflow —
+  // see ARCHITECTURE §15). App.render() rebuilds #view on every cloud echo /
+  // data-ready pass and when returning to the notebook, which collapses the
+  // document to empty and resets window scroll to 0 → the note "jumped to the
+  // top" and flickered. Remember the active topic's scroll, re-apply it after
+  // each render, and persist it (sessionStorage) so a refresh reopens the same
+  // note in the same place.
+  const NB_SCROLL_KEY = 'nb.scroll';
+  let lastScrollY = 0;
+  let restorePending = null;   // { id, y } — applied on the first render after a page load
+  try {
+    const raw = sessionStorage.getItem(NB_SCROLL_KEY);
+    // Seed lastScrollY too: a refresh renders twice (immediate + after Store.ready),
+    // so the second (data-ready) render must target the same restored position
+    // and not fall back to 0 before the scroll listener has caught up.
+    if (raw) { const o = JSON.parse(raw); if (o && o.id) { restorePending = o; lastScrollY = o.y || 0; } }
+  } catch {}
+  let _scrollRaf = 0;
+  window.addEventListener('scroll', () => {
+    // only track while the notebook is the visible view
+    if (!location.hash || location.hash.indexOf('#/notebook') !== 0) return;
+    if (_scrollRaf) return;
+    _scrollRaf = requestAnimationFrame(() => {
+      _scrollRaf = 0;
+      if (!activeId) return;
+      lastScrollY = window.scrollY || (document.scrollingElement || {}).scrollTop || 0;
+      try { sessionStorage.setItem(NB_SCROLL_KEY, JSON.stringify({ id: activeId, y: lastScrollY })); } catch {}
+    });
+  }, { passive: true });
+
   // Restore saved sidebar width once on first load
   try {
     const saved = localStorage.getItem(SIDEBAR_KEY);
@@ -136,14 +167,34 @@
 
   function render(root) {
     const topics = getTopics();
+    // Refresh restore: reopen the exact topic the user last viewed (if it still
+    // exists) instead of defaulting to the first one. Kept pending until the
+    // topics have actually loaded (localStorage may be empty on first paint).
+    if (restorePending) {
+      if (getById(restorePending.id)) activeId = restorePending.id;
+      else if (topics.length) restorePending = null;   // that topic is gone → give up
+    }
     if (!activeId && topics.length) {
       const firstRoot = topics.find(t => !t.parentId);
       activeId = (firstRoot || topics[0]).id;
     }
     const active = getById(activeId);
-    if (active && activeId !== lastRenderedId) {
+
+    // Decide where the window should sit AFTER this render is built:
+    let scrollTarget;
+    if (restorePending && activeId === restorePending.id) {
+      scrollTarget = restorePending.y || 0;   // first paint after a page refresh → same place
+      restorePending = null;
+      lastRenderedId = activeId;               // not a topic switch
+    } else if (active && activeId !== lastRenderedId) {
       lastRenderedId = activeId;
-      requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'instant' in document.documentElement.style ? 'instant' : 'auto' }));
+      scrollTarget = 0;                        // switched to a different note → start at top
+    } else {
+      scrollTarget = lastScrollY;              // same note re-rendered (cloud echo / return) → keep the place
+    }
+    if (active) {
+      const _y = scrollTarget;
+      requestAnimationFrame(() => window.scrollTo({ top: _y, behavior: 'instant' in document.documentElement.style ? 'instant' : 'auto' }));
     }
 
     const addRootBtn = App.el('button', {

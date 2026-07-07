@@ -166,13 +166,20 @@
       });
 
       const view = document.getElementById('view');
+      // Replay the entrance animation ONLY on a real section change. Replaying
+      // it on every in-place re-render (cloud echo / data-ready / returning to
+      // the same view) made the screen flicker and feel unstable. (P-01)
+      const sectionChanged = this._renderedSection !== section.id;
+      this._renderedSection = section.id;
       view.innerHTML = '';
       const fn = this._routes[section.id];
       if (fn) fn(view, sub);
       else view.innerHTML = `<div class="empty-state">החלק הזה עוד בהכנה…</div>`;
-      view.style.animation = 'none';
-      void view.offsetWidth;
-      view.style.animation = '';
+      if (sectionChanged) {
+        view.style.animation = 'none';
+        void view.offsetWidth;
+        view.style.animation = '';
+      }
     },
 
     // נתוני ענן נחתו אחרי הרינדור הראשוני (במיוחד במובייל, שם הענן מגיע מאוחר).
