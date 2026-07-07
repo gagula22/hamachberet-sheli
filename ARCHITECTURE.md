@@ -565,6 +565,18 @@ canvas דרך `ctx.direction='rtl'` + `textAlign='right'` — **בלי** היפ�
    (v=20 "נשרף" כך ונדרש v=21).
 5. **מדידת layout בסביבת preview:** אנימציית `viewIn` (translateY 6px, ‏260ms) מוקפאת
    בטאב-רקע — offset של ~5px במדידות הוא ארטיפקט של הסביבה, לא באג.
+6. **ריצוד + קפיצה-לראש ברינדור-מחדש (commit `a041e04`, app.js `?v=38` + notebook/index.js `?v=49`):**
+   `App.render()` (app.js) בונה מחדש את כל `#view` (`innerHTML=''` ואז בנייה) בכל hashchange **וגם**
+   בכל `onCloudUpdate` (הד-ענן) / `Store.ready` / `focusout`-דחוי. שתי מלכודות שנבעו מזה:
+   (א) **ריצוד** — `render()` ניגן מחדש את אנימציית `viewIn` בכל קריאה, כולל render-במקום. **כלל:**
+   לנגן את אנימציית-הכניסה **רק כשהסקשן משתנה** (`this._renderedSection !== section.id`), לא ב-render
+   של אותו מסך. (ב) **קפיצה-לראש** — **המחברת גוללת את כל החלון** (ה-`body` גריד שגדל; ל-`.main` אין
+   `overflow`; ל-`.sidebar` יש גלילה משלה), אז קריסת-המסמך-לריק בזמן `innerHTML=''` מאפסת את
+   `window.scrollY` ל-0. **כלל:** תצוגה עם גלילת-חלון שמרונדרת-מחדש-במקום חייבת **זיכרון-גלילה** משלה
+   (notebook: מאזין `scroll`→`sessionStorage['nb.scroll']`, ו-`render()` מחזיר את המיקום ב-rAF;
+   מעבר-נושא=ראש, הד-ענן/חזרה=שומר-מקום; `activeId`+scroll נשמרים לרענון, ו-`lastScrollY` מוזרע
+   מהערך השמור כי הרענון מרנדר פעמיים). ⚠️ אל תסתמך על `history.scrollRestoration` — התוכן נבנה
+   אסינכרונית אחרי טעינת IndexedDB, הרבה אחרי שהדפדפן ניסה לשחזר גלילה.
 
 ## 16. סטודיו מסמכים (`js/views/tools/doc-studio/`, view `docstudio`) — יולי 2026
 

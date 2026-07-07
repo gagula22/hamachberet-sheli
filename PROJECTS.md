@@ -90,6 +90,7 @@
 ### P-10 · עץ נושאים ופריסה
 - **בבעלות:** `js/views/notebook/index.js` (`window.nbTree/nbCore/nbActive`)
 - **מהות:** עץ הנושאים, sidebar פנימי, layout, החלפת-פאנלים במובייל.
+- **בוצע (7.7.2026, `a041e04`, index.js v=49 + app.js v=38):** תיקון **ריצוד + קפיצה-לראש** אחרי רענון/חזרה-למסך. זיכרון-גלילה: `render()` מחזיר את `window.scrollY` של הנושא הפעיל (הד-ענן/חזרה = שומר מקום; מעבר-נושא = ראש) + persist ל-`sessionStorage['nb.scroll']` לרענון (מזריע `lastScrollY`). ב-app.js (P-01): `viewIn` רק במעבר-מסך אמיתי (מבטל ריצוד). ARCHITECTURE §15. ⚠️ **המחברת גוללת את החלון** — כל תיקון גלילה עובד על `window.scrollY`, לא על אלמנט פנימי.
 
 ### P-11 · עורך הטקסט
 - **בבעלות:** `js/views/notebook/editor.js` (`window.nbEditor`)
