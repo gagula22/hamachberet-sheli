@@ -197,10 +197,19 @@
 - **כשל-מהיר (watchdog):** ברירת המחדל `maxUploadRetryTime`=10 דק' → מקוצר ל-20s + `CloudFiles.stallMs`
   (30s): אם אין תזוזת-בייטים → `task.cancel()`+reject `storage/stalled` (מתאפס על התקדמות אמיתית).
   ה-toast של הנפילה מציג את קוד-השגיאה האמיתי.
-- **⚠️ כלל-אבחון (למד בשטח):** העלאה "תקועה על 0%" עם `net::ERR_FAILED` על `firebasestorage.googleapis.com`
-  (+ `ERR_HTTP2_PROTOCOL_ERROR` על Firestore) = **Brave Shields / חוסם-פרסומות שחוסם את שרתי Firebase**,
-  **לא** הקוד ולא הרשאות Storage (שהיו מחזירות 403/404). פתרון: להוריד Shields לאתר / דפדפן נקי.
-  (`net::ERR_FAILED` = נחסם ברמת-רשת לפני שהגיע לשרת.) `Failed to obtain primary lease` = כמה טאבים.
+- **⚠️⚠️ כלל-אבחון (תוקן 7.7.2026 — הקביעה הקודמת "Brave Shields" הייתה שגויה):** העלאה "תקועה על 0%"
+  שנופלת למקומי — הסיבה האמיתית היא **CORS לא מוגדר על ה-bucket של Storage עבור מקור GitHub Pages**.
+  הקונסול מראה: `Access to XMLHttpRequest at 'https://firebasestorage.googleapis.com/v0/b/…/o' from
+  origin 'https://gagula22.github.io' has been blocked by CORS policy: Response to preflight request
+  doesn't pass access control check`, ואז `net::ERR_FAILED` + `storage/retry-limit-exceeded`. **ה-`net::ERR_FAILED`
+  הוא הדפדפן שמבטל את הבקשה החסומה ע"י CORS — לא חסימת Brave.** האתר מתארח ב-**GitHub Pages** (לא ב-Firebase
+  Hosting), ולכן ה-bucket חייב כלל-CORS מפורש שמתיר את `https://gagula22.github.io`; Firestore לא זקוק לזה
+  (endpoint אחר) — ולכן הסנכרון עבד אך Storage לא. **אומת שזה לא חוסר-התאמת שם-bucket:** החלפת הקונפיג
+  `.firebasestorage.app`↔`.appspot.com` נתנה CORS זהה בשניהם (`b4e4965`→`6f16c01` החזיר). **התיקון:**
+  `gsutil cors set cors.json gs://<bucket>` עם origin `https://gagula22.github.io` (methods GET/POST/PUT/DELETE/HEAD
+  + responseHeaders של `x-goog-upload*`) — דורש גישה לפרויקט `my-notebook-b5229` ב-Google Cloud. ⚠️ בעיית-גישה:
+  b5229 לא הופיע בקונסול של המשתמש (רק `my-notebook-26ff5`/`notebook-158c2`) — כנראה תחת חשבון אחר; אם לא נגיש,
+  הגיבוי הוא מעבר לפרויקט שבשליטת המשתמש. `Failed to obtain primary lease` = כמה טאבים פתוחים.
 
 ## 6. ייצוא מסמכים — פרטי מימוש (`notebook/export.js`, `window.nbExport`)
 
