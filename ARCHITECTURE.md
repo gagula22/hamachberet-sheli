@@ -210,6 +210,8 @@
   + responseHeaders של `x-goog-upload*`) — דורש גישה לפרויקט `my-notebook-b5229` ב-Google Cloud. ⚠️ בעיית-גישה:
   b5229 לא הופיע בקונסול של המשתמש (רק `my-notebook-26ff5`/`notebook-158c2`) — כנראה תחת חשבון אחר; אם לא נגיש,
   הגיבוי הוא מעבר לפרויקט שבשליטת המשתמש. `Failed to obtain primary lease` = כמה טאבים פתוחים.
+  **⏳ 7.7.2026: הוחלט על מעבר בקאנד `b5229`→`my-notebook-26ff5` (שבבעלות המשתמש) כי b5229 לא נגיש לו.
+  צ'ק-ליסט מלא + כללים + CORS + מצב: `MIGRATION-b5229-to-26ff5.md` (קובץ יחיד לשנות: `firebase-config.js`).**
 
 ## 6. ייצוא מסמכים — פרטי מימוש (`notebook/export.js`, `window.nbExport`)
 
