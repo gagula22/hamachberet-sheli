@@ -2,8 +2,8 @@
    כל שאר העיצוב חי בתוך המסמך (torot.html) ומבודד ב-iframe. */
 .torot-wrap {
   padding: 0;
-  margin: 0 auto;
-  max-width: 1180px;
+  margin: 0;
+  width: 100%;   /* מלוא רוחב אזור התצוגה — כמו readinglist */
 }
 
 /* גובה מלא לפי מוסכמת §15: כל 100vh חייב להיכפל ב-var(--page-unzoom,1)
