@@ -11,6 +11,7 @@
     { id: 'sketch',    title: 'לוח שרטוט',       icon: '✏️', color: 'lavender', desc: 'ציור חופשי — ומשם ישר למחברת', group: 'knowledge' },
     { id: 'flashcards',title: 'כרטיסיות זיכרון', icon: '🧠', color: 'sage',     desc: 'חזרה מרווחת — לזכור לטווח ארוך', group: 'knowledge' },
     { id: 'readinglist', title: 'רשימת קריאה',   icon: '🔖', color: 'sky',      desc: 'קישורים שנשמרו לקריאה אחר-כך', group: 'knowledge' },
+    { id: 'torot',     title: 'תורות, חוקים ומשפטים', icon: '📜', color: 'butter', desc: 'הטקסט המקראי המלא לפי תורה/חוק/משפט + מקבילות מהספרים החיצוניים (יובלים, אריסטיאס, בן סירא)', group: 'knowledge' },
     { id: 'todos',     title: 'משימות',          icon: '✅', color: 'blush',    desc: 'לסיים את העניינים', group: 'daily' },
     { id: 'eisenhower',title: 'מטריצת סדר יום',  icon: '🎯', color: 'butter',   desc: 'דחוף/חשוב — ארבעה רבעים', group: 'daily' },
     { id: 'habits',    title: 'מעקב הרגלים',     icon: '🌱', color: 'sage',     desc: 'צור רצף של הצלחה', group: 'daily' },

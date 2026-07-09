@@ -46,7 +46,8 @@
         { view: 'highlights', title: 'מרכז הדגשות', icon: '🖍️', color: 'butter' },
         { view: 'flashcards', title: 'כרטיסיות זיכרון', icon: '🧠', color: 'sage' },
         { view: 'voice', title: 'הערות קול', icon: '🎙️', color: 'blush' },
-        { view: 'readinglist', title: 'רשימת קריאה', icon: '🔖', color: 'sky' }
+        { view: 'readinglist', title: 'רשימת קריאה', icon: '🔖', color: 'sky' },
+        { view: 'torot', title: 'תורות, חוקים ומשפטים', icon: '📜', color: 'butter' }
     ] },
     { id: 'money', title: 'כסף ותובנות', icon: '💰', color: 'butter', children: [
         { view: 'budget', title: 'תקציב', icon: '💰', color: 'butter' },

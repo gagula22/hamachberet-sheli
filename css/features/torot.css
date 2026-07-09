@@ -1,0 +1,29 @@
+/* P-39 · תורות, חוקים ומשפטים — עטיפת ה-iframe בלבד.
+   כל שאר העיצוב חי בתוך המסמך (torot.html) ומבודד ב-iframe. */
+.torot-wrap {
+  padding: 0;
+  margin: 0 auto;
+  max-width: 1180px;
+}
+
+/* גובה מלא לפי מוסכמת §15: כל 100vh חייב להיכפל ב-var(--page-unzoom,1)
+   כי html{zoom:0.8} אינו מפצה על יחידות ה-viewport. */
+.torot-frame {
+  display: block;
+  width: 100%;
+  border: 0;
+  border-radius: 14px;
+  background: #f4f1ea;
+  box-shadow: 0 8px 26px -14px rgba(0, 0, 0, 0.35);
+  height: calc(100vh * var(--page-unzoom, 1) - var(--topbar-h, 60px) - 44px);
+  height: calc(100dvh * var(--page-unzoom, 1) - var(--topbar-h, 60px) - 44px);
+  min-height: 480px;
+}
+
+@media (max-width: 900px) {
+  .torot-wrap { max-width: 100%; }
+  .torot-frame {
+    border-radius: 10px;
+    height: calc(100dvh * var(--page-unzoom, 1) - var(--topbar-h, 60px) - var(--bottom-nav-h, 0px) - 20px);
+  }
+}
