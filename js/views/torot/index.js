@@ -5,7 +5,7 @@
  * עדכון תוכן = החלפת torot.html + הקפצת ?v ב-SRC כאן וב-index.html.
  */
 (function () {
-  const SRC = 'js/views/torot/torot.html?v=1';
+  const SRC = 'js/views/torot/torot.html?v=2';
 
   function render(view) {
     const wrap = document.createElement('div');
