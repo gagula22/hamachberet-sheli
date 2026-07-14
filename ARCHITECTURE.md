@@ -167,51 +167,45 @@
 
 ---
 
-## 5א. קבצים מצורפים בענן (`js/features/cloud-files/`, `window.CloudFiles`) — יולי 2026
+## 5א. קבצים מצורפים בענן (`js/features/cloud-files/`, `window.CloudFiles`) — Firestore-chunked (יולי 2026)
 
-> קובץ שמדביקים במחברת (PDF/Word/וכו') עולה ל-**Firebase Storage** (ללא מגבלת ה-1MB של
-> Firestore), והנושא שומר רק **קישור-הורדה** קטן (`data-url`) — לא base64. commit `82c393c`.
+> קובץ שמדביקים במחברת (PDF/Word/וכו') מאוחסן ב-**Firestore, מפוצל ל-chunks** — **לא ב-Storage**.
+> הנושא שומר רק הפניה קטנה `data-fs="{id}"` (בלי base64). כך הקובץ באמת עולה לענן וזמין מכל מכשיר.
 > **⛔ אין קשר לתמונות** — נתיב שמירת התמונות (`media.js insertImage`/`Editable`) לא נגע.
 
-- **`CloudFiles.upload(file,id)`** → מעלה ל-`users/{uid}/attachments/{id}-{name}` ומחזיר
-  `{url,path,name,type,size}`. `ref.put()` נפתר רק אחרי **אישור-שרת אמיתי** (בניגוד ל-Firestore
-  `set()` תחת offline-persistence). `enabled()` = SDK+storage+משתמש-מחובר.
-- **`media.js insertFileAttachment`:** מחובר → placeholder → העלאה → כרטיס עם `data-url`.
-  לא-מחובר/כשל → נפילה חיננית ל-base64 מקומי (`data-content`, ההתנהגות הקודמת) — כלום לא נשבר.
-- **`openAttachment`:** ענן (`data-url`) → פתיחה ישירה בטאב; מדיה מקומית (`data-content`) →
-  **Blob URL** (data-URI ב-iframe נכשל על קבצים גדולים = הבאג "טאב ריק"; Blob URL עובד).
-- **⚠️ תלות חיצונית:** כללי-הרשאה ב-Firebase Storage חייבים להתיר כתיבה למשתמש מחובר; אחרת
-  ההעלאה נכשלת ונופלת למקומי. הבאג ההיסטורי "קובץ נעלם אחרי רענון" (§6, מגן-המדיה) עדיין
-  רלוונטי לקבצים מקומיים ישנים (base64) — קבצי-ענן חדשים לא סובלים ממנו (הנושא קטן).
+**למה Firestore ולא Storage (השורש שנפתר סופית):** האתר ב-**GitHub Pages** (לא Firebase Hosting),
+ול-bucket של Storage **אין כלל-CORS** למקור `https://gagula22.github.io` — כל העלאה נחסמה
+(`blocked by CORS policy` → `net::ERR_FAILED` → נפילה מקומית; **לא Brave**). לתקן CORS דורש
+`gsutil` על ה-bucket, אבל `my-notebook-b5229` אינו נגיש בחשבון של המשתמש → תקוע שבוע. **Firestore
+לא זקוק ל-CORS ומסתנכרן חלק** (כמו שאר הנתונים) → זו הדרך היחידה שמבטיחה העלאה אמיתית בלי הגדרת-שרת.
+זה גם ייתר את הצורך הדחוף במעבר-בקאנד (ראה `MIGRATION-b5229-to-26ff5.md` — עכשיו אופציונלי).
 
-**עדכון יולי 2026 (P-12, commits `951ef0e`→`f70b19e`→`2f50aa7`→`ebc7042`):**
-- **כפתור הורדה ⬇ + פתיחה בלחיצה כפולה** בכל כרטיס (`downloadAttachment`/`openAttachment`).
-  מקומי → Blob URL + `<a download>` (הורדה אמיתית); ענן → `<a download target=_blank>`.
+- **מבנה Firestore:** מסמך-מטא `users/{uid}/attachments/{id}` = `{name,type,size,mime,chunks:N,createdAt}`
+  + תת-אוסף `parts/{i}` = `{b:"<base64 של ~600KB>"}`. מגבלת 1MB למסמך → פיצול ל-chunks. המטא נכתב
+  **אחרון** → מטא שלם מבטיח שכל ה-parts קיימים. **תקרה:** `CloudFiles.FS_MAX`=20MB (מעבר → מקומי).
+- **⚠️ מחוץ ל-Store/סכימה בכוונה (decoupled):** cloud-files קורא/כותב את אוסף `attachments` **ישירות**,
+  לא דרך מנוע-הסנכרון (SUBCOL_KEYS). כמו הקלטות-קול ב-IndexedDB — אחסון כבד שלא מנפח snapshot ה-Store.
+  **אין מפתח store-schema, אין אסרציית firebase-sync.** כלל-ההרשאה הקיים `match /users/{uid}/{document=**}`
+  (רקורסיבי) מכסה את `attachments/**` — **אין צורך בשינוי כללים** (וכללי ה-Storage הישנים כבר לא רלוונטיים).
+- **API:** `enabled()` = SDK+firestore+משתמש-מחובר · `fits(size)` · `upload(file,id,onProgress)`→`{id,name,type,size,fs:true}`
+  (מפצל, כותב parts רציף עם התקדמות, מטא אחרון) · `fetch(id,onProgress)`→`{dataUrl,name,type,size}`
+  (קורא מטא+parts, מרכיב) · `remove(id)` (מוחק parts+מטא, best-effort).
+- **`media.js insertFileAttachment`:** מחובר+בטווח → placeholder → `upload` → כרטיס עם `data-fs`.
+  לא-מחובר/מעל-תקרה/כשל → נפילה חיננית ל-base64 מקומי (`data-content`) — כלום לא נשבר.
+- **`openAttachment`/`downloadAttachment`:** `data-fs` → `CloudFiles.fetch` (טוען chunks) → **Blob URL**
+  (data-URI ב-iframe נכשל על קבצים גדולים = הבאג "טאב ריק"; Blob URL עובד) → תצוגה/הורדה. תאימות-לאחור:
+  `data-url` (קבצי-Storage ישנים) עדיין נפתחים; `data-content` (base64 מקומי) עדיין נפתח.
+- **הבאג "קובץ נעלם אחרי רענון" (§6, מגן-המדיה):** לא רלוונטי לקבצי-Firestore — הנושא שומר רק `data-fs`
+  קטן (בלי base64), אז שומר-הגודל (`_sizeSafeTopic`) לא חותך כלום ומגן-המדיה הוא no-op עבורם.
 - **⚠️⚠️ מלכודת קריטית — האצלה, לא חיווט פר-כרטיס:** כל האינטראקציות (⬇/×/dblclick) **מואצלות
-  על אלמנט העורך** ב-`editor.js`, לא מחווטות פר-כרטיס. **למה זה חובה:** חיווט פר-כרטיס שסימן
-  `data-wired=1` על הכרטיס — הדגל **דלף ל-`topic.body` הנשמר**, ואחרי רענון החיווט-מחדש דילג
-  על הכרטיס (`:not([data-wired])`) → **הכפתורים מתים אחרי רענון**. **כלל-מניעה: לעולם אל תחווט
-  handler פר-אלמנט על תוכן שמסתדרל (serialize) ל-Store; האצל על אב יציב (העורך).**
-- **אחוזי-התקדמות חיים:** `upload(file,id,onProgress)` מאזין ל-`UploadTask.state_changed`;
-  ה-placeholder מציג "מעלה 45%…". **זמן ההעברה כבול-רוחב-פס** (raw bytes) — לא ניתן להאצה בקוד.
-- **כשל-מהיר (watchdog):** ברירת המחדל `maxUploadRetryTime`=10 דק' → מקוצר ל-20s + `CloudFiles.stallMs`
-  (30s): אם אין תזוזת-בייטים → `task.cancel()`+reject `storage/stalled` (מתאפס על התקדמות אמיתית).
-  ה-toast של הנפילה מציג את קוד-השגיאה האמיתי.
-- **⚠️⚠️ כלל-אבחון (תוקן 7.7.2026 — הקביעה הקודמת "Brave Shields" הייתה שגויה):** העלאה "תקועה על 0%"
-  שנופלת למקומי — הסיבה האמיתית היא **CORS לא מוגדר על ה-bucket של Storage עבור מקור GitHub Pages**.
-  הקונסול מראה: `Access to XMLHttpRequest at 'https://firebasestorage.googleapis.com/v0/b/…/o' from
-  origin 'https://gagula22.github.io' has been blocked by CORS policy: Response to preflight request
-  doesn't pass access control check`, ואז `net::ERR_FAILED` + `storage/retry-limit-exceeded`. **ה-`net::ERR_FAILED`
-  הוא הדפדפן שמבטל את הבקשה החסומה ע"י CORS — לא חסימת Brave.** האתר מתארח ב-**GitHub Pages** (לא ב-Firebase
-  Hosting), ולכן ה-bucket חייב כלל-CORS מפורש שמתיר את `https://gagula22.github.io`; Firestore לא זקוק לזה
-  (endpoint אחר) — ולכן הסנכרון עבד אך Storage לא. **אומת שזה לא חוסר-התאמת שם-bucket:** החלפת הקונפיג
-  `.firebasestorage.app`↔`.appspot.com` נתנה CORS זהה בשניהם (`b4e4965`→`6f16c01` החזיר). **התיקון:**
-  `gsutil cors set cors.json gs://<bucket>` עם origin `https://gagula22.github.io` (methods GET/POST/PUT/DELETE/HEAD
-  + responseHeaders של `x-goog-upload*`) — דורש גישה לפרויקט `my-notebook-b5229` ב-Google Cloud. ⚠️ בעיית-גישה:
-  b5229 לא הופיע בקונסול של המשתמש (רק `my-notebook-26ff5`/`notebook-158c2`) — כנראה תחת חשבון אחר; אם לא נגיש,
-  הגיבוי הוא מעבר לפרויקט שבשליטת המשתמש. `Failed to obtain primary lease` = כמה טאבים פתוחים.
-  **⏳ 7.7.2026: הוחלט על מעבר בקאנד `b5229`→`my-notebook-26ff5` (שבבעלות המשתמש) כי b5229 לא נגיש לו.
-  צ'ק-ליסט מלא + כללים + CORS + מצב: `MIGRATION-b5229-to-26ff5.md` (קובץ יחיד לשנות: `firebase-config.js`).**
+  על אלמנט העורך** ב-`editor.js`, לא מחווטות פר-כרטיס. **למה חובה:** חיווט פר-כרטיס שסימן
+  `data-wired=1` — הדגל **דלף ל-`topic.body` הנשמר**, ואחרי רענון החיווט-מחדש דילג על הכרטיס
+  (`:not([data-wired])`) → הכפתורים מתים אחרי רענון. **כלל-מניעה: לעולם אל תחווט handler פר-אלמנט
+  על תוכן שמסתדרל ל-Store; האצל על אב יציב (העורך).** הסרת כרטיס (× בעורך) קוראת `CloudFiles.remove(data-fs || data-path)`.
+
+**היסטוריה (Storage — הוחלף):** הגישה המקורית (commit `82c393c`, `data-url`) העלתה ל-Firebase Storage
+`users/{uid}/attachments/{id}-{name}`; נחסמה ב-CORS כמתואר למעלה ולכן הוחלפה ב-Firestore-chunking.
+הקוד עדיין קורא כרטיסי-`data-url` ישנים לתאימות-לאחור.
 
 ## 6. ייצוא מסמכים — פרטי מימוש (`notebook/export.js`, `window.nbExport`)
 

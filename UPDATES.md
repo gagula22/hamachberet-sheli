@@ -53,6 +53,38 @@
 
 # יומן (החדש למעלה)
 
+## 14.7.2026 — P-12 ✅ פתרון סופי: הצמדת-קובץ-לענן עוברת ל-Firestore-chunking (סוכן: Code)
+**הבעיה (המשתמש):** צירוף קובץ במחברת "נתקע ולא עולה לענן" — אי אפשר לראות אותו ממחשב אחר.
+**השורש (אומת בקוד):** `cloud-files/index.js` העלה ל-Firebase **Storage** (`ref.put`), וה-bucket חוסם את
+המקור `gagula22.github.io` ב-CORS (האתר ב-GitHub Pages, לא ב-Firebase Hosting) → ההעלאה נכשלת. הנפילה
+המקומית (base64 בגוף הנושא) **לא מסתנכרנת** כי `firebase-sync._sizeSafeTopic` חותך base64 כבד מעל 900KB
+לפני שמירת הנושא (מגבלת 1MB/מסמך ב-Firestore) → הקובץ נשאר מקומי בלבד. תיקון ה-CORS תקוע שבוע כי
+ה-bucket b5229 לא נגיש בחשבון של המשתמש.
+**הפתרון (בלי שום הגדרת-שרת):** ניתוב הקבצים דרך **Firestore מפוצל ל-chunks** במקום Storage. Firestore
+מסתנכרן חלק (בלי CORS) → הקובץ באמת עולה וזמין מכל מכשיר. מבנה: `users/{uid}/attachments/{id}` מטא +
+תת-אוסף `parts/{i}` chunks של ~600KB (עוקף מגבלת 1MB/מסמך), המטא נכתב **אחרון** (מטא שלם ⇒ כל ה-parts
+קיימים). הנושא שומר רק `data-fs="{id}"` קטן — בלי base64 → **חסין** ל-`_sizeSafeTopic` ולמגן-המדיה, מסתנכרן
+בגוף הנושא כרגיל. תקרה `FS_MAX`=20MB (מעבר → מקומי). `openAttachment`/`downloadAttachment` טוענים chunks
+על-פי-דרישה ומרכיבים ל-Blob URL. תאימות-לאחור: `data-url` (Storage ישן)/`data-content` (מקומי) עדיין נפתחים.
+**החלטת עיצוב (SoC):** אוסף `attachments` **מחוץ ל-Store/סכימה בכוונה** (כמו הקלטות-קול ב-IndexedDB) —
+cloud-files קורא/כותב אותו ישירות, לא דרך מנוע-הסנכרון. **אין מפתח store-schema, אין אסרציית firebase-sync.**
+כלל-ההרשאה הקיים `match /users/{uid}/{document=**}` (רקורסיבי) כבר מכסה — **אין צורך בשינוי כללים בקונסול.**
+**בונוס:** זה מייתר את הדחיפות של מעבר-הבקאנד (`MIGRATION-b5229`) — עודכן שם שהוא עכשיו אופציונלי.
+**קבצים ששונו + גרסאות v:** `js/features/cloud-files/index.js` → **v=4** (נכתב מחדש: Firestore במקום Storage) ·
+`js/views/notebook/media.js` → **v=54** (`data-fs`, ניתוב open/download, gate על `fits()`) ·
+`js/views/notebook/editor.js` → **v=54** (הסרה: `CloudFiles.remove(data-fs || data-path)`) ·
+`js/views/assistant/knowledge.js` → **v=19** (עדכון HELP `notebook-attach`) · `index.html` (4 הקפצות).
+**אימות (preview 7788, Firebase mock בזיכרון — אין credentials לחשבון האמיתי):** round-trip של 1.5MB PDF →
+4 chunks+מטא → נטען חזרה **byte-identical** (1,572,864=1,572,864); התקדמות 20/40/60/100; insert מלא → כרטיס
+`data-fs` (בלי data-content/data-url, שם/סוג/גודל נכונים, save×1); פתיחת PDF → `window.open(blob:)`, פתיחת docx +
+כפתור ⬇ → הורדה עם שם-קובץ; הסרה → `remove` מחק מטא+parts (2→0); signed-out → `enabled()=false` → נפילה
+ל-base64 מקומי (כלום לא נשבר); reload נקי — מחברת מרונדרת, **אפס שגיאות קונסול**. ⚠️ **לא נבדק חי מול Firebase
+אמיתי** (דורש התחברות המשתמש) — הלוגיקה מאומתת מלא דרך mock; המשתמש יאמת ממכשיר שני אחרי הפריסה.
+**קומיטים:** feat P-12 firestore-chunked attachments (once-and-for-all cloud file sync).
+**איפה ממשיכים / פתוח:** אימות סופי של המשתמש: לצרף קובץ כשמחובר → "☁️ נשמר בענן" → לפתוח ממחשב אחר
+(אותו חשבון) ולוודא שהקובץ נטען. אם קבצי-Storage ישנים (`data-url`) לא נפתחים — הם מעולם לא עלו (CORS);
+לצרף מחדש. רעיון עתידי: העלאה-מחדש אוטומטית של קבצים מקומיים ישנים כשמתחברים.
+
 ## 14.7.2026 — אימות-חוזר לניקוי התיעוד + תיקון היסחפות בכרטיס P-51 (סוכן: Code) ✅
 **מה נעשה:** מעבר-חוזר יסודי על 7 המסמכים הקנוניים לאחר ניקוי מסמכי-הרפאים, לווידוא שאין
 הפניות שבורות או תוכן מיושן *בתוך* הקבצים שנשמרו (לא רק ברמת הקבצים).
