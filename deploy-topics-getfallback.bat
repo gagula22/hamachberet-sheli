@@ -34,7 +34,7 @@ echo ==================================================
 echo   DONE. Live in ~1-2 min.
 echo   PHONE: clear site data once, reopen the site, log in.
 echo   The notebook list should now show ALL 41 (week 24/25, June).
-echo   If still 23 -> tap the purple "Cloud Diagnostic" button
+echo   If still 23, tap the purple "Cloud Diagnostic" button
 echo   in the sidebar and send me the numbers it shows.
 echo ==================================================
 echo.
