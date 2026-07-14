@@ -327,7 +327,10 @@ Web Speech he-IL; טקסט סופי דרך `execCommand('insertText')` → שמ�
 המשותף ל-`startRec` (מיקרופון, getUserMedia עם echoCancellation) ו-`startTabRec` (שמע-טאב,
 `getDisplayMedia({video:true,audio:true})` — לוקח רק את ה-audio track, שומר את סטרים-האב חי
 כ-extraStream ועוצר אותו בעצירה; track `ended` → `stopRec`; אין audio track → toast מתקן).
-כפתור "🔊 הקלט שמע מהטאב" בכל כרטיס (מוסתר בזמן הקלטה) + `<details>` עם מדריך הפעלה 6 שלבים.
+כפתור "🔊 הקלט שמע מהטאב" בכל כרטיס (מוסתר בזמן הקלטה). מדריך ההפעלה מוצג בשני מקומות
+מאותה `guideBody()`: חלון קופץ ב-hover/focus על הכפתור (`.vm-tab-pop`, נחשף דרך מחלקה
+`vm-pop-open` ש-JS מוסיף ב-mouseenter/focusin + גיבוי `:hover`/`:focus-within` ב-CSS; נפתח
+מתחת לכפתור כי הכרטיסים גבוהים בעמוד), ו-`<details>` מתקפל כגיבוי למגע בנייד (אין hover).
 זהו הפתרון הנכון לתמלול סרטונים — המיקרופון קולט רמקולים גרוע וביטול-ההד מוחק את קול המחשב.
 הקלטת אנגלית: `transcribe.js` מתמלל עם `language='en'` (ענן ומקומי),
 מתרגם אוטומטית לעברית ושומר `memo.translation` — מקור ראשי endpoint ‎`/translate` של
