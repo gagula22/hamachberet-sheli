@@ -283,7 +283,7 @@
 ### P-51 · הקלטות ותמלול
 - **בבעלות:** `js/features/voice/memos.js` (`window.VoiceMemos`), `transcribe.js` — IndexedDB נפרד `hamachberet-voice`. גם `css/features/voice.css`.
 - **בוצע (14.7.2026):** רובריקה שנייה "🇬🇧 הערות קול באנגלית" — הקלטה+תמלול באנגלית, תרגום אוטומטי לעברית (Worker ‎/translate Llama-3 → fallback MyMemory דרך PTR_ENGINE), ייצוא Word בעברית (+מקור אנגלי בהמשך) וכפתור 🇬🇧 למקור-בלבד. שדה `lang` על כל הקלטה; רשומות ישנות = עברית. ראה ARCHITECTURE (פסקת "קול").
-- **בוצע (14.7.2026):** כפתור "🔊 הקלט שמע מהטאב" בשני הכרטיסים — לכידת שמע דיגיטלי של סרטון/שיעור מטאב אחר (`getDisplayMedia`, audio-only) לתמלול איכותי בלי מיקרופון, + `<details>` מדריך 6 שלבים. גוף ההקלטה שותף ל-`beginRecording(stream, extraStream)`.
+- **בוצע (14.7.2026):** כפתור "🔊 הקלט שמע מהטאב" בשני הכרטיסים — לכידת שמע דיגיטלי של סרטון/שיעור מטאב אחר (`getDisplayMedia`, audio-only) לתמלול איכותי בלי מיקרופון. גוף ההקלטה שותף ל-`beginRecording(stream, extraStream)`. מדריך הפעלה (מה עושה + 5 שלבים) מ-`guideBody()` המשותף, מוצג בחלון קופץ ב-hover על הכפתור (`.vm-tab-pop`/`vm-pop-open`) + `<details>` מתקפל כגיבוי למגע.
 - **זהירות (commit 65107d3):** הקלטה רציפה חיה ברמת המודול; `hashchange` עוצר ניגון בלבד — **אסור להחזיר לשם stopRec()**. שלט צף `.vm-rec-pill` בכל עמוד. מאז יולי 2026 המצב החי הוא `_cards`+`_recLang` (לא `_ui`); הקלטה אחת פעילה בכל רגע בשתי הרובריקות.
 
 ---
