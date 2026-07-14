@@ -112,6 +112,34 @@
 .vm-word-en:hover { filter: brightness(.95); }
 .vm-word.busy { animation: vmBusy 1s linear infinite; cursor: progress; }
 
+/* ── כפתור "הקלט שמע מהטאב" + מדריך ההפעלה ── */
+.vm-controls { flex-wrap: wrap; }
+.vm-tab-btn { background: var(--sky); }
+.vm-tab-btn:hover { background: var(--sky-deep); }
+.vm-tab-help {
+  margin-bottom: var(--sp-4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--cream);
+  padding: 8px 12px;
+  font-size: 13px;
+}
+.vm-tab-help > summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--ink);
+  list-style: none;
+}
+.vm-tab-help > summary::-webkit-details-marker { display: none; }
+.vm-tab-help > summary::before { content: '▸ '; color: var(--ink-mute); }
+.vm-tab-help[open] > summary::before { content: '▾ '; }
+.vm-tab-help-body { padding-top: 8px; color: var(--ink-soft); line-height: 1.65; }
+.vm-tab-help-body p { margin: 0 0 8px; }
+.vm-tab-help-steps-title { font-weight: 600; color: var(--ink); margin-top: 4px; }
+.vm-tab-help-body ol { margin: 0 0 8px; padding-inline-start: 22px; }
+.vm-tab-help-body li { margin-bottom: 5px; }
+.vm-tab-help-note { font-size: 12px; color: var(--ink-mute); border-top: 1px dashed var(--line); padding-top: 8px; }
+
 /* ── שלט הקלטה צף — מוצג בכל עמוד בזמן הקלטה (ההקלטה ממשיכה במעבר עמוד) ── */
 .vm-rec-pill {
   position: fixed;

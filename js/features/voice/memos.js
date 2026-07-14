@@ -84,17 +84,10 @@
     return h ? h + ':' + mmss : mmss;
   }
 
-  function startRec(lang) {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) {
-      App.toast('הדפדפן לא תומך בהקלטת שמע');
-      return;
-    }
-    _recLang = lang === 'en' ? 'en' : 'he';
-    // איכות מקור = דיוק תמלול: ביטול הד, סינון רעש ו-AGC משפרים משמעותית
-    // את הזיהוי; קצב 128kbps שומר פרטים שהמנוע צריך (עדיין ~1MB לדקה).
-    navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
-    }).then(stream => {
+  // גוף ההקלטה המשותף לשני המקורות: מיקרופון (startRec) ושמע-טאב (startTabRec).
+  // stream = מה שמוקלט בפועל; extraStream = סטרים-האב של שיתוף המסך (אם יש) —
+  // נעצר יחד עם ההקלטה כדי שכרום יוריד את פס "משתף כרטיסייה".
+  function beginRecording(stream, extraStream) {
       const mime = pickMime();
       const opts = mime ? { mimeType: mime, audioBitsPerSecond: 128000 } : { audioBitsPerSecond: 128000 };
       _mr = new MediaRecorder(stream, opts);
@@ -106,6 +99,7 @@
       _mr.onstop = () => {
         clearInterval(_timerI); // גם אם onstop הגיע בלי stopRec (למשל התקן נותק)
         stream.getTracks().forEach(t => t.stop());
+        if (extraStream) extraStream.getTracks().forEach(t => t.stop());
         const dur = (Date.now() - _t0) / 1000;
         const blob = new Blob(_chunks, { type: _mr.mimeType || 'audio/webm' });
         const d = new Date();
@@ -141,7 +135,43 @@
         if (cu) cu.setTimer(t);
         if (_pillTime) _pillTime.textContent = t;
       }, 500);
-    }).catch(() => App.toast('אין הרשאת מיקרופון — אפשר גישה בדפדפן'));
+  }
+
+  function startRec(lang) {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) {
+      App.toast('הדפדפן לא תומך בהקלטת שמע');
+      return;
+    }
+    _recLang = lang === 'en' ? 'en' : 'he';
+    // איכות מקור = דיוק תמלול: ביטול הד, סינון רעש ו-AGC משפרים משמעותית
+    // את הזיהוי; קצב 128kbps שומר פרטים שהמנוע צריך (עדיין ~1MB לדקה).
+    navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+    }).then(stream => beginRecording(stream))
+      .catch(() => App.toast('אין הרשאת מיקרופון — אפשר גישה בדפדפן'));
+  }
+
+  // הקלטת שמע מטאב: לסרטון/שיעור שמתנגן בדפדפן. המיקרופון קולט רמקולים רע
+  // (וביטול-ההד אף מוחק את שמע המחשב עצמו) — כאן נלכד השמע הדיגיטלי הנקי של
+  // הטאב דרך getDisplayMedia, בלי מיקרופון בכלל. הווידאו לא מוקלט (שמע בלבד);
+  // סטרים-האב נשמר חי כדי ששיתוף הטאב לא ייקטע, ונעצר יחד עם ההקלטה.
+  function startTabRec(lang) {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia || !window.MediaRecorder) {
+      App.toast('הדפדפן לא תומך בלכידת שמע מטאב (נדרש Chrome/Edge/Brave)');
+      return;
+    }
+    _recLang = lang === 'en' ? 'en' : 'he';
+    navigator.mediaDevices.getDisplayMedia({ video: true, audio: true }).then(ds => {
+      const audio = ds.getAudioTracks();
+      if (!audio.length) {
+        ds.getTracks().forEach(t => t.stop());
+        App.toast('לא שותף שמע — בחר את טאב הסרטון וסמן "שתף גם שמע מהכרטיסייה", ונסה שוב');
+        return;
+      }
+      // לחיצה על "הפסק שיתוף" של הדפדפן עוצרת ושומרת (לא מאבדת את ההקלטה)
+      audio[0].addEventListener('ended', stopRec);
+      beginRecording(new MediaStream(audio), ds);
+    }).catch(() => App.toast('שיתוף הטאב בוטל'));
   }
   function stopRec() {
     clearInterval(_timerI);
@@ -311,12 +341,17 @@
     const timer = el('span', { class: 'vm-timer' }, '00:00');
     const recLabel = isEn ? '🎙️ Start recording' : '🎙️ התחל הקלטה';
     const recBtn = el('button', { class: 'vm-rec-btn' }, recLabel);
+    const tabLabel = isEn ? '🔊 Record tab audio' : '🔊 הקלט שמע מהטאב';
+    const tabBtn = el('button', { class: 'vm-rec-btn vm-tab-btn', title: 'הקלטת השמע של סרטון/שיעור שמתנגן בטאב אחר — בלי מיקרופון' }, tabLabel);
     const listWrap = el('div', { class: 'vm-list' });
 
     const ui = {
       setRecording(on) {
         recBtn.textContent = on ? '⏹ עצור ושמור' : recLabel;
         recBtn.classList.toggle('recording', on);
+        // בזמן הקלטה כפתור לכידת-הטאב מוסתר (הקלטה אחת בכל רגע); כפתור העצירה
+        // הראשי עוצר גם הקלטת-טאב
+        tabBtn.style.display = on ? 'none' : '';
         timer.style.display = on ? 'inline' : 'none';
         if (!on) timer.textContent = '00:00';
       },
@@ -338,24 +373,51 @@
         });
       }
     };
-    recBtn.addEventListener('click', () => {
-      if (_mr) {
-        if (_recLang !== lang) {
-          App.toast(_recLang === 'en' ? 'הקלטה באנגלית כבר פעילה — עצור אותה קודם' : 'הקלטה בעברית כבר פעילה — עצור אותה קודם');
-          return;
-        }
-        stopRec();
-      } else {
-        startRec(lang);
+    const guardOtherLang = () => {
+      if (_mr && _recLang !== lang) {
+        App.toast(_recLang === 'en' ? 'הקלטה באנגלית כבר פעילה — עצור אותה קודם' : 'הקלטה בעברית כבר פעילה — עצור אותה קודם');
+        return true;
       }
+      return false;
+    };
+    recBtn.addEventListener('click', () => {
+      if (_mr) { if (guardOtherLang()) return; stopRec(); }
+      else startRec(lang);
     });
+    tabBtn.addEventListener('click', () => {
+      if (_mr) { if (guardOtherLang()) return; stopRec(); }
+      else startTabRec(lang);
+    });
+
+    // ── הסבר "הקלט שמע מהטאב": מה הכפתור עושה + שלבי הפעלה למשתמש ──
+    const help = el('details', { class: 'vm-tab-help' }, [
+      el('summary', {}, '🔊 מה זה "הקלט שמע מהטאב"? (מדריך)'),
+      el('div', { class: 'vm-tab-help-body' }, [
+        el('p', {}, 'לכידת השמע הדיגיטלי של סרטון, שיעור או שיחה שמתנגנים בטאב אחר של הדפדפן — ' +
+          'בלי מיקרופון. זה הפתרון הנכון לתמלול סרטונים: המיקרופון קולט את הרמקולים באיכות ירודה ' +
+          '(ולפעמים ביטול-ההד של הדפדפן מוחק לגמרי את קול המחשב), ואילו לכידת-הטאב מקבלת את פס-הקול ' +
+          'הנקי ישירות — איכות תמלול מקסימלית.'),
+        el('p', { class: 'vm-tab-help-steps-title' }, 'שלבי הפעלה:'),
+        el('ol', {}, [
+          el('li', {}, 'פתח את הסרטון/השיעור בטאב אחר של אותו דפדפן והבא אותו למצב שממנו תרצה להתחיל.'),
+          el('li', {}, 'כאן, בעמוד "הערות קול", לחץ על הכפתור "🔊 הקלט שמע מהטאב"' + (isEn ? ' שבכרטיס האנגלי' : '') + '.'),
+          el('li', {}, 'ייפתח חלון בחירה של הדפדפן — בחר בלשונית "כרטיסייה" (Tab), בחר את הטאב של הסרטון, ' +
+            'וודא שהמתג "שיתוף גם השמע של הכרטיסייה" (Share tab audio) דלוק. אשר.'),
+          el('li', {}, 'חזור לטאב הסרטון ולחץ Play. ההקלטה רצה ברקע — הטיימר והשלט הצף מראים שהיא פעילה.'),
+          el('li', {}, 'בסיום לחץ "⏹ עצור ושמור" (כאן או בשלט הצף). ההקלטה תופיע ברשימה למטה.'),
+          el('li', {}, 'לחץ 📝 לתמלול' + (isEn ? ' באנגלית + תרגום אוטומטי לעברית, ואז 📄 לקובץ Word בעברית' : ' ול-Word') + '. הכול נשמר רק במחשב שלך.')
+        ]),
+        el('p', { class: 'vm-tab-help-note' }, 'טיפ: לסרטון באנגלית — השתמש בכפתור שבכרטיס "🇬🇧 הערות קול באנגלית" כדי לקבל בסוף Word עם תרגום לעברית. נדרש Chrome / Edge / Brave (שיתוף-שמע-כרטיסייה לא נתמך בכל הדפדפנים).')
+      ])
+    ]);
 
     const card = el('div', { class: 'card vm-card' + (isEn ? ' vm-card-en' : '') }, [
       el('h2', {}, isEn ? '🇬🇧 הערות קול באנגלית' : '🎙️ הערות קול'),
       el('div', { class: 'vm-sub' }, isEn
-        ? 'הקלטה ותמלול בשפה האנגלית. כפתור 📝 מתמלל (Whisper) ומתרגם אוטומטית לעברית; כפתור 📄 מייצא ל-Word את התרגום בעברית (עם המקור האנגלי בהמשך המסמך), וכפתור 🇬🇧 מייצא את המקור באנגלית בלבד. ההקלטות נשמרות מקומית בלבד וממשיכות ברקע — כמו בעברית.'
-        : 'תזכירים קוליים — מוקלטים ונשמרים מקומית בלבד. ההקלטה ממשיכה ברקע גם במעבר לעמוד או לחלון אחר, עד שעוצרים אותה. להכתבה לטקסט השתמש בכפתור 🎤 שבעורך המחברת.'),
-      el('div', { class: 'vm-controls' }, [recBtn, timer]),
+        ? 'הקלטה ותמלול בשפה האנגלית — מהמיקרופון או משמע של טאב אחר (🔊, לסרטונים/שיעורים). כפתור 📝 מתמלל (Whisper) ומתרגם אוטומטית לעברית; כפתור 📄 מייצא ל-Word את התרגום בעברית (עם המקור האנגלי בהמשך המסמך), וכפתור 🇬🇧 מייצא את המקור באנגלית בלבד. ההקלטות נשמרות מקומית בלבד וממשיכות ברקע — כמו בעברית.'
+        : 'תזכירים קוליים — מהמיקרופון או משמע של טאב אחר (🔊, לסרטונים/שיעורים). מוקלטים ונשמרים מקומית בלבד, וההקלטה ממשיכה ברקע גם במעבר לעמוד או לחלון אחר, עד שעוצרים אותה. להכתבה לטקסט השתמש בכפתור 🎤 שבעורך המחברת.'),
+      el('div', { class: 'vm-controls' }, [recBtn, tabBtn, timer]),
+      help,
       listWrap
     ]);
     return { card, ui };
