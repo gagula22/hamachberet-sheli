@@ -24,7 +24,12 @@
   // להטמעת base64 מקומית (ההתנהגות הקודמת) — כלום לא נשבר.
   // ─────────────────────────────────────────────────────────────────────────
 
-  var CHUNK = 600 * 1024;              // תווי base64 לכל part (~600KB < מגבלת 1MB)
+  // ~900KB לכל part: מקסימום שבטוח מתחת למגבלת 1,048,576 בייט/מסמך (עם מרווח
+  // ל-path+overhead), מיעוט chunks = פחות round-trips. כפולה של 4 (יישור base64).
+  var CHUNK = 900 * 1024;
+  // כמה parts נכתבים/נקראים במקביל — חופף round-trips ומקצר את זמן ההעלאה
+  // מ-N סדרתי ל-~ceil(N/CONCURRENCY) גלים. 5 בטוח לחלוטין ל-Firestore.
+  var CONCURRENCY = 5;
   var FS_MAX = 20 * 1024 * 1024;       // תקרת קובץ לאחסון-ענן (מעבר לזה → מקומי)
 
   function _fb() {
@@ -75,13 +80,27 @@
 
     var N = Math.max(1, Math.ceil(b64.length / CHUNK));
     var ref = _attRef(id);
+    var partsCol = ref.collection('parts');
 
-    // כותבים את ה-parts קודם (רציף, עם התקדמות), והמטא אחרון — כך שמטא קיים
-    // מבטיח שכל ה-parts כבר נכתבו. כתיבה בודדת נכשלת → זורקים → נפילה מקומית.
-    for (var i = 0; i < N; i++) {
-      await ref.collection('parts').doc(String(i)).set({ b: b64.slice(i * CHUNK, (i + 1) * CHUNK) });
-      if (onProgress) { try { onProgress((i + 1) / (N + 1)); } catch (e) {} }
+    // כותבים את ה-parts **במקביל** (concurrency-capped) — חופף round-trips כדי
+    // שההעלאה תסתיים ב-~ceil(N/CONCURRENCY) גלים ולא ב-N כתיבות סדרתיות. כתיבה
+    // בודדת נכשלת → Promise.all דוחה → זורקים → נפילה מקומית. המטא נכתב **אחרון**
+    // (אחרי שכל ה-parts אושרו) — כך שקיום המטא מבטיח שכל ה-parts כבר בענן.
+    var next = 0, done = 0;
+    function lane() {
+      if (next >= N) return Promise.resolve();
+      var i = next++;
+      return partsCol.doc(String(i)).set({ b: b64.slice(i * CHUNK, (i + 1) * CHUNK) })
+        .then(function () {
+          done++;
+          if (onProgress) { try { onProgress(done / (N + 1)); } catch (e) {} }
+          return lane();
+        });
     }
+    var lanes = [];
+    for (var k = 0; k < Math.min(CONCURRENCY, N); k++) lanes.push(lane());
+    await Promise.all(lanes);
+
     await ref.set({
       name: file.name, type: file.type || '', size: file.size,
       mime: mime, chunks: N, createdAt: Date.now()
@@ -100,28 +119,49 @@
     if (!metaSnap.exists) { var e = new Error('attachment-missing'); e.code = 'file/missing'; throw e; }
     var meta = metaSnap.data() || {};
     var N = meta.chunks || 0;
+    var partsCol = ref.collection('parts');
     var parts = new Array(N);
-    for (var i = 0; i < N; i++) {
-      var ps = await ref.collection('parts').doc(String(i)).get();
-      parts[i] = (ps.exists && ps.data() && ps.data().b) || '';
-      if (onProgress) { try { onProgress((i + 1) / N); } catch (e) {} }
+
+    // קריאת ה-parts **במקביל** (concurrency-capped) — אותו רווח-ביצועים כמו בכתיבה.
+    var next = 0, done = 0;
+    function lane() {
+      if (next >= N) return Promise.resolve();
+      var i = next++;
+      return partsCol.doc(String(i)).get().then(function (ps) {
+        parts[i] = (ps.exists && ps.data() && ps.data().b) || '';
+        done++;
+        if (onProgress) { try { onProgress(done / N); } catch (e) {} }
+        return lane();
+      });
     }
+    var lanes = [];
+    for (var k = 0; k < Math.min(CONCURRENCY, N); k++) lanes.push(lane());
+    await Promise.all(lanes);
+
     var mime = meta.mime || meta.type || 'application/octet-stream';
     return { dataUrl: 'data:' + mime + ';base64,' + parts.join(''), name: meta.name || 'file', type: meta.type || '', size: meta.size || 0 };
   }
 
   // מחיקה (בעת הסרת קובץ מהנושא). best-effort — לא זורק.
+  // מוחק מטא + כל ה-parts ב-batch אטומי אחד (round-trip יחיד; מתפצל אם > מגבלת
+  // ה-batch). המטא נכלל ב-batch הראשון → אם מחיקה מתפצלת ונקטעת, המטא כבר נמחק
+  // וה-fetch יראה "חסר" (מחוק לוגית; parts יתומים = זבל לא-מזיק).
   async function remove(id) {
-    if (!_db() || !_user() || !id) return;
+    var db = _db();
+    if (!db || !_user() || !id) return;
     try {
       var ref = _attRef(id);
       var metaSnap = await ref.get();
       var N = (metaSnap.exists && metaSnap.data() && metaSnap.data().chunks) || 0;
-      for (var i = 0; i < N; i++) {
-        try { await ref.collection('parts').doc(String(i)).delete(); } catch (e) {}
+      var partsCol = ref.collection('parts');
+      var refs = [ref];
+      for (var i = 0; i < N; i++) refs.push(partsCol.doc(String(i)));
+      for (var s = 0; s < refs.length; s += 450) {
+        var batch = db.batch();
+        refs.slice(s, s + 450).forEach(function (r) { batch.delete(r); });
+        await batch.commit();
       }
-      try { await ref.delete(); } catch (e) {}
-    } catch (e) { /* הרשאה / כבר נמחק — לא קריטי */ }
+    } catch (e) { /* הרשאה / כבר נמחק — best-effort */ }
   }
 
   window.CloudFiles = { enabled: enabled, fits: fits, upload: upload, fetch: fetchFile, remove: remove, FS_MAX: FS_MAX };
