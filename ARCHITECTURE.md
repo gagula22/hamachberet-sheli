@@ -181,15 +181,19 @@
 זה גם ייתר את הצורך הדחוף במעבר-בקאנד (ראה `MIGRATION-b5229-to-26ff5.md` — עכשיו אופציונלי).
 
 - **מבנה Firestore:** מסמך-מטא `users/{uid}/attachments/{id}` = `{name,type,size,mime,chunks:N,createdAt}`
-  + תת-אוסף `parts/{i}` = `{b:"<base64 של ~600KB>"}`. מגבלת 1MB למסמך → פיצול ל-chunks. המטא נכתב
-  **אחרון** → מטא שלם מבטיח שכל ה-parts קיימים. **תקרה:** `CloudFiles.FS_MAX`=20MB (מעבר → מקומי).
+  + תת-אוסף `parts/{i}` = `{b:"<base64 של ~900KB>"}`. מגבלת 1MB למסמך → פיצול ל-chunks (900KB = המקסימום
+  הבטוח מתחת ל-1,048,576 עם מרווח ל-path/overhead). המטא נכתב **אחרון** → מטא שלם מבטיח שכל ה-parts
+  קיימים. **תקרה:** `CloudFiles.FS_MAX`=20MB (מעבר → מקומי).
+- **ביצועים (מהירות + איכות):** ה-parts נכתבים ונקראים **במקביל** (`CONCURRENCY`=5 lanes, אותו דפוס
+  כמו תמלול-הקול) — חופף round-trips ומקצר את הזמן מ-N סדרתי ל-~ceil(N/5) גלים (נמדד: 5MB≈2.2× מהיר
+  מסדרתי). המחיקה = `writeBatch` אטומי יחיד (מטא+כל ה-parts, round-trip אחד). round-trip byte-identical אומת.
 - **⚠️ מחוץ ל-Store/סכימה בכוונה (decoupled):** cloud-files קורא/כותב את אוסף `attachments` **ישירות**,
   לא דרך מנוע-הסנכרון (SUBCOL_KEYS). כמו הקלטות-קול ב-IndexedDB — אחסון כבד שלא מנפח snapshot ה-Store.
   **אין מפתח store-schema, אין אסרציית firebase-sync.** כלל-ההרשאה הקיים `match /users/{uid}/{document=**}`
   (רקורסיבי) מכסה את `attachments/**` — **אין צורך בשינוי כללים** (וכללי ה-Storage הישנים כבר לא רלוונטיים).
 - **API:** `enabled()` = SDK+firestore+משתמש-מחובר · `fits(size)` · `upload(file,id,onProgress)`→`{id,name,type,size,fs:true}`
-  (מפצל, כותב parts רציף עם התקדמות, מטא אחרון) · `fetch(id,onProgress)`→`{dataUrl,name,type,size}`
-  (קורא מטא+parts, מרכיב) · `remove(id)` (מוחק parts+מטא, best-effort).
+  (מפצל, כותב parts **במקביל** עם התקדמות, מטא אחרון) · `fetch(id,onProgress)`→`{dataUrl,name,type,size}`
+  (קורא מטא+parts **במקביל**, מרכיב) · `remove(id)` (batch אטומי, best-effort).
 - **`media.js insertFileAttachment`:** מחובר+בטווח → placeholder → `upload` → כרטיס עם `data-fs`.
   לא-מחובר/מעל-תקרה/כשל → נפילה חיננית ל-base64 מקומי (`data-content`) — כלום לא נשבר.
 - **`openAttachment`/`downloadAttachment`:** `data-fs` → `CloudFiles.fetch` (טוען chunks) → **Blob URL**
