@@ -288,16 +288,21 @@
   }
   function _escAttr(s) { return String(s == null ? '' : s).replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 
-  // meta: { name, type, size, id, dataUrl? (local base64) | url?+path? (cloud) }
+  // meta: { name, type, size, id, and ONE source:
+  //   fs:true      → קובץ ב-Firestore (data-fs=id) — נטען על-פי-דרישה, מסתנכרן
+  //   url?+path?   → קובץ ב-Storage (מדור קודם; data-url) — עדיין נפתח
+  //   dataUrl?     → base64 מקומי (data-content) — מכשיר זה בלבד }
   function _attachHtml(meta) {
     var esc = _escAttr(meta.name);
     var isImg = (meta.type || '').startsWith('image/');
-    var thumb = meta.dataUrl || meta.url || '';
+    var thumb = meta.dataUrl || meta.url || '';   // ל-fs אין thumb → אייקון (הקובץ נטען בפתיחה)
     var visual = isImg && thumb ? '<img class="file-thumb" src="' + thumb + '" alt="" />'
       : '<span class="file-icon">' + _fileIcon(meta.name, meta.type) + '</span>';
-    var srcAttr = meta.url
-      ? 'data-url="' + _escAttr(meta.url) + '" data-path="' + _escAttr(meta.path || '') + '"'
-      : 'data-content="' + (meta.dataUrl || '') + '"';
+    var srcAttr = meta.fs
+      ? 'data-fs="' + _escAttr(meta.id || '') + '"'
+      : meta.url
+        ? 'data-url="' + _escAttr(meta.url) + '" data-path="' + _escAttr(meta.path || '') + '"'
+        : 'data-content="' + (meta.dataUrl || '') + '"';
     return '<span class="file-attachment" contenteditable="false" data-att-id="' + (meta.id || '') + '" '
       + 'data-name="' + esc + '" data-type="' + _escAttr(meta.type) + '" ' + srcAttr
       + ' title="⬇ הורדה · לחיצה כפולה לפתיחה">' + visual
@@ -317,12 +322,28 @@
     var name = el.dataset.name || 'file';
     var url = el.dataset.url;
     if (url) {
-      // Cloud file: a cross-origin download attribute is ignored by browsers, so
-      // this may open in a tab where the user saves it. (True forced-download of a
-      // cloud file needs bucket CORS — a tab is the reliable no-setup fallback.)
+      // Legacy cloud-Storage file: a cross-origin download attribute is ignored by
+      // browsers, so this may open in a tab where the user saves it. (True forced
+      // download of a Storage file needs bucket CORS — a tab is the reliable
+      // no-setup fallback.)
       var a = document.createElement('a'); a.href = url; a.download = name; a.target = '_blank'; a.rel = 'noopener';
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       App.toast('⬇ ' + name);
+      return;
+    }
+    var fsId = el.dataset.fs;
+    if (fsId) {
+      if (!window.CloudFiles) { App.toast('טעינת קבצי-ענן לא זמינה'); return; }
+      App.toast('טוען מהענן…');
+      window.CloudFiles.fetch(fsId).then(function (f) {
+        var blob; try { blob = _dataUrlToBlob(f.dataUrl); } catch (e) { App.toast('שגיאה בהורדה'); return; }
+        var burl = URL.createObjectURL(blob);
+        _download(burl, name);
+        setTimeout(function () { URL.revokeObjectURL(burl); }, 4000);
+        App.toast('⬇ הורד: ' + name);
+      }).catch(function (e) {
+        App.toast('שגיאה בטעינת הקובץ מהענן (ייתכן שההעלאה לא הושלמה)');
+      });
       return;
     }
     var dataUrl = el.dataset.content;
@@ -347,17 +368,10 @@
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
   }
 
-  // Open/preview an attachment. Cloud files (data-url) open in a new tab (browser
-  // previews PDF/image natively). Legacy base64 (data-content) is converted to a
-  // Blob URL — a data-URI in an iframe FAILS to render for large files (the
-  // "blank tab" bug); a Blob URL renders reliably and can be downloaded.
-  function openAttachment(el) {
-    var url = el.dataset.url;
-    var name = el.dataset.name || 'file';
-    var type = el.dataset.type || '';
-    if (url) { var wc = window.open(url, '_blank', 'noopener'); if (!wc) _download(url, name); return; }
-    var dataUrl = el.dataset.content;
-    if (!dataUrl) { App.toast('תוכן הקובץ אינו זמין (ייתכן שנשמר במכשיר אחר)'); return; }
+  // Preview a data-URL in a new tab (image/PDF/text/AV) or download it. A base64
+  // data-URI in an iframe FAILS to render for large files (the "blank tab" bug),
+  // so it's converted to a Blob URL, which renders reliably and can be downloaded.
+  function _previewOrDownloadDataUrl(dataUrl, name, type) {
     var blob; try { blob = _dataUrlToBlob(dataUrl); } catch (e) { App.toast('שגיאה בפתיחת הקובץ'); return; }
     var burl = URL.createObjectURL(blob);
     var previewable = type.startsWith('image/') || type === 'application/pdf'
@@ -373,6 +387,30 @@
     }
   }
 
+  // Open/preview an attachment. Cloud-Storage files (legacy data-url) open in a
+  // new tab; Firestore files (data-fs) are fetched on demand then previewed;
+  // local base64 (data-content) is previewed directly.
+  function openAttachment(el) {
+    var url = el.dataset.url;
+    var name = el.dataset.name || 'file';
+    var type = el.dataset.type || '';
+    if (url) { var wc = window.open(url, '_blank', 'noopener'); if (!wc) _download(url, name); return; }
+    var fsId = el.dataset.fs;
+    if (fsId) {
+      if (!window.CloudFiles) { App.toast('טעינת קבצי-ענן לא זמינה'); return; }
+      App.toast('טוען מהענן…');
+      window.CloudFiles.fetch(fsId).then(function (f) {
+        _previewOrDownloadDataUrl(f.dataUrl, name, f.type || type);
+      }).catch(function (e) {
+        App.toast('שגיאה בטעינת הקובץ מהענן (ייתכן שההעלאה לא הושלמה)');
+      });
+      return;
+    }
+    var dataUrl = el.dataset.content;
+    if (!dataUrl) { App.toast('תוכן הקובץ אינו זמין (ייתכן שנשמר במכשיר אחר)'); return; }
+    _previewOrDownloadDataUrl(dataUrl, name, type);
+  }
+
   // ── Insert a file attachment. Prefers Firebase Storage: the FILE goes to the
   // CLOUD and the note stores only a small URL → the note syncs fully to
   // Firestore and the file is available from every device. Falls back to a local
@@ -383,8 +421,8 @@
     if (file.size > HARD_CAP) { App.toast('הקובץ גדול מדי (מעל 50MB)'); return; }
     var id = 'att' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
-    if (window.CloudFiles && CloudFiles.enabled()) {
-      // placeholder → upload → swap in the real (URL-based) card
+    if (window.CloudFiles && CloudFiles.enabled() && CloudFiles.fits(file.size)) {
+      // placeholder → upload to Firestore → swap in the real (data-fs) card
       var ph = '<span class="file-attachment file-uploading" contenteditable="false" data-att-id="' + id + '">'
         + '<span class="file-icon">⏳</span><span class="file-name">' + _escAttr(file.name) + '</span>'
         + '<span class="file-size">מעלה 0%…</span></span>&nbsp;';
@@ -403,7 +441,7 @@
           var real = tmp.firstChild; node.replaceWith(real);   // buttons handled by editor delegation
         }
         save();
-        App.toast('☁️ הקובץ נשמר בענן: ' + file.name);
+        App.toast('☁️ הקובץ נשמר בענן — זמין מכל מכשיר: ' + file.name);
       }).catch(function (err) {
         var code = (err && (err.code || err.message)) || 'unknown';
         console.warn('[cloud-files] upload failed (' + code + ') → local fallback', err);
@@ -412,7 +450,7 @@
       });
       return;
     }
-    _embedLocalAttachment(file, editor, save, id);   // not signed in / Storage off
+    _embedLocalAttachment(file, editor, save, id);   // not signed in / too large / cloud off
   }
 
   function _embedLocalAttachment(file, editor, save, id) {

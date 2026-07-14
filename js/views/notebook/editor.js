@@ -218,8 +218,9 @@
         e.preventDefault(); e.stopPropagation();
         const att = rm.closest('.file-attachment');
         if (att) {
-          const path = att.dataset.path;
-          if (path && window.CloudFiles) CloudFiles.remove(path);  // best-effort cloud delete
+          // best-effort cloud delete: Firestore attachment id (data-fs) or legacy Storage path
+          const cloudId = att.dataset.fs || att.dataset.path;
+          if (cloudId && window.CloudFiles) CloudFiles.remove(cloudId);
           att.remove(); save();
         }
         return;
