@@ -105,6 +105,13 @@
 
 .vm-empty { padding: var(--sp-4) 0; color: var(--ink-soft); font-size: 14px; line-height: 1.6; }
 
+/* ── כרטיס "הערות קול באנגלית" — רובריקה שנייה מתחת לכרטיס העברי ── */
+.vm-card + .vm-card { margin-top: var(--sp-4); }
+.vm-card-en { border-inline-start: 3px solid var(--sky-deep, #A8C8D8); }
+.vm-word-en { background: var(--sage); font-size: 15px; }
+.vm-word-en:hover { filter: brightness(.95); }
+.vm-word.busy { animation: vmBusy 1s linear infinite; cursor: progress; }
+
 /* ── שלט הקלטה צף — מוצג בכל עמוד בזמן הקלטה (ההקלטה ממשיכה במעבר עמוד) ── */
 .vm-rec-pill {
   position: fixed;

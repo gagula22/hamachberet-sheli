@@ -57,14 +57,14 @@
     '  } else if (d.type === "transcribe") {\n' +
     '    try {\n' +
     '      var result = await _pipe({ data: d.audio, sampling_rate: 16000 },\n' +
-    '        { language: "hebrew", task: "transcribe", chunk_length_s: 30, stride_length_s: 5, return_timestamps: true });\n' +
+    '        { language: d.language || "hebrew", task: "transcribe", chunk_length_s: 30, stride_length_s: 5, return_timestamps: true });\n' +
     '      self.postMessage({ type: "result", text: result.text, chunks: result.chunks || [] });\n' +
     '    } catch (err) { self.postMessage({ type: "error", message: err.message }); }\n' +
     '  }\n' +
     '};\n';
 
   var _lw = null, _lwReady = null;
-  function localWhisper(pcm, onProgress) {
+  function localWhisper(pcm, onProgress, langName) {
     if (!_lwReady) {
       var blob = new Blob([WHISPER_SRC], { type: 'text/javascript' });
       _lw = new Worker(URL.createObjectURL(blob));
@@ -93,7 +93,7 @@
     return _lwReady.then(function () {
       return new Promise(function (resolve, reject) {
         _lw._onDone = { resolve: resolve, reject: reject };
-        _lw.postMessage({ type: 'transcribe', audio: pcm }, [pcm.buffer]);
+        _lw.postMessage({ type: 'transcribe', audio: pcm, language: langName || 'hebrew' }, [pcm.buffer]);
       });
     });
   }
@@ -103,7 +103,7 @@
   // מוסטות חזרה לזמן המקורי. _slicePcmSec מחזיר עותק, כך שההעברה ל-Worker
   // (transfer) לא נוגעת ב-PCM המלא.
   var SEG_SEC = 300;
-  async function localWhisperChunked(pcm, sampleRate, onProgress) {
+  async function localWhisperChunked(pcm, sampleRate, onProgress, langName) {
     var d = deps();
     var totalSec = pcm.length / sampleRate;
     var segs = [];
@@ -122,7 +122,7 @@
       var progWrap = onProgress ? function (msg) { onProgress(msg.indexOf('%') > -1 && msg.indexOf('מוריד') === 0 ? msg : label); } : null;
       if (onProgress) onProgress(label);
       var piece = d.A._slicePcmSec(pcm, seg[0], seg[1], sampleRate);
-      var res = await localWhisper(piece, progWrap || onProgress);
+      var res = await localWhisper(piece, progWrap || onProgress, langName);
       allText.push((res.text || '').trim());
       (res.chunks || []).forEach(function (c) {
         var ts = c.timestamp || [0, 0];
@@ -138,7 +138,7 @@
   // משתמש ב-_transcribeViaWorker פר-נתח (לא בלולאה הטורית של הכלי) ומרכיב
   // את התוצאות לפי הסדר עם היסט חותמות-זמן.
   var CLOUD_CHUNK_SEC = 90, CLOUD_CONCURRENCY = 3;
-  async function cloudChunkedParallel(base, pcm, sampleRate, onProgress) {
+  async function cloudChunkedParallel(base, pcm, sampleRate, onProgress, lang) {
     var d = deps();
     var totalSec = pcm.length / sampleRate;
     var bounds = [];
@@ -155,7 +155,7 @@
         var i = next++;
         var b = bounds[i];
         var wav = d.A._pcmToWavBytes(d.A._slicePcmSec(pcm, b[0], b[1], sampleRate), sampleRate);
-        var r = await d.W._transcribeViaWorker(base, wav, 'he', null);
+        var r = await d.W._transcribeViaWorker(base, wav, lang || 'he', null);
         results[i] = { r: r, off: b[0] };
         done++;
         if (onProgress) onProgress('מתמלל בענן… ' + done + '/' + bounds.length + ' (' + Math.round((done / bounds.length) * 100) + '%)');
@@ -177,13 +177,85 @@
     return { text: text.filter(Boolean).join(' '), chunks: chunks, engine: 'ענן · Whisper-Large-v3' };
   }
 
+  // ── תרגום אנגלית→עברית ───────────────────────────────────────────────────
+  // עבור הקלטות באנגלית (memo.lang==='en'): ה-Word המיוצא הוא התרגום לעברית.
+  // מקור ראשי: endpoint ‎/translate של אותו Worker פרטי (Llama-3, איכות גבוהה),
+  // דרך VT_WORKER._translateViaWorker (קריאה בלבד — אותו דפוס כמו התמלול).
+  // fallback: מנוע MyMemory של מתרגם ה-PDF (window.PTR_ENGINE, קריאה בלבד) —
+  // עובד גם מ-localhost (ה-Worker חסום שם ב-CORS). נכשלו שניהם → שגיאה ידידותית.
+  function _splitForTranslate(text, MAX) {
+    MAX = MAX || 1800;
+    text = String(text || '').trim();
+    if (!text) return [];
+    if (text.length <= MAX) return [text];
+    var parts = [], pos = 0;
+    while (pos < text.length) {
+      var end = pos + MAX;
+      if (end >= text.length) { parts.push(text.slice(pos).trim()); break; }
+      var cut = -1;
+      for (var i = end; i > end - 400 && i > pos; i--) {
+        if ('.!?\n'.indexOf(text[i]) >= 0) { cut = i + 1; break; }
+      }
+      if (cut === -1) {
+        for (var j = end; j > end - 120 && j > pos; j--) {
+          if (text[j] === ' ') { cut = j; break; }
+        }
+      }
+      if (cut === -1) cut = end;
+      var piece = text.slice(pos, cut).trim();
+      if (piece) parts.push(piece);
+      pos = cut;
+    }
+    return parts;
+  }
+
+  async function translateToHebrew(text, onProgress) {
+    text = String(text || '').trim();
+    if (!text) return '';
+    var parts = _splitForTranslate(text);
+    var out = [];
+    var workerOk = true;                       // Worker נכשל פעם אחת → MyMemory לשאר
+    var bases = cloudBases();
+    for (var i = 0; i < parts.length; i++) {
+      if (onProgress) onProgress('מתרגם לעברית… ' + (i + 1) + '/' + parts.length);
+      var t = null;
+      if (workerOk && navigator.onLine && window.VT_WORKER && VT_WORKER._translateViaWorker) {
+        for (var b = 0; b < bases.length && t === null; b++) {
+          try {
+            var r = await VT_WORKER._translateViaWorker(bases[b], parts[i], 'he', null);
+            t = (r.translation || '').trim() || null;
+          } catch (we) {
+            console.warn('[voice-translate] worker via ' + bases[b] + ' failed:', we.message);
+          }
+        }
+        if (t === null) workerOk = false;
+      }
+      if (t === null && window.PTR_ENGINE && PTR_ENGINE._translatePageText) {
+        try {
+          var m = (await PTR_ENGINE._translatePageText(parts[i]) || '').trim();
+          // MyMemory מחזיר את המקור כשנכשל — אנגלית שחוזרת זהה = כישלון
+          if (m && m !== parts[i]) t = m;
+        } catch (me) {
+          console.warn('[voice-translate] MyMemory failed:', me.message);
+        }
+      }
+      if (t === null) throw new Error('התרגום לעברית נכשל — הענן ושירות הגיבוי לא נגישים');
+      out.push(t);
+    }
+    return out.join('\n\n');
+  }
+
   // ── תמלול ────────────────────────────────────────────────────────────────
-  // memo: רשומת הקלטה { name, blob, ... } ; onProgress(msg) אופציונלי.
-  // מחזיר { text, chunks } — והשומר הוא הקורא (memos.js).
+  // memo: רשומת הקלטה { name, blob, lang?, ... } ; onProgress(msg) אופציונלי.
+  // מחזיר { text, chunks, engine, translation? } — והשומר הוא הקורא (memos.js).
+  // שפת התמלול לפי memo.lang ('en' = אנגלית, אחרת עברית); להקלטת אנגלית
+  // מתבצע גם תרגום אוטומטי לעברית (translation) — ואם התרגום נכשל, התמלול
+  // עדיין מוחזר וייצוא ה-Word ינסה לתרגם שוב על-פי דרישה.
   // אסטרטגיה: ענן (Whisper-Large, איכות גבוהה) ← נפילה אוטומטית למקומי
   // כשהענן לא נגיש (CORS מ-localhost / אין אינטרנט לענן).
   async function run(memo, onProgress) {
     var d = deps();
+    var lang = memo.lang === 'en' ? 'en' : 'he';
     if (onProgress) onProgress('מפענח את ההקלטה…');
     var decoded = await d.A._decodeAnyFileToPcm(memo.blob, onProgress);
     if (!decoded.pcm || !decoded.pcm.length) throw new Error('ההקלטה ריקה או לא ניתנת לפענוח');
@@ -193,7 +265,7 @@
       var bases = cloudBases();
       for (var b = 0; b < bases.length && !result; b++) {
         try {
-          result = await cloudChunkedParallel(bases[b], decoded.pcm, decoded.sampleRate, onProgress);
+          result = await cloudChunkedParallel(bases[b], decoded.pcm, decoded.sampleRate, onProgress, lang);
         } catch (cloudErr) {
           console.warn('[voice-transcribe] cloud via ' + bases[b] + ' failed:', cloudErr.message);
         }
@@ -202,12 +274,21 @@
     }
     if (!result || !(result.text || '').trim()) {
       if (!navigator.onLine && !_lwReady) throw new Error('אין חיבור לאינטרנט (נדרש להורדת מודל התמלול בפעם הראשונה)');
-      result = await localWhisperChunked(decoded.pcm, decoded.sampleRate, onProgress);
+      result = await localWhisperChunked(decoded.pcm, decoded.sampleRate, onProgress, lang === 'en' ? 'english' : 'hebrew');
       result.engine = 'מקומי · Whisper-small (איכות מופחתת)';
     }
     var text = (result.text || '').trim();
     if (!text) throw new Error('לא זוהה דיבור בהקלטה');
-    return { text: text, chunks: result.chunks || [], engine: result.engine || 'ענן · Whisper-Large-v3' };
+    var out = { text: text, chunks: result.chunks || [], engine: result.engine || 'ענן · Whisper-Large-v3' };
+    if (lang === 'en') {
+      try {
+        out.translation = await translateToHebrew(text, onProgress);
+      } catch (te) {
+        console.warn('[voice-transcribe] translation failed:', te.message);
+        if (onProgress) onProgress('התמלול מוכן; התרגום לעברית נכשל — ינוסה שוב בייצוא ל-Word');
+      }
+    }
+    return out;
   }
 
   // ── ייצוא Word ───────────────────────────────────────────────────────────
@@ -224,29 +305,59 @@
       .join('\n') || '<p>' + esc(memo.transcript) + '</p>';
   }
 
-  function openInWord(memo) {
+  function translationHtml(memo) {
+    return String(memo.translation || '').split(/\n+/).filter(function (p) { return p.trim(); })
+      .map(function (p) { return '<p>' + esc(p) + '</p>'; })
+      .join('\n') || '<p>' + esc(memo.translation) + '</p>';
+  }
+
+  // opts.original: להקלטת אנגלית — ייצוא המקור באנגלית בלבד (בלי תרגום).
+  // ברירת מחדל להקלטת אנגלית: גוף המסמך הוא התרגום לעברית, והמקור האנגלי
+  // מצורף אחריו (עם חותמות הזמן). להקלטת עברית — ללא שינוי.
+  function openInWord(memo, opts) {
+    opts = opts || {};
     if (!memo.transcript) { App.toast('אין עדיין תמלול להקלטה הזו'); return; }
+    var isEn = memo.lang === 'en';
+    if (isEn && !opts.original && !memo.translation) {
+      App.toast('אין עדיין תרגום לעברית — לחץ 📝 לתמלול ותרגום');
+      return;
+    }
     var dateStr = new Date(memo.createdAt || Date.now()).toLocaleDateString('he-IL');
+    var metaLine = (isEn ? (opts.original ? 'תמלול הקלטה באנגלית (מקור)' : 'תמלול הקלטה באנגלית · תרגום לעברית') : 'תמלול הקלטה') +
+      ' · ' + dateStr + (memo.engine ? ' · מנוע: ' + esc(memo.engine) : '');
+    var body;
+    if (!isEn) {
+      body = bodyHtml(memo);
+    } else if (opts.original) {
+      body = '<div dir="ltr" class="en">' + bodyHtml(memo) + '</div>';
+    } else {
+      body =
+        '<h2>תרגום לעברית</h2>' + translationHtml(memo) +
+        '<hr/><h2>המקור באנגלית (English original)</h2>' +
+        '<div dir="ltr" class="en">' + bodyHtml(memo) + '</div>';
+    }
     var html =
       '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" dir="rtl" lang="he">' +
       '<head><meta charset="utf-8"><title>' + esc(memo.name) + '</title>' +
       '<style>@page Section1 { size:21cm 29.7cm; margin:1.5cm; } div.Section1 { page:Section1; } ' +
       'body { font-family:"Arial",sans-serif; font-size:11pt; direction:rtl; } ' +
-      'h1 { font-size:16pt; } .meta { color:#777; font-size:9pt; } p { margin:0 0 8pt; line-height:1.5; }</style></head>' +
+      'h1 { font-size:16pt; } h2 { font-size:13pt; } .meta { color:#777; font-size:9pt; } p { margin:0 0 8pt; line-height:1.5; } ' +
+      '.en { direction:ltr; text-align:left; }</style></head>' +
       '<body><div class="Section1" dir="rtl">' +
       '<h1>🎙️ ' + esc(memo.name) + '</h1>' +
-      '<p class="meta">תמלול הקלטה · ' + dateStr + (memo.engine ? ' · מנוע: ' + esc(memo.engine) : '') + '</p><hr/>' +
-      bodyHtml(memo) +
+      '<p class="meta">' + metaLine + '</p><hr/>' +
+      body +
       '</div></body></html>';
     var blob = new Blob(['﻿', html], { type: 'application/msword' });
     var a = document.createElement('a');
     var url = URL.createObjectURL(blob);
     a.href = url;
-    a.download = String(memo.name || 'תמלול').replace(/[\\/:*?"<>|]/g, '-') + '.doc';
+    var suffix = isEn ? (opts.original ? ' - English' : ' - תרגום לעברית') : '';
+    a.download = String(memo.name || 'תמלול').replace(/[\\/:*?"<>|]/g, '-') + suffix + '.doc';
     a.click();
     setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
     App.toast('📄 קובץ ה-Word ירד — פתח אותו מההורדות');
   }
 
-  window.VoiceTranscribe = { run: run, openInWord: openInWord };
+  window.VoiceTranscribe = { run: run, openInWord: openInWord, translateToHebrew: translateToHebrew };
 })();
