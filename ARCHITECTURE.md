@@ -322,7 +322,14 @@ Web Speech he-IL; טקסט סופי דרך `execCommand('insertText')` → שמ�
 ב-Store/סכימה כדי שאודיו לא ינפח localStorage/סנכרון.
 **שתי רובריקות (יולי 2026):** ה-view מציג שני כרטיסים — עברית (ברירת מחדל) ו-"🇬🇧 הערות
 קול באנגלית". כל הקלטה נושאת `lang` ('he'/'en'; רשומות ישנות בלי שדה = 'he'), והרשימות
-מסוננות לפי שפה. הקלטת אנגלית: `transcribe.js` מתמלל עם `language='en'` (ענן ומקומי),
+מסוננות לפי שפה.
+**שני מקורות הקלטה (יולי 2026):** גוף ההקלטה חולץ ל-`beginRecording(stream, extraStream)`
+המשותף ל-`startRec` (מיקרופון, getUserMedia עם echoCancellation) ו-`startTabRec` (שמע-טאב,
+`getDisplayMedia({video:true,audio:true})` — לוקח רק את ה-audio track, שומר את סטרים-האב חי
+כ-extraStream ועוצר אותו בעצירה; track `ended` → `stopRec`; אין audio track → toast מתקן).
+כפתור "🔊 הקלט שמע מהטאב" בכל כרטיס (מוסתר בזמן הקלטה) + `<details>` עם מדריך הפעלה 6 שלבים.
+זהו הפתרון הנכון לתמלול סרטונים — המיקרופון קולט רמקולים גרוע וביטול-ההד מוחק את קול המחשב.
+הקלטת אנגלית: `transcribe.js` מתמלל עם `language='en'` (ענן ומקומי),
 מתרגם אוטומטית לעברית ושומר `memo.translation` — מקור ראשי endpoint ‎`/translate` של
 ה-Worker (Llama-3, דרך `VT_WORKER._translateViaWorker`), fallback ל-MyMemory דרך
 `window.PTR_ENGINE` של מתרגם ה-PDF (קריאה בלבד, אותו דפוס כמו VT_*). ייצוא Word של
@@ -333,6 +340,8 @@ Web Speech he-IL; טקסט סופי דרך `execCommand('insertText')` → שמ�
 `stopRec()`. בזמן הקלטה מוצג שלט צף (`.vm-rec-pill`, בכל עמוד) עם טיימר + עצירה;
 `renderView` נקשר ל-`_cards` חי (ui לכל כרטיס-שפה; `_recLang` קובע איזה כרטיס משחזר
 מצב-הקלטה בחזרה לעמוד); `beforeunload` מזהיר לפני סגירת טאב (הצ'אנקים בזיכרון בלבד).
+לכידת-טאב היא הקלטה רגילה לכל דבר (אותו `_mr`/pill/timer) — נשמרת ל-IndexedDB, מתומללת
+ומיוצאת בדיוק כמו הקלטת מיקרופון.
 
 **גיבוי אוטומטי (`js/features/autobackup/index.js`, `window.AutoBackup`):** צילום יומי מלא של
 `Store.get()` ל-IndexedDB משלו (`hamachberet-backups`), שמירת 14; שחזור = צילום-בטיחות ←
