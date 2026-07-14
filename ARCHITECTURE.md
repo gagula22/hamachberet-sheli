@@ -320,11 +320,19 @@ Web Speech he-IL; טקסט סופי דרך `execCommand('insertText')` → שמ�
 ביניים בבועה צפה בלבד. `memos.js` (view `voice`, `window.VoiceMemos`) — MediaRecorder
 (webm/opus→mp4 fallback), בלובים ב-**IndexedDB משלו (`hamachberet-voice`)** — אפס נגיעה
 ב-Store/סכימה כדי שאודיו לא ינפח localStorage/סנכרון.
+**שתי רובריקות (יולי 2026):** ה-view מציג שני כרטיסים — עברית (ברירת מחדל) ו-"🇬🇧 הערות
+קול באנגלית". כל הקלטה נושאת `lang` ('he'/'en'; רשומות ישנות בלי שדה = 'he'), והרשימות
+מסוננות לפי שפה. הקלטת אנגלית: `transcribe.js` מתמלל עם `language='en'` (ענן ומקומי),
+מתרגם אוטומטית לעברית ושומר `memo.translation` — מקור ראשי endpoint ‎`/translate` של
+ה-Worker (Llama-3, דרך `VT_WORKER._translateViaWorker`), fallback ל-MyMemory דרך
+`window.PTR_ENGINE` של מתרגם ה-PDF (קריאה בלבד, אותו דפוס כמו VT_*). ייצוא Word של
+הקלטת אנגלית = התרגום לעברית + המקור האנגלי (LTR) בהמשך המסמך; כפתור 🇬🇧 נוסף מייצא
+מקור-בלבד; תרגום חסר מושלם על-פי-דרישה בלחיצת 📄. הקלטה אחת פעילה בכל רגע (שתי השפות).
 ⚠️ **הקלטה רציפה (יולי 2026, commit `65107d3`):** ההקלטה חיה ברמת המודול וממשיכה
 במעבר עמוד/חלון עד עצירה מפורשת — `hashchange` עוצר **ניגון בלבד**; אסור להחזיר לשם
 `stopRec()`. בזמן הקלטה מוצג שלט צף (`.vm-rec-pill`, בכל עמוד) עם טיימר + עצירה;
-`renderView` נקשר ל-`_ui` חי ומשחזר מצב-הקלטה בחזרה לעמוד; `beforeunload` מזהיר לפני
-סגירת טאב (הצ'אנקים בזיכרון בלבד).
+`renderView` נקשר ל-`_cards` חי (ui לכל כרטיס-שפה; `_recLang` קובע איזה כרטיס משחזר
+מצב-הקלטה בחזרה לעמוד); `beforeunload` מזהיר לפני סגירת טאב (הצ'אנקים בזיכרון בלבד).
 
 **גיבוי אוטומטי (`js/features/autobackup/index.js`, `window.AutoBackup`):** צילום יומי מלא של
 `Store.get()` ל-IndexedDB משלו (`hamachberet-backups`), שמירת 14; שחזור = צילום-בטיחות ←
