@@ -331,9 +331,11 @@ Web Speech he-IL; טקסט סופי דרך `execCommand('insertText')` → שמ�
 מתחת לכפתור כי הכרטיסים גבוהים בעמוד), ו-`<details>` מתקפל כגיבוי למגע בנייד (אין hover).
 זהו הפתרון הנכון לתמלול סרטונים — המיקרופון קולט רמקולים גרוע וביטול-ההד מוחק את קול המחשב.
 הקלטת אנגלית: `transcribe.js` מתמלל עם `language='en'` (ענן ומקומי),
-מתרגם אוטומטית לעברית ושומר `memo.translation` — מקור ראשי endpoint ‎`/translate` של
-ה-Worker (Llama-3, דרך `VT_WORKER._translateViaWorker`), fallback ל-MyMemory דרך
-`window.PTR_ENGINE` של מתרגם ה-PDF (קריאה בלבד, אותו דפוס כמו VT_*). ייצוא Word של
+מתרגם אוטומטית לעברית ושומר `memo.translation` — מקור ראשי **Google Translate** (endpoint חינמי
+`gtx`, בלי מפתח, `_googleTranslateHe`), fallback ל-MyMemory דרך `window.PTR_ENGINE`.
+⚠️ **תוקן 15.7.2026:** קודם השתמש ב-endpoint ‎`/translate` של ה-Worker (Llama-3) — אבל Cloudflare
+**הוציאה את המודל משימוש ב-2026-05-30** (`5028: model deprecated`, HTTP 500) → כל תרגום נכשל
+(ו-MyMemory נגמרה מכסתו). הוחלף ב-Google gtx (אמין, נגיש CORS גם מ-localhost). ייצוא Word של
 הקלטת אנגלית = התרגום לעברית + המקור האנגלי (LTR) בהמשך המסמך; כפתור 🇬🇧 נוסף מייצא
 מקור-בלבד; תרגום חסר מושלם על-פי-דרישה בלחיצת 📄. הקלטה אחת פעילה בכל רגע (שתי השפות).
 ⚠️ **הקלטה רציפה (יולי 2026, commit `65107d3`):** ההקלטה חיה ברמת המודול וממשיכה
