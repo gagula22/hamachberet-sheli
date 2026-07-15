@@ -357,6 +357,7 @@ Web Speech he-IL; טקסט סופי דרך `execCommand('insertText')` → שמ�
 מצב-הקלטה בחזרה לעמוד); `beforeunload` מזהיר לפני סגירת טאב (הצ'אנקים בזיכרון בלבד).
 לכידת-טאב היא הקלטה רגילה לכל דבר (אותו `_mr`/pill/timer) — נשמרת ל-IndexedDB, מתומללת
 ומיוצאת בדיוק כמו הקלטת מיקרופון.
+**גיבוי-תמלולים לענן (`backup.js`, `window.VoiceBackup`, ‏15.7.2026):** ידני בלבד — כפתור ☁️ פר-הקלטה (⚠️ החלטת משתמש: אסור להפוך לאוטומטי). מגבה טקסט-בלבד למסמך Firestore יחיד `users/{uid}/voice-transcripts/{id}` בכתיבה ישירה — **מחוץ ל-Store/סכימה בכוונה** (כמו attachments של P-12: אין מפתח סכימה, אין אסרציית sync; הכלל הרקורסיבי מכסה). שומר-גודל: >900KB ⇒ מוותרים על transcriptChunks. `memo.backedUpAt` = סטטוס מקומי; תמלול-מחדש מוחק אותו. set() מאושר-שרת ⇒ "גובה ואומת" אמיתי.
 
 **גיבוי אוטומטי (`js/features/autobackup/index.js`, `window.AutoBackup`):** צילום יומי מלא של
 `Store.get()` ל-IndexedDB משלו (`hamachberet-backups`), שמירת 14; שחזור = צילום-בטיחות ←

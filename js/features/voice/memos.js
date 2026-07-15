@@ -280,6 +280,43 @@
       style: (isEn && hasT) ? '' : 'display:none',
       onClick: () => { if (window.VoiceTranscribe) VoiceTranscribe.openInWord(memo, { original: true }); }
     }, '🇬🇧');
+    // ── גיבוי-תמלול לענן — ידני בלבד (החלטת המשתמש: שום גיבוי אוטומטי) ────
+    // מגבה את הטקסט (תמלול+תרגום+חותמות) ל-Firestore דרך window.VoiceBackup;
+    // האודיו נשאר מקומי. מוצג רק כשיש תמלול. ✓ = כבר גובה (תמלול-מחדש מאפס).
+    const hasBk = !!memo.backedUpAt;
+    const backupBtn = el('button', {
+      class: 'vm-act vm-backup' + (hasBk ? ' done' : ''),
+      title: hasBk
+        ? 'התמלול גובה בענן ✓ (' + new Date(memo.backedUpAt).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' }) + ') — לחץ לגיבוי מחדש'
+        : 'גיבוי התמלול לענן (הטקסט בלבד, לא האודיו) — ידני, בלחיצה',
+      style: hasT ? '' : 'display:none'
+    }, hasBk ? '☁️✓' : '☁️');
+    backupBtn.addEventListener('click', () => {
+      if (backupBtn.classList.contains('busy')) return;
+      if (!window.VoiceBackup) { App.toast('מודול הגיבוי לא נטען — רענן את הדף'); return; }
+      if (!VoiceBackup.enabled()) { App.toast('לא מחובר לענן — התחבר קודם (איזור המשתמש בסרגל)'); return; }
+      backupBtn.classList.add('busy');
+      backupBtn.textContent = '⏳';
+      const setStatus = rowStatus(backupBtn);
+      setStatus('מגבה את התמלול לענן…');
+      VoiceBackup.backup(memo).then(ts => {
+        memo.backedUpAt = ts;
+        return putMemo(memo).then(() => {
+          App.toast('☁️ התמלול גובה ואומת בענן');
+          ui.refresh();
+        });
+      }).catch(e => {
+        backupBtn.classList.remove('busy');
+        backupBtn.textContent = hasBk ? '☁️✓' : '☁️';
+        App.toast('הגיבוי נכשל: ' + (e && e.message || ''));
+        setStatus('❌ ' + (e && e.message || 'הגיבוי נכשל'));
+        setTimeout(() => {
+          const row = backupBtn.closest('.vm-row');
+          const status = row && row.querySelector('.vm-status');
+          if (status && status.textContent.startsWith('❌')) status.remove();
+        }, 6000);
+      });
+    });
     transBtn.addEventListener('click', () => {
       if (!window.VoiceTranscribe) { App.toast('מנוע התמלול לא נטען'); return; }
       if (transBtn.classList.contains('busy')) return;
@@ -294,6 +331,7 @@
         memo.engine = res.engine;
         if (res.translation) memo.translation = res.translation;
         else delete memo.translation;   // תרגום ישן לא תואם לתמלול החדש
+        delete memo.backedUpAt;         // הגיבוי בענן שייך לתמלול הקודם — הכפתור חוזר ל"לא גובה"
         return putMemo(memo).then(() => {
           if (isEn && !memo.translation) {
             App.toast('📝 התמלול מוכן; התרגום נכשל — לחץ 📄 לנסות שוב');
@@ -324,6 +362,7 @@
       transBtn,
       wordBtn,
       wordEnBtn,
+      backupBtn,
       el('button', { class: 'vm-act', title: 'הורדה', onClick: () => download(memo) }, '⬇'),
       el('button', { class: 'vm-act vm-del', title: 'מחיקה', onClick: () => {
         if (confirm('למחוק את ההקלטה?')) {
