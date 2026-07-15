@@ -335,15 +335,21 @@ Web Speech he-IL; טקסט סופי דרך `execCommand('insertText')` → שמ�
 `gtx`, בלי מפתח, `_googleTranslateHe`), fallback ל-MyMemory דרך `window.PTR_ENGINE`.
 ⚠️ **תוקן 15.7.2026:** קודם השתמש ב-endpoint ‎`/translate` של ה-Worker (Llama-3) — אבל Cloudflare
 **הוציאה את המודל משימוש ב-2026-05-30** (`5028: model deprecated`, HTTP 500) → כל תרגום נכשל
-(ו-MyMemory נגמרה מכסתו). הוחלף ב-Google gtx (אמין, נגיש CORS גם מ-localhost). ייצוא Word של
+(ו-MyMemory נגמרה מכסתו). הוחלף ב-Google gtx (אמין, נגיש CORS גם מ-localhost); ב-15.7 הוחל אותו תיקון גם על כלי-הווידאו (P-44,
+`VT_WORKER._translateText`, sl=auto לכל שפת-מקור). ייצוא Word של
 הקלטת אנגלית = התרגום לעברית + המקור האנגלי (LTR) בהמשך המסמך; כפתור 🇬🇧 נוסף מייצא
 מקור-בלבד; תרגום חסר מושלם על-פי-דרישה בלחיצת 📄. הקלטה אחת פעילה בכל רגע (שתי השפות).
-**תמלול-ענן — עמידות (transcribe v=9):** `cloudChunkedParallel` חותך ל-90ש, 3 lanes במקביל, עם
-**ניסיון-חוזר per-נתח** (`CLOUD_RETRIES=3`, backoff 2.5/5ש) ו-**המשך-חלקי** (נתח שנכשל סופית מדולג,
-`missing` מדווח; רק כשל-כולל זורק→מקומי). מאפשר הקלטות ארוכות (3ש≈120 נתחים) אמינות. **פענוח חסכוני (transcribe v=10):** הקול מפענח
-דרך `_decodeLean` (שלו) שמחזיר **view** אל ה-AudioBuffer במקום ההעתקה המלאה ש-`VT_AUDIO._decodeAnyFileToPcm`
-(בעלות P-44) עושה → שיא זיכרון יורד מ-~1.5GB ל-~690MB ל-3ש; decodeAudioData שנכשל → נפילה אוטומטית
-ל-VT_AUDIO. ⚠️ **SoC:** לא נוגעים בקובץ audio.js של P-44 — הפתרון כולו בתוך transcribe.js.
+**תמלול-ענן — המנוע המשותף (15.7.2026, transcribe v=11 · worker-api v=27):** מנוע-הנתחים המקבילי
+(נתחי 90ש, 3 lanes, ניסיון-חוזר per-נתח עם backoff ‏2.5/5ש, המשך-חלקי — נתח שנכשל סופית מדולג,
+`missing/total` מדווח; רק כשל-כולל זורק→מקומי) נכתב במקור בקול ו**הועבר ל-`VT_WORKER`** (בעלות P-44):
+`_runChunkLanes` (גנרי) + `_transcribeViaWorkerParallel` (PCM). הקול (`cloudChunkedParallel`) וכלי-הווידאו
+(נתיב PCM **ונתיב ה-MP3** ב-mp3.js) צורכים את אותו קוד — אין יותר שני עותקים. גם `VT_WORKER.WORKER_URL`
+וקוד ה-Whisper-המקומי (`LOCAL_WHISPER_SRC`, עם `useBrowserCache:true` — המודל ~150MB יורד פעם אחת)
+הם מקורות-אמת יחידים שם. ⚠️ אל תחזירו לולאת-נתחים טורית בלי retry ואל תשכפלו שוב את הכתובת/ה-src.
+**פענוח חסכוני:** `_decodeLean` בקול (v=10) מחזיר **view** אל ה-AudioBuffer במקום העתקה מלאה →
+שיא ~1.5GB→~690MB ל-3ש; ומאז 15.7 (`fa52be7`) גם `VT_AUDIO._decodeAnyFileToPcm` עצמו רזה ל-mono
+(מחזיר `_buf` + view; סטריאו עדיין downmix-עותק). ⚠️ **מלכודת:** view אסור ב-transfer ל-Web-Worker —
+מי שמעביר buffer חייב לוודא עותק (הנתיב המקומי בכלי מעתיק כשאין חיתוך; חיתוך/slice = כבר עותק).
 ⚠️ **הקלטה רציפה (יולי 2026, commit `65107d3`):** ההקלטה חיה ברמת המודול וממשיכה
 במעבר עמוד/חלון עד עצירה מפורשת — `hashchange` עוצר **ניגון בלבד**; אסור להחזיר לשם
 `stopRec()`. בזמן הקלטה מוצג שלט צף (`.vm-rec-pill`, בכל עמוד) עם טיימר + עצירה;
