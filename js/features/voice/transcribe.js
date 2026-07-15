@@ -3,27 +3,26 @@
   // ─────────────────────────────────────────────────────────────────────────
   // תמלול הערות קול — חלק מאחריות הקול (window.VoiceTranscribe).
   // שימוש חוזר מלא בתשתית כלי "תמלול וידאו" (קריאה בלבד ל-namespaces שלו):
-  //   • VT_AUDIO._decodeAnyFileToPcm — פענוח ה-webm/opus ל-PCM 16kHz
-  //   • VT_WORKER._transcribeViaWorkerChunked — Whisper-Large-v3-Turbo בענן
-  //     (ה-Cloudflare Worker הפרטי של המשתמש — אותו יעד שכלי התמלול משתמש בו)
+  //   • VT_AUDIO._decodeAnyFileToPcm — פענוח ה-webm/opus ל-PCM 16kHz (fallback)
+  //   • VT_WORKER._transcribeViaWorkerParallel — Whisper-Large-v3-Turbo בענן,
+  //     נתחים מקביליים + retry (המנוע המשותף; במקור נכתב כאן והועבר לשם)
+  //   • VT_WORKER.WORKER_URL / LOCAL_WHISPER_SRC — מקורות-אמת יחידים
   //   • VT_UTILS._buildTimestampedHtml — פסקאות עם חותמות זמן למסמך
   // הפלט נשמר על רשומת ההקלטה (memos.js שומר ל-IndexedDB) ומיוצא כ-Word
   // בדיוק בתבנית ה-.doc של שאר האתר (application/msword, RTL, הורדה אוטומטית).
   // אם מודולי הכלי לא נטענו — הכפתור פשוט יציג שגיאה ידידותית, בלי לשבור כלום.
   // ─────────────────────────────────────────────────────────────────────────
 
-  // אותו Worker פרטי שמוגדר בכלי התמלול (js/views/tools/video-transcriber/index.js)
-  var WORKER_URL = 'https://broad-hall-729c.gagula22.workers.dev';
-
   // סדר יעדים לענן: על localhost מנסים קודם את הפרוקסי המקומי (server.py
   // מעביר לענן שרת-אל-שרת — עוקף את חסימת ה-CORS של ה-Worker), ואז את
   // ה-Worker ישירות (יעבוד כשהאתר ירוץ על github.io). נכשלו שניהם → מקומי.
+  // כתובת ה-Worker נקראת מ-VT_WORKER (מקור-אמת יחיד) בזמן-ריצה.
   function cloudBases() {
     var bases = [];
     if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
       bases.push(location.origin + '/vt-proxy');
     }
-    bases.push(WORKER_URL);
+    bases.push(window.VT_WORKER.WORKER_URL);
     return bases;
   }
 
@@ -37,36 +36,12 @@
   // ── Whisper מקומי (fallback) ─────────────────────────────────────────────
   // ה-Worker בענן מקבל בקשות רק מ-gagula22.github.io (CORS), ולכן מהעותק
   // המקומי (localhost) הקריאה נחסמת ע"י הדפדפן. כשזה קורה עוברים אוטומטית
-  // ל-Whisper שרץ בדפדפן בתוך Web Worker — אותו דפוס בדיוק כמו המצב המקומי
-  // של כלי "תמלול וידאו" (Transformers.js, מודל ~150MB בהורדה חד-פעמית).
-  var WHISPER_SRC = '\n' +
-    'let _pipe = null;\n' +
-    'self.onmessage = async function (e) {\n' +
-    '  var d = e.data;\n' +
-    '  if (d.type === "init") {\n' +
-    '    try {\n' +
-    '      var mod = await import("https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2");\n' +
-    '      mod.env.allowLocalModels = false;\n' +
-    '      mod.env.useBrowserCache = false;\n' +
-    '      _pipe = await mod.pipeline("automatic-speech-recognition", d.model || "Xenova/whisper-small", {\n' +
-    '        quantized: true,\n' +
-    '        progress_callback: function (p) { self.postMessage({ type: "progress", status: p.status, progress: p.progress || 0 }); }\n' +
-    '      });\n' +
-    '      self.postMessage({ type: "ready" });\n' +
-    '    } catch (err) { self.postMessage({ type: "error", message: err.message }); }\n' +
-    '  } else if (d.type === "transcribe") {\n' +
-    '    try {\n' +
-    '      var result = await _pipe({ data: d.audio, sampling_rate: 16000 },\n' +
-    '        { language: d.language || "hebrew", task: "transcribe", chunk_length_s: 30, stride_length_s: 5, return_timestamps: true });\n' +
-    '      self.postMessage({ type: "result", text: result.text, chunks: result.chunks || [] });\n' +
-    '    } catch (err) { self.postMessage({ type: "error", message: err.message }); }\n' +
-    '  }\n' +
-    '};\n';
-
+  // ל-Whisper שרץ בדפדפן בתוך Web Worker. קוד ה-worker עצמו — עותק יחיד
+  // משותף ב-VT_WORKER.LOCAL_WHISPER_SRC (לפני כן שוכפל כאן כמעט אחד-לאחד).
   var _lw = null, _lwReady = null;
   function localWhisper(pcm, onProgress, langName) {
     if (!_lwReady) {
-      var blob = new Blob([WHISPER_SRC], { type: 'text/javascript' });
+      var blob = new Blob([window.VT_WORKER.LOCAL_WHISPER_SRC], { type: 'text/javascript' });
       _lw = new Worker(URL.createObjectURL(blob));
       _lwReady = new Promise(function (resolve, reject) {
         _lw._onReady = { resolve: resolve, reject: reject };
@@ -133,77 +108,17 @@
   }
 
   // ── תמלול ענן מקבילי ─────────────────────────────────────────────────────
-  // נמדד: נתח 90 שניות ≈ 5 שניות הלוך-חזור. בעיבוד טורי שעה וחצי ≈ 5+ דקות;
-  // 3 נתחים במקביל חופפים העלאה עם תמלול ומורידים לאזור 2-3 דקות.
-  // משתמש ב-_transcribeViaWorker פר-נתח (לא בלולאה הטורית של הכלי) ומרכיב
-  // את התוצאות לפי הסדר עם היסט חותמות-זמן.
-  // עמידות להקלטות ארוכות (3 שעות ≈ 120 נתחים): (1) **ניסיון חוזר per-נתח** —
-  // טעות רגעית של Cloudflare (rate-limit) לא מפילה נתח; (2) **המשך-חלקי** — נתח
-  // שנכשל אחרי כל הניסיונות מדולג (לא מפיל את השאר), כך שמתקבל 119/120 במקום כלום.
-  // רק אם **כל** הנתחים נכשלו זורקים → הקורא נופל לתמלול מקומי.
-  var CLOUD_CHUNK_SEC = 90, CLOUD_CONCURRENCY = 3, CLOUD_RETRIES = 3;
+  // המנוע (נתחי 90ש׳, 3 lanes, retry עם backoff, המשך-חלקי — 119/120 במקום
+  // כלום) נכתב במקור כאן והועבר ל-VT_WORKER._transcribeViaWorkerParallel כדי
+  // שגם כלי-הווידאו ייהנה ממנו. כאן נשארת רק ההאצלה + תווית המנוע לתצוגה.
+  // זריקה רק אם **כל** הנתחים נכשלו → הקורא נופל לתמלול מקומי.
   async function cloudChunkedParallel(base, pcm, sampleRate, onProgress, lang) {
     var d = deps();
-    var totalSec = pcm.length / sampleRate;
-    var bounds = [];
-    for (var s = 0; s < totalSec; s += CLOUD_CHUNK_SEC) {
-      bounds.push([s, Math.min(totalSec, s + CLOUD_CHUNK_SEC)]);
-    }
-    if (!bounds.length) bounds.push([0, totalSec]);
-
-    if (onProgress) onProgress('מתמלל בענן… 0/' + bounds.length);
-    var results = new Array(bounds.length);
-    var next = 0, done = 0, failed = 0;
-    function report() {
-      if (onProgress) onProgress('מתמלל בענן… ' + done + '/' + bounds.length +
-        ' (' + Math.round((done / bounds.length) * 100) + '%)' +
-        (failed ? ' · ⚠️ ' + failed + ' נתחים נכשלו' : ''));
-    }
-    async function lane() {
-      while (next < bounds.length) {
-        var i = next++;
-        var b = bounds[i];
-        var wav = d.A._pcmToWavBytes(d.A._slicePcmSec(pcm, b[0], b[1], sampleRate), sampleRate);
-        var ok = false, lastErr = null;
-        for (var attempt = 1; attempt <= CLOUD_RETRIES && !ok; attempt++) {
-          try {
-            var r = await d.W._transcribeViaWorker(base, wav, lang || 'he', null);
-            results[i] = { r: r, off: b[0] };
-            ok = true;
-          } catch (err) {
-            lastErr = err;
-            // המתנה מדורגת בין ניסיונות (2.5ש, 5ש) — נותן ל-rate-limit להתאושש
-            if (attempt < CLOUD_RETRIES) await new Promise(function (res) { setTimeout(res, attempt * 2500); });
-          }
-        }
-        done++;
-        if (!ok) {
-          failed++;
-          console.warn('[voice-transcribe] chunk ' + (i + 1) + '/' + bounds.length +
-            ' failed after ' + CLOUD_RETRIES + ' tries:', lastErr && lastErr.message);
-        }
-        report();
-      }
-    }
-    var lanes = [];
-    for (var k = 0; k < Math.min(CLOUD_CONCURRENCY, bounds.length); k++) lanes.push(lane());
-    await Promise.all(lanes);
-
-    // כל הנתחים נכשלו → זרוק כדי שהקורא ייפול לתמלול מקומי
-    if (failed === bounds.length) throw new Error('כל ' + bounds.length + ' נתחי הענן נכשלו');
-
-    var text = [], chunks = [];
-    results.forEach(function (x) {
-      if (!x) return;
-      text.push((x.r.text || '').trim());
-      (x.r.chunks || []).forEach(function (c) {
-        var ts = c.timestamp || [0, 0];
-        chunks.push({ timestamp: [(ts[0] || 0) + x.off, (ts[1] || ts[0] || 0) + x.off], text: c.text });
-      });
-    });
+    var r = await d.W._transcribeViaWorkerParallel(base, pcm, sampleRate, lang || 'he', onProgress);
     var engine = 'ענן · Whisper-Large-v3';
-    if (failed) engine += ' · ' + failed + '/' + bounds.length + ' נתחים חסרים';
-    return { text: text.filter(Boolean).join(' '), chunks: chunks, engine: engine, missing: failed, total: bounds.length };
+    if (r.missing) engine += ' · ' + r.missing + '/' + r.total + ' נתחים חסרים';
+    r.engine = engine;
+    return r;
   }
 
   // ── תרגום אנגלית→עברית ───────────────────────────────────────────────────

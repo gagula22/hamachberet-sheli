@@ -244,7 +244,7 @@
     const transBtn = el('button', {
       class: 'vm-act vm-trans' + (hasT ? ' done' : ''),
       title: hasT ? 'תומלל ✓ — לחץ לתמלול מחדש'
-        : (isEn ? 'תמלל באנגלית ותרגם לעברית (Whisper + Llama-3)' : 'תמלל לטקסט (Whisper)')
+        : (isEn ? 'תמלל באנגלית ותרגם לעברית (Whisper + Google Translate)' : 'תמלל לטקסט (Whisper)')
     }, '📝');
     const wordBtn = el('button', {
       class: 'vm-act vm-word',
@@ -308,7 +308,7 @@
         setStatus('❌ ' + (e && e.message || 'התמלול נכשל'));
         transBtn.classList.remove('busy');
         transBtn.textContent = '📝';
-        transBtn.title = isEn ? 'תמלל באנגלית ותרגם לעברית (Whisper + Llama-3)' : 'תמלל לטקסט (Whisper)';
+        transBtn.title = isEn ? 'תמלל באנגלית ותרגם לעברית (Whisper + Google Translate)' : 'תמלל לטקסט (Whisper)';
         const row = transBtn.closest('.vm-row');
         const status = row && row.querySelector('.vm-status');
         setTimeout(() => { if (status && status.textContent.startsWith('❌')) status.remove(); }, 6000);
