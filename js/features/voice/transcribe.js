@@ -179,10 +179,10 @@
 
   // ── תרגום אנגלית→עברית ───────────────────────────────────────────────────
   // עבור הקלטות באנגלית (memo.lang==='en'): ה-Word המיוצא הוא התרגום לעברית.
-  // מקור ראשי: endpoint ‎/translate של אותו Worker פרטי (Llama-3, איכות גבוהה),
-  // דרך VT_WORKER._translateViaWorker (קריאה בלבד — אותו דפוס כמו התמלול).
-  // fallback: מנוע MyMemory של מתרגם ה-PDF (window.PTR_ENGINE, קריאה בלבד) —
-  // עובד גם מ-localhost (ה-Worker חסום שם ב-CORS). נכשלו שניהם → שגיאה ידידותית.
+  // מקור ראשי: Google Translate (endpoint חינמי gtx, בלי מפתח) — אמין, איכותי,
+  // מכסות נדיבות, נגיש CORS גם מ-localhost. fallback: MyMemory דרך window.PTR_ENGINE.
+  // ⚠️ הוסר ה-endpoint ‎/translate של ה-Worker: המודל (Llama-3) הוצא משימוש ב-Cloudflare
+  // ב-2026-05-30 (‎"5028: model deprecated"‎, HTTP 500) — לכן התרגום נכשל. Google מחליף אותו.
   function _splitForTranslate(text, MAX) {
     MAX = MAX || 1800;
     text = String(text || '').trim();
@@ -209,37 +209,47 @@
     return parts;
   }
 
+  // Google Translate דרך ה-endpoint החינמי gtx (בלי מפתח). מחזיר עברית או null.
+  // מפצל את התשובה למקטעי-משפט (data[0]) ומאחד. 'iw' = קוד עברית הישן של גוגל (עובד יציב).
+  async function _googleTranslateHe(part) {
+    var url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=iw&dt=t&q=' + encodeURIComponent(part);
+    var r = await fetch(url);
+    if (!r.ok) throw new Error('google ' + r.status);
+    var data = await r.json();
+    var segs = (data && data[0]) || [];
+    var he = segs.map(function (s) { return (s && s[0]) || ''; }).join('').trim();
+    return he || null;
+  }
+
   async function translateToHebrew(text, onProgress) {
     text = String(text || '').trim();
     if (!text) return '';
     var parts = _splitForTranslate(text);
     var out = [];
-    var workerOk = true;                       // Worker נכשל פעם אחת → MyMemory לשאר
-    var bases = cloudBases();
+    var googleOk = true;                        // Google נכשל פעם אחת → MyMemory לשאר
     for (var i = 0; i < parts.length; i++) {
       if (onProgress) onProgress('מתרגם לעברית… ' + (i + 1) + '/' + parts.length);
       var t = null;
-      if (workerOk && navigator.onLine && window.VT_WORKER && VT_WORKER._translateViaWorker) {
-        for (var b = 0; b < bases.length && t === null; b++) {
-          try {
-            var r = await VT_WORKER._translateViaWorker(bases[b], parts[i], 'he', null);
-            t = (r.translation || '').trim() || null;
-          } catch (we) {
-            console.warn('[voice-translate] worker via ' + bases[b] + ' failed:', we.message);
-          }
+      // מקור ראשי: Google Translate (אמין, איכותי)
+      if (googleOk && navigator.onLine) {
+        try {
+          t = await _googleTranslateHe(parts[i]);
+        } catch (ge) {
+          console.warn('[voice-translate] google failed:', ge.message);
+          googleOk = false;                     // לא לבזבז round-trip על כל שאר המקטעים
         }
-        if (t === null) workerOk = false;
       }
+      // fallback: MyMemory דרך מנוע מתרגם ה-PDF (מכסה יומית קטנה, לכן משני)
       if (t === null && window.PTR_ENGINE && PTR_ENGINE._translatePageText) {
         try {
           var m = (await PTR_ENGINE._translatePageText(parts[i]) || '').trim();
-          // MyMemory מחזיר את המקור כשנכשל — אנגלית שחוזרת זהה = כישלון
-          if (m && m !== parts[i]) t = m;
+          // MyMemory מחזיר את המקור/אזהרה כשנכשל — טקסט זהה למקור = כישלון
+          if (m && m !== parts[i] && m.indexOf('MYMEMORY') === -1 && m.indexOf('QUERY LIMIT') === -1) t = m;
         } catch (me) {
           console.warn('[voice-translate] MyMemory failed:', me.message);
         }
       }
-      if (t === null) throw new Error('התרגום לעברית נכשל — הענן ושירות הגיבוי לא נגישים');
+      if (t === null) throw new Error('התרגום לעברית נכשל — שירותי התרגום אינם נגישים כרגע');
       out.push(t);
     }
     return out.join('\n\n');
