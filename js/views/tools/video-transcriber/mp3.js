@@ -218,68 +218,53 @@
       }
     }
 
-    const allText = [];
-    const allChunks = [];
-    let _firstLang = null;
-    for (let i = 0; i < boundaries.length; i++) {
+    // Parallel lanes + per-chunk retry + partial-continue (shared engine in
+    // worker-api.js — the same one the PCM path and the voice memos use).
+    // ⚠️ Replaced the serial loop: it paced 800ms between chunks and a single
+    // failed chunk (after its 3 tries) aborted the WHOLE run. Now a dead chunk
+    // is skipped (result carries missing/total) and only all-failed throws.
+    const totalMB = ((sliceEnd - sliceStart) / 1024 / 1024).toFixed(1);
+    if (onProgress) onProgress('מתמלל ' + totalMB + ' MB בענן… 0/' + boundaries.length);
+    const run = await window.VT_WORKER._runChunkLanes(boundaries.length, function (i) {
       const cs = boundaries[i][0], ce = boundaries[i][1];
       const chunkBytes = mp3meta.bytes.buffer.slice(cs, ce);
       const chunkStartSec = startSec + (cs - sliceStart) / mp3meta.bytesPerSec;
-      const chunkSizeMB = (chunkBytes.byteLength / 1024 / 1024).toFixed(1);
-      const partTag = boundaries.length === 1
-        ? '(' + chunkSizeMB + ' MB)'
-        : 'חלק ' + (i + 1) + '/' + boundaries.length + ' (' + chunkSizeMB + ' MB · התקדמות ~' + Math.round(((i) / boundaries.length) * 100) + '%)';
+      // onProgress פר-נתח = null בכוונה: 3 lanes במקביל מערבבים הודעות; הדיווח דרך המונה
+      return _transcribeViaWorker(workerUrl, chunkBytes, language, null)
+        .then(function (r) { return { r: r, off: chunkStartSec }; });
+    }, function (done, count, failed) {
+      if (onProgress) onProgress('מתמלל בענן… ' + done + '/' + count +
+        ' (' + Math.round((done / count) * 100) + '%)' +
+        (failed ? ' · ⚠️ ' + failed + ' נתחים נכשלו' : ''));
+    });
+    if (run.failed === boundaries.length) {
+      throw new Error('כל ' + boundaries.length + ' נתחי הענן נכשלו' +
+        ' (ייתכן עומס/CPU-limit רגעי ב-Cloudflare — נסה שוב בעוד דקה)');
+    }
 
-      // Up to 3 attempts per chunk with backoff — Cloudflare's free tier
-      // CPU/rate limits sometimes flake under load, but a brief pause and
-      // a retry usually clears it.
-      let result = null;
-      let lastErr = null;
-      for (let attempt = 1; attempt <= 3; attempt++) {
-        const tryTag = attempt === 1 ? partTag : partTag + ' · ניסיון ' + attempt + '/3';
-        if (onProgress) onProgress(tryTag + ' · שולח לענן…');
-        try {
-          result = await _transcribeViaWorker(workerUrl, chunkBytes, language, function(msg){
-            if (onProgress) onProgress(tryTag + ' · ' + msg);
-          });
-          break;
-        } catch (chunkErr) {
-          lastErr = chunkErr;
-          if (attempt < 3) {
-            if (onProgress) onProgress(partTag + ' · ⚠️ נכשל (' + chunkErr.message + ') — ממתין ' + (attempt * 3) + ' שנ׳ ומנסה שוב…');
-            await new Promise(function(r){ setTimeout(r, attempt * 3000); });
-          }
-        }
-      }
-      if (!result) {
-        var hint = (lastErr && lastErr.message === 'Failed to fetch')
-          ? ' (3 ניסיונות נכשלו · Cloudflare Worker מגיע ל-CPU limit · עדכון ל-Worker v4 יפתור סופית)'
-          : '';
-        throw new Error('כשל בחלק ' + (i + 1) + '/' + boundaries.length + ' אחרי 3 ניסיונות: ' + (lastErr ? lastErr.message : 'unknown') + hint);
-      }
-      allText.push((result.text || '').trim());
-      if (Array.isArray(result.chunks)) {
-        for (let j = 0; j < result.chunks.length; j++) {
-          const c = result.chunks[j];
+    const allText = [];
+    const allChunks = [];
+    let _firstLang = null;
+    run.results.forEach(function (x) {
+      if (!x) return;
+      if (_firstLang === null && x.r.detectedLanguage) _firstLang = x.r.detectedLanguage;
+      allText.push((x.r.text || '').trim());
+      if (Array.isArray(x.r.chunks)) {
+        for (let j = 0; j < x.r.chunks.length; j++) {
+          const c = x.r.chunks[j];
           allChunks.push({
-            timestamp: [c.timestamp[0] + chunkStartSec, c.timestamp[1] + chunkStartSec],
+            timestamp: [c.timestamp[0] + x.off, c.timestamp[1] + x.off],
             text: c.text
           });
         }
       }
-      // Capture detected language from the first chunk
-      if (i === 0 && result.detectedLanguage) {
-        _firstLang = result.detectedLanguage;
-      }
-      // Brief pacing between chunks to avoid edge rate-limit
-      if (i < boundaries.length - 1) {
-        await new Promise(function(r){ setTimeout(r, 800); });
-      }
-    }
+    });
     return {
       text: allText.filter(Boolean).join(' '),
       chunks: allChunks,
-      detectedLanguage: _firstLang
+      detectedLanguage: _firstLang,
+      missing: run.failed,
+      total: boundaries.length
     };
   }
 

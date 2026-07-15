@@ -1,5 +1,13 @@
 (function () {
   // VT audio decode/PCM. Extracted from index.js.
+  // Memory-lean decode: for MONO sources the returned pcm is a *view* onto the
+  // AudioBuffer's channel data (no full-PCM copy) — peak RAM for a 3-hour file
+  // drops from ~1.5GB to ~690MB (the AudioBuffer alone). The AudioBuffer is
+  // kept alive via `_buf` on the result so the view stays valid. Stereo still
+  // downmixes (a copy is unavoidable there).
+  // ⚠️ A view's .buffer belongs to the AudioBuffer — callers that TRANSFER the
+  // buffer to a Web Worker (local Whisper) must copy first when `_buf` is set;
+  // slicing (`_slicePcmSec`/`.slice`) already copies, so the cloud path is safe.
   async function _decodeAnyFileToPcm(file, onProgress) {
     const ab = await file.arrayBuffer();
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
@@ -13,10 +21,10 @@
         pcm = new Float32Array(c0.length);
         for (let i = 0; i < c0.length; i++) pcm[i] = (c0[i] + c1[i]) * 0.5;
       } else {
-        pcm = new Float32Array(decoded.getChannelData(0));
+        pcm = decoded.getChannelData(0);   // VIEW — zero copy (see note above)
       }
       audioCtx.close();
-      return { pcm: pcm, sampleRate: 16000, durationSec: pcm.length / 16000 };
+      return { pcm: pcm, sampleRate: 16000, durationSec: pcm.length / 16000, _buf: ch > 1 ? null : decoded };
     } catch (decodeErr) {
       try { audioCtx.close(); } catch (_) {}
       // Fallback for video / unusual containers

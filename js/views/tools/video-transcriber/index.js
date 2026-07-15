@@ -5,45 +5,11 @@
   var _decodeAnyFileToPcm=_A._decodeAnyFileToPcm,_decodeViaVideoElement=_A._decodeViaVideoElement,_slicePcmSec=_A._slicePcmSec,_pcmToWavBytes=_A._pcmToWavBytes;
   var _saveBlobViaPicker=_S._saveBlobViaPicker,_saveDocViaPicker=_S._saveDocViaPicker,_saveWavViaPicker=_S._saveWavViaPicker,_saveMp3ViaPicker=_S._saveMp3ViaPicker,_saveVideoViaPicker=_S._saveVideoViaPicker;
   var _loadFfmpeg=_F._loadFfmpeg,_mergeVideos=_F._mergeVideos,_cutVideoClip=_F._cutVideoClip,_cutVideoClipLegacy=_F._cutVideoClipLegacy,_explainErr=_F._explainErr;
-  var _transcribeViaWorker=_W._transcribeViaWorker,_translateViaWorker=_W._translateViaWorker,_transcribeViaWorkerChunked=_W._transcribeViaWorkerChunked,_pingWorker=_W._pingWorker,_preflightWorker=_W._preflightWorker,_transcribeYouTubeViaWorker=_W._transcribeYouTubeViaWorker;
+  var _transcribeViaWorker=_W._transcribeViaWorker,_translateText=_W._translateText,_transcribeViaWorkerParallel=_W._transcribeViaWorkerParallel,_pingWorker=_W._pingWorker,_preflightWorker=_W._preflightWorker,_transcribeYouTubeViaWorker=_W._transcribeYouTubeViaWorker;
   var _readMp3Metadata=_M._readMp3Metadata,_sliceMp3ByTimeBytes=_M._sliceMp3ByTimeBytes,_transcribeMp3ByteSliced=_M._transcribeMp3ByteSliced;
   var _getVtToast=_T._getVtToast,_vtToastHtml=_T._vtToastHtml,_vtShowProgress=_T._vtShowProgress,_vtShowDone=_T._vtShowDone,_vtShowError=_T._vtShowError;
-  const WHISPER_WORKER_SRC = `
-let _pipe = null;
-self.onmessage = async function(e) {
-  var d = e.data;
-  if (d.type === 'init') {
-    try {
-      var modelName = d.model || 'Xenova/whisper-small';
-      var mod = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2');
-      var pipeline = mod.pipeline, env = mod.env;
-      env.allowLocalModels = false;
-      env.useBrowserCache  = false;
-      _pipe = await pipeline('automatic-speech-recognition', modelName, {
-        quantized: true,
-        progress_callback: function(p) {
-          self.postMessage({ type: 'progress', status: p.status, progress: p.progress || 0 });
-        }
-      });
-      self.postMessage({ type: 'ready' });
-    } catch(err) {
-      self.postMessage({ type: 'error', message: err.message });
-    }
-  } else if (d.type === 'transcribe') {
-    try {
-      var result = await _pipe(
-        { data: d.audio, sampling_rate: 16000 },
-        { language: 'hebrew', task: 'transcribe',
-          chunk_length_s: 30, stride_length_s: 5,
-          return_timestamps: true }
-      );
-      self.postMessage({ type: 'result', text: result.text, chunks: result.chunks || [] });
-    } catch(err) {
-      self.postMessage({ type: 'error', message: err.message });
-    }
-  }
-};
-`;
+  // קוד ה-Whisper-worker המקומי עבר ל-worker-api.js (VT_WORKER.LOCAL_WHISPER_SRC)
+  // — עותק יחיד משותף גם להערות-הקול. אין יותר עותק מקומי כאן.
 
   var _ww        = null;   // Whisper Worker instance
   var _wwReady   = null;   // null | Promise<void>
@@ -60,7 +26,7 @@ self.onmessage = async function(e) {
     _ww = null; _wwReady = null; _wwDone = null;
     _wwModel = model;
 
-    var blob = new Blob([WHISPER_WORKER_SRC], { type: 'text/javascript' });
+    var blob = new Blob([window.VT_WORKER.LOCAL_WHISPER_SRC], { type: 'text/javascript' });
     _ww = new Worker(URL.createObjectURL(blob));
     _wwReady = new Promise(function(resolve, reject) {
       _ww.onmessage = function(e) {
@@ -103,8 +69,8 @@ self.onmessage = async function(e) {
   // "600" / "10:00" / "01:23:45" / "10m" / "1h2m3s" / "90s" → seconds
   function buildVideoTranscriber() {
     const MAX_FILE = 2 * 1024 * 1024 * 1024; // 2 GB
-    // Hard-coded Worker URL — transparent to the user, no UI field.
-    const WORKER_URL = 'https://broad-hall-729c.gagula22.workers.dev';
+    // Worker URL — single source of truth in worker-api.js (shared with voice)
+    const WORKER_URL = _W.WORKER_URL;
 
     const statusEl = App.el('p', { style: { margin: '10px 0 0', fontSize: '13px', color: 'var(--ink-mute)' } });
     const barTrack = App.el('div', { style: { marginTop: '10px', height: '5px', background: '#e8e8e8', borderRadius: '3px', overflow: 'hidden' } });
@@ -297,6 +263,9 @@ self.onmessage = async function(e) {
               detectedLang = cloudResult.detectedLanguage || null;
               offsetSec = 0;  // already absolute (helper added startSec to each chunk)
               docTitleSrc = 'תמלול · Cloudflare Workers AI · whisper-large-v3-turbo';
+              if (cloudResult.missing) {
+                docTitleSrc += ' · ⚠️ ' + cloudResult.missing + '/' + cloudResult.total + ' קטעים לא תומללו';
+              }
             } else if (file.size <= FAST_LIMIT_BYTES && noTrim && isCompressedAudio) {
               // ── FAST PATH for non-MP3 compressed audio ≤95MB
               statusEl.textContent = 'מעלה ' + sizeMB + ' MB ל-Cloudflare (ללא פענוח)…';
@@ -313,7 +282,8 @@ self.onmessage = async function(e) {
               offsetSec = 0;
               docTitleSrc = 'תמלול · Cloudflare Workers AI · whisper-large-v3-turbo';
             } else {
-            // ── CHUNKED PATH: decode → downsample → ~40-min WAV chunks ─────
+            // ── CHUNKED PATH: decode → downsample → 90-sec WAV chunks,
+            // 3 lanes in parallel with per-chunk retry (shared engine).
             // Used for non-MP3 large files, video files, or partial-range trims
             // on non-MP3 sources.
             statusEl.textContent = 'מפענח קובץ ' + sizeMB + ' MB בדפדפן…';
@@ -335,7 +305,7 @@ self.onmessage = async function(e) {
             statusEl.textContent = 'מתמלל בענן (' + totalMin + ' דקות אודיו)…';
             _vtShowProgress(20, 'מתמלל ' + totalMin + ' דקות בענן…');
 
-            const cloudResult = await _transcribeViaWorkerChunked(
+            const cloudResult = await _transcribeViaWorkerParallel(
               adv.workerUrl, pcm, decoded.sampleRate, 'auto',
               function(msg){
                 if (document.body.contains(statusEl)) statusEl.textContent = msg;
@@ -353,14 +323,17 @@ self.onmessage = async function(e) {
               });
             }
             docTitleSrc = 'תמלול · Cloudflare Workers AI · whisper-large-v3-turbo';
+            if (cloudResult.missing) {
+              docTitleSrc += ' · ⚠️ ' + cloudResult.missing + '/' + cloudResult.total + ' קטעים לא תומללו';
+            }
             }  // end of CHUNKED PATH
 
             // ── AUTO-TRANSLATE TO HEBREW if source language detected and != 'he' ──
             if (detectedLang && detectedLang !== 'he' && detectedLang !== 'iw' && text && text.trim().length > 0) {
-              statusEl.textContent = '🌍 מזוהה: ' + detectedLang + ' · מתרגם לעברית באמצעות Llama 3…';
+              statusEl.textContent = '🌍 מזוהה: ' + detectedLang + ' · מתרגם לעברית (Google Translate)…';
               _vtShowProgress(85, '🌍 מזוהה: ' + detectedLang + ' · מתרגם לעברית…');
               try {
-                const translateResult = await _translateViaWorker(adv.workerUrl, text, 'he', function(msg){
+                const translateResult = await _translateText(text, 'he', function(msg){
                   if (document.body.contains(statusEl)) statusEl.textContent = '🌍 ' + msg;
                   _vtShowProgress(90, '🌍 ' + msg);
                 });
@@ -370,7 +343,7 @@ self.onmessage = async function(e) {
                   targetLang: 'he',
                   targetName: translateResult.targetName || 'Hebrew'
                 };
-                docTitleSrc += ' · תרגום לעברית: Llama 3';
+                docTitleSrc += ' · תרגום לעברית: Google Translate';
               } catch (translateErr) {
                 console.warn('[transcribe] translation failed:', translateErr);
                 // Don't abort — just skip translation and proceed with original transcript
@@ -388,6 +361,12 @@ self.onmessage = async function(e) {
             let audio = decodedLocal.pcm;
 
             audio = _trimAudio(audio, adv.startSec, adv.endSec);
+            // lean decode may hand back a VIEW onto the AudioBuffer; transferring
+            // its .buffer to the Whisper worker needs an independent copy. Trimming
+            // already copied (slice) — copy only when it's still the raw view.
+            if (decodedLocal._buf && audio.buffer === decodedLocal.pcm.buffer) {
+              audio = new Float32Array(audio);
+            }
             const durationMin = Math.round(audio.length / 16000 / 60);
             offsetSec = adv.startSec || 0;
 
@@ -432,7 +411,7 @@ self.onmessage = async function(e) {
             translationBlock =
               '<hr style="border:none;border-top:2px solid #2d7a2d;margin:36px 0 18px;">' +
               '<h2 style="font-size:18px;margin:0 0 4px;direction:rtl;text-align:right;color:#2d7a2d;">🌍 תרגום לעברית</h2>' +
-              '<p style="font-size:11px;color:#999;margin:0 0 18px;direction:rtl;text-align:right;">תורגם אוטומטית מ' + _esc(langLabel) + ' באמצעות Llama 3 על Cloudflare Workers AI</p>' +
+              '<p style="font-size:11px;color:#999;margin:0 0 18px;direction:rtl;text-align:right;">תורגם אוטומטית מ' + _esc(langLabel) + ' באמצעות Google Translate</p>' +
               transParas;
           }
 

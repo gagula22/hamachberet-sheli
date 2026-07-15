@@ -2,6 +2,43 @@
   // VT Cloudflare Worker API. Extracted from index.js.
   var _U = window.VT_UTILS, _A = window.VT_AUDIO;
   var _arrayBufferToBase64 = _U._arrayBufferToBase64, _formatHMS = _U._formatHMS, _slicePcmSec = _A._slicePcmSec, _pcmToWavBytes = _A._pcmToWavBytes;
+
+  // ── Single sources of truth (dedup) ───────────────────────────────────────
+  // כתובת ה-Cloudflare Worker הפרטי — מוגדרת פעם אחת בלבד כאן. גם כלי-הווידאו
+  // (index.js) וגם הערות-הקול (js/features/voice/transcribe.js) קוראים מכאן;
+  // לפני כן הכתובת שוכפלה בשני קבצים והייתה מועדת לסטייה. משנים? רק כאן.
+  var WORKER_URL = 'https://broad-hall-729c.gagula22.workers.dev';
+
+  // קוד ה-Web-Worker של Whisper המקומי (Transformers.js) — עותק יחיד, משותף
+  // לשני הכלים (לפני כן שוכפל כמעט אחד-לאחד בשני קבצים). פרמטרי: d.model
+  // בבחירת המודל, d.language בשפת התמלול (ברירת מחדל עברית — זהה להתנהגות
+  // הקודמת של כלי-הווידאו ששלח בלי שפה).
+  // useBrowserCache: true — המודל (~150MB) נשמר ב-Cache API של הדפדפן ויורד
+  // פעם אחת באמת, במקום בכל סשן מחדש (הדגל היה false מאז ההטמעה המקורית,
+  // בלי סיבה מתועדת — נבדק בהיסטוריית git).
+  var LOCAL_WHISPER_SRC = '\n' +
+    'let _pipe = null;\n' +
+    'self.onmessage = async function (e) {\n' +
+    '  var d = e.data;\n' +
+    '  if (d.type === "init") {\n' +
+    '    try {\n' +
+    '      var mod = await import("https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2");\n' +
+    '      mod.env.allowLocalModels = false;\n' +
+    '      mod.env.useBrowserCache = true;\n' +
+    '      _pipe = await mod.pipeline("automatic-speech-recognition", d.model || "Xenova/whisper-small", {\n' +
+    '        quantized: true,\n' +
+    '        progress_callback: function (p) { self.postMessage({ type: "progress", status: p.status, progress: p.progress || 0 }); }\n' +
+    '      });\n' +
+    '      self.postMessage({ type: "ready" });\n' +
+    '    } catch (err) { self.postMessage({ type: "error", message: err.message }); }\n' +
+    '  } else if (d.type === "transcribe") {\n' +
+    '    try {\n' +
+    '      var result = await _pipe({ data: d.audio, sampling_rate: 16000 },\n' +
+    '        { language: d.language || "hebrew", task: "transcribe", chunk_length_s: 30, stride_length_s: 5, return_timestamps: true });\n' +
+    '      self.postMessage({ type: "result", text: result.text, chunks: result.chunks || [] });\n' +
+    '    } catch (err) { self.postMessage({ type: "error", message: err.message }); }\n' +
+    '  }\n' +
+    '};\n';
   async function _transcribeViaWorker(workerUrl, fileBuffer, language, onProgress) {
     var url = workerUrl.replace(/\/+$/, '') + '/?language=' + encodeURIComponent(language || 'auto');
     var u8 = new Uint8Array(fileBuffer);
@@ -112,72 +149,170 @@
     return { text: text, chunks: chunks, raw: data, detectedLanguage: (data.transcription_info && data.transcription_info.language) || null };
   }
 
-  // Call the Worker's /translate endpoint (Llama-3 based) to translate a
-  // block of text to a target language. Used when source audio's detected
-  // language is not the user's preferred output language.
-  async function _translateViaWorker(workerUrl, text, targetLang, onProgress) {
-    var url = workerUrl.replace(/\/+$/, '') + '/translate';
-    if (onProgress) onProgress('שולח טקסט לתרגום ל-' + (targetLang || 'he') + ' (Llama 3)…');
-    var r = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: text, target_language: targetLang || 'he' })
-    });
-    if (!r.ok) {
-      var errBody = '';
-      try { errBody = await r.text(); } catch(_) {}
-      throw new Error('Worker translate שגיאה ' + r.status + ': ' + errBody.slice(0, 200));
+  // ── Text translation (Google Translate gtx) ──────────────────────────────
+  // ⚠️ ה-endpoint ‎/translate של ה-Worker הוסר לצמיתות: מודל ה-Llama-3 שלו הוצא
+  // משימוש ב-Cloudflare ב-2026-05-30 ("5028: model deprecated" → HTTP 500 קבוע)
+  // וה-Worker מתארח בנפרד — אי אפשר לתקן אותו מכאן. הוחלף באותו מנוע שכבר
+  // הוכח בהערות-הקול (P-51, תוקן 15.7): Google Translate דרך ה-endpoint
+  // החינמי gtx — בלי מפתח, CORS פתוח (גם מ-localhost), מכסות נדיבות, עם זיהוי
+  // שפת-מקור אוטומטי (sl=auto). fallback ליעד-עברית: MyMemory דרך מנוע מתרגם
+  // ה-PDF (window.PTR_ENGINE — מכסה יומית קטנה, לכן משני בלבד).
+  // הטקסט מפוצל ל~1800 תווים לבקשה בגבולות משפט (מתחת למגבלת ה-GET של gtx).
+  function _splitForTranslate(text, MAX) {
+    MAX = MAX || 1800;
+    text = String(text || '').trim();
+    if (!text) return [];
+    if (text.length <= MAX) return [text];
+    var parts = [], pos = 0;
+    while (pos < text.length) {
+      var end = pos + MAX;
+      if (end >= text.length) { parts.push(text.slice(pos).trim()); break; }
+      var cut = -1;
+      for (var i = end; i > end - 400 && i > pos; i--) {
+        if ('.!?\n'.indexOf(text[i]) >= 0) { cut = i + 1; break; }
+      }
+      if (cut === -1) {
+        for (var j = end; j > end - 120 && j > pos; j--) {
+          if (text[j] === ' ') { cut = j; break; }
+        }
+      }
+      if (cut === -1) cut = end;
+      var piece = text.slice(pos, cut).trim();
+      if (piece) parts.push(piece);
+      pos = cut;
     }
+    return parts;
+  }
+
+  // מקטע יחיד דרך gtx. 'iw' = קוד העברית הישן של גוגל (עובד יציב). מחזיר null אם ריק.
+  async function _googleTranslatePart(part, targetLang) {
+    var tl = (!targetLang || targetLang === 'he') ? 'iw' : targetLang;
+    var url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=' +
+              encodeURIComponent(tl) + '&dt=t&q=' + encodeURIComponent(part);
+    var r = await fetch(url);
+    if (!r.ok) throw new Error('google ' + r.status);
     var data = await r.json();
-    if (data.error) throw new Error('Translate: ' + data.error);
+    var segs = (data && data[0]) || [];
+    var out = segs.map(function (s) { return (s && s[0]) || ''; }).join('').trim();
+    return out || null;
+  }
+
+  // תרגום בלוק טקסט מלא. מחזיר { translation, targetLanguage, targetName }
+  // (אותו shape שהחזיר ה-endpoint הישן — הקוראים לא משתנים).
+  async function _translateText(text, targetLang, onProgress) {
+    text = String(text || '').trim();
+    targetLang = targetLang || 'he';
+    if (!text) return { translation: '', targetLanguage: targetLang, targetName: targetLang === 'he' ? 'Hebrew' : targetLang };
+    var parts = _splitForTranslate(text);
+    var out = [];
+    var googleOk = true;                       // Google נכשל פעם אחת → לא מבזבזים round-trip על השאר
+    for (var i = 0; i < parts.length; i++) {
+      if (onProgress) onProgress('מתרגם (Google)… ' + (i + 1) + '/' + parts.length);
+      var t = null;
+      if (googleOk && navigator.onLine) {
+        try {
+          t = await _googleTranslatePart(parts[i], targetLang);
+        } catch (ge) {
+          console.warn('[vt-translate] google failed:', ge.message);
+          googleOk = false;
+        }
+      }
+      // fallback (יעד עברית בלבד): MyMemory דרך מנוע מתרגם ה-PDF
+      if (t === null && targetLang === 'he' && window.PTR_ENGINE && PTR_ENGINE._translatePageText) {
+        try {
+          var m = (await PTR_ENGINE._translatePageText(parts[i]) || '').trim();
+          // MyMemory מחזיר את המקור/אזהרה כשנכשל — טקסט זהה למקור = כישלון
+          if (m && m !== parts[i] && m.indexOf('MYMEMORY') === -1 && m.indexOf('QUERY LIMIT') === -1) t = m;
+        } catch (me) {
+          console.warn('[vt-translate] MyMemory failed:', me.message);
+        }
+      }
+      if (t === null) throw new Error('התרגום נכשל — שירותי התרגום אינם נגישים כרגע');
+      out.push(t);
+    }
     return {
-      translation: (data.translation || '').trim(),
-      targetLanguage: data.target_language,
-      targetName: data.target_name
+      translation: out.join('\n\n'),
+      targetLanguage: targetLang,
+      targetName: targetLang === 'he' ? 'Hebrew' : targetLang
     };
   }
 
-  // ── Audio decode + WAV encode (browser-side) ─────────────────────────────
-  // Two-stage decode:
-  //  (1) FAST: AudioContext.decodeAudioData on the raw bytes — works for
-  //      MP3/WAV/M4A/OGG/FLAC. Native, instant.
-  //  (2) FALLBACK: HTMLVideoElement playback at 16x + capture via WebAudio.
-  //      Works for MP4/WebM/MOV video containers that decodeAudioData refuses.
-  //      Real-time-bound (16x speedup) but reliable for any browser-playable file.
-  async function _transcribeViaWorkerChunked(workerUrl, pcm, sampleRate, language, onProgress) {
-    const totalSec = pcm.length / sampleRate;
-    const CHUNK_DUR = 90;  // 1.5 min per chunk → ~2.9MB WAV
-    const boundaries = [];
-    for (let s = 0; s < totalSec; s += CHUNK_DUR) {
-      boundaries.push([s, Math.min(totalSec, s + CHUNK_DUR)]);
-    }
-    if (!boundaries.length) boundaries.push([0, 0]);
-
-    const allText = [];
-    const allChunks = [];
-    let _firstLang = null;
-    for (let i = 0; i < boundaries.length; i++) {
-      const [s, e] = boundaries[i];
-      const headLine = boundaries.length === 1
-        ? 'שולח לענן…'
-        : 'חלק ' + (i + 1) + '/' + boundaries.length + ' (' + _formatHMS(s) + '–' + _formatHMS(e) + ')…';
-      if (onProgress) onProgress(headLine);
-
-      const slice = _slicePcmSec(pcm, s, e, sampleRate);
-      const wavBytes = _pcmToWavBytes(slice, sampleRate);
-      const result = await _transcribeViaWorker(workerUrl, wavBytes, language, onProgress);
-      allText.push((result.text || '').trim());
-      if (Array.isArray(result.chunks)) {
-        for (const c of result.chunks) {
-          allChunks.push({
-            timestamp: [c.timestamp[0] + s, c.timestamp[1] + s],
-            text: c.text
-          });
+  // ── Parallel chunk engine (shared: this tool + voice memos) ──────────────
+  // 3 מסלולים (lanes) במקביל + עד 3 ניסיונות לנתח עם backoff מדורג + המשך-חלקי:
+  // נתח שנכשל סופית מדולג ולא מפיל את השאר (מתקבל 119/120 במקום כלום); זריקה
+  // רק אם *כל* הנתחים נכשלו. נמדד בהערות-הקול: נתח 90ש׳ ≈ 5ש׳ הלוך-חזור, ולכן
+  // 3 lanes חופפים העלאה-עם-תמלול ומורידים שעה-וחצי מ~5+ דקות ל~2-3 דקות.
+  // ⚠️ החליף את המסלול הטורי הישן (_transcribeViaWorkerChunked) שבו כשל נתח
+  // בודד הפיל את כל הריצה — אל תחזירו לולאה טורית בלי retry.
+  var LANE_COUNT = 3, CHUNK_TRIES = 3;
+  async function _runChunkLanes(count, runOne, onUpdate) {
+    var results = new Array(count);
+    var next = 0, done = 0, failed = 0;
+    async function lane() {
+      while (next < count) {
+        var i = next++;
+        var ok = false, lastErr = null;
+        for (var attempt = 1; attempt <= CHUNK_TRIES && !ok; attempt++) {
+          try {
+            results[i] = await runOne(i);
+            ok = true;
+          } catch (err) {
+            lastErr = err;
+            // המתנה מדורגת (2.5ש, 5ש) — נותנת ל-rate-limit של Cloudflare להתאושש
+            if (attempt < CHUNK_TRIES) await new Promise(function (r) { setTimeout(r, attempt * 2500); });
+          }
         }
+        done++;
+        if (!ok) {
+          failed++;
+          console.warn('[vt-lanes] chunk ' + (i + 1) + '/' + count + ' failed after ' +
+            CHUNK_TRIES + ' tries:', lastErr && lastErr.message);
+        }
+        if (onUpdate) onUpdate(done, count, failed);
       }
-      if (i === 0 && result.detectedLanguage) _firstLang = result.detectedLanguage;
     }
-    return { text: allText.filter(Boolean).join(' '), chunks: allChunks, detectedLanguage: _firstLang };
+    var lanes = [];
+    for (var k = 0; k < Math.min(LANE_COUNT, count); k++) lanes.push(lane());
+    await Promise.all(lanes);
+    return { results: results, failed: failed };
+  }
+
+  // תמלול PCM מקבילי: נתחי 90 שניות (~2.9MB WAV — בטוח גם למכונות עם מעט RAM).
+  // מחזיר { text, chunks, detectedLanguage, missing, total }.
+  async function _transcribeViaWorkerParallel(workerUrl, pcm, sampleRate, language, onProgress) {
+    var CHUNK_DUR = 90;
+    var totalSec = pcm.length / sampleRate;
+    var bounds = [];
+    for (var s = 0; s < totalSec; s += CHUNK_DUR) {
+      bounds.push([s, Math.min(totalSec, s + CHUNK_DUR)]);
+    }
+    if (!bounds.length) bounds.push([0, totalSec]);
+
+    if (onProgress) onProgress('מתמלל בענן… 0/' + bounds.length);
+    var run = await _runChunkLanes(bounds.length, function (i) {
+      var b = bounds[i];
+      var wav = _pcmToWavBytes(_slicePcmSec(pcm, b[0], b[1], sampleRate), sampleRate);
+      // onProgress פר-נתח = null בכוונה: 3 lanes במקביל היו מערבבים הודעות; הדיווח דרך המונה
+      return _transcribeViaWorker(workerUrl, wav, language || 'auto', null)
+        .then(function (r) { return { r: r, off: b[0] }; });
+    }, function (done, count, failed) {
+      if (onProgress) onProgress('מתמלל בענן… ' + done + '/' + count +
+        ' (' + Math.round((done / count) * 100) + '%)' +
+        (failed ? ' · ⚠️ ' + failed + ' נתחים נכשלו' : ''));
+    });
+    if (run.failed === bounds.length) throw new Error('כל ' + bounds.length + ' נתחי הענן נכשלו');
+
+    var text = [], chunks = [], detected = null;
+    run.results.forEach(function (x) {
+      if (!x) return;
+      if (detected === null && x.r.detectedLanguage) detected = x.r.detectedLanguage;
+      text.push((x.r.text || '').trim());
+      (x.r.chunks || []).forEach(function (c) {
+        var ts = c.timestamp || [0, 0];
+        chunks.push({ timestamp: [(ts[0] || 0) + x.off, (ts[1] || ts[0] || 0) + x.off], text: c.text });
+      });
+    });
+    return { text: text.filter(Boolean).join(' '), chunks: chunks, detectedLanguage: detected, missing: run.failed, total: bounds.length };
   }
 
   // Quick health check — returns true if Worker URL responds (any 2xx/4xx OK)
@@ -251,5 +386,5 @@
   // File System Access API — let the user pick where to save. Falls back to
   // a normal anchor download in browsers that don't support the picker.
   // opts: { description, extension, mimeType }
-  window.VT_WORKER = { _transcribeViaWorker:_transcribeViaWorker, _translateViaWorker:_translateViaWorker, _transcribeViaWorkerChunked:_transcribeViaWorkerChunked, _pingWorker:_pingWorker, _preflightWorker:_preflightWorker, _transcribeYouTubeViaWorker:_transcribeYouTubeViaWorker };
+  window.VT_WORKER = { WORKER_URL:WORKER_URL, LOCAL_WHISPER_SRC:LOCAL_WHISPER_SRC, _transcribeViaWorker:_transcribeViaWorker, _translateText:_translateText, _runChunkLanes:_runChunkLanes, _transcribeViaWorkerParallel:_transcribeViaWorkerParallel, _pingWorker:_pingWorker, _preflightWorker:_preflightWorker, _transcribeYouTubeViaWorker:_transcribeYouTubeViaWorker };
 })();
