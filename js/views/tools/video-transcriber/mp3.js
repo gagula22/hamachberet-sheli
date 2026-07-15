@@ -187,8 +187,9 @@
   }
 
   // Transcribe an MP3 by byte-slicing (no decode required). Splits the
-  // requested range into ≤90MB pieces at frame boundaries, uploads each to
-  // the Worker, and stitches the transcripts back with cumulative offsets.
+  // requested range into ~3MB pieces at frame boundaries (CHUNK_BYTES below),
+  // uploads them through the shared parallel-lanes engine, and stitches the
+  // transcripts back with cumulative offsets.
   async function _transcribeMp3ByteSliced(workerUrl, mp3meta, startSec, endSec, language, onProgress) {
     const startByte = mp3meta.dataStart + Math.floor(startSec * mp3meta.bytesPerSec);
     const endByte   = mp3meta.dataStart + Math.floor(endSec   * mp3meta.bytesPerSec);

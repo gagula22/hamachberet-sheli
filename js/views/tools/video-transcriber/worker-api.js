@@ -1,7 +1,7 @@
 (function () {
   // VT Cloudflare Worker API. Extracted from index.js.
   var _U = window.VT_UTILS, _A = window.VT_AUDIO;
-  var _arrayBufferToBase64 = _U._arrayBufferToBase64, _formatHMS = _U._formatHMS, _slicePcmSec = _A._slicePcmSec, _pcmToWavBytes = _A._pcmToWavBytes;
+  var _arrayBufferToBase64 = _U._arrayBufferToBase64, _slicePcmSec = _A._slicePcmSec, _pcmToWavBytes = _A._pcmToWavBytes;
 
   // ── Single sources of truth (dedup) ───────────────────────────────────────
   // כתובת ה-Cloudflare Worker הפרטי — מוגדרת פעם אחת בלבד כאן. גם כלי-הווידאו
