@@ -284,6 +284,35 @@
     return out.join('\n\n');
   }
 
+  // ── פענוח חסכוני-בזיכרון (אחריות הקול בלבד) ───────────────────────────────
+  // ⚠️ SoC: `VT_AUDIO._decodeAnyFileToPcm` (בעלות P-44 תמלול-וידאו) עושה
+  // `new Float32Array(getChannelData(0))` — **העתקה מלאה** של ה-PCM על גבי
+  // ה-AudioBuffer → שיא ~1.5GB זיכרון ל-3 שעות (עלול להיכשל בטלפון/מכשיר חלש).
+  // לא נוגעים בקובץ של P-44. במקום, הקול מפענח בעצמו ומחזיר **view** אל ערוץ ה-PCM
+  // של ה-AudioBuffer (בלי ההעתקה) → שיא יורד ל-~690MB (רק ה-AudioBuffer). ה-AudioBuffer
+  // נשמר חי דרך `_buf` כדי שה-view יישאר תקין (הוא עצמאי מה-context אחרי הפענוח).
+  // נכשל (container ש-decodeAudioData לא מפענח) → הקורא נופל ל-VT_AUDIO (שכולל
+  // גם fallback ל-HTMLVideoElement) — אפס רגרסיה, רק חיסכון זיכרון כשאפשר.
+  async function _decodeLean(blob, onProgress) {
+    if (onProgress) onProgress('מפענח את ההקלטה…');
+    var ab = await blob.arrayBuffer();
+    var Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) throw new Error('no-audiocontext');
+    var ctx = new Ctx({ sampleRate: 16000 });
+    var buf = await ctx.decodeAudioData(ab);   // AudioBuffer יחיד; ab משוחרר אחר-כך
+    var pcm;
+    if (buf.numberOfChannels > 1) {
+      // downmix stereo→mono (העתקה — אבל הקלטות-קול הן כמעט תמיד מונו)
+      var c0 = buf.getChannelData(0), c1 = buf.getChannelData(1);
+      pcm = new Float32Array(c0.length);
+      for (var i = 0; i < c0.length; i++) pcm[i] = (c0[i] + c1[i]) * 0.5;
+    } else {
+      pcm = buf.getChannelData(0);             // VIEW — אפס העתקה
+    }
+    try { ctx.close(); } catch (e) {}
+    return { pcm: pcm, sampleRate: 16000, durationSec: pcm.length / 16000, _buf: buf };
+  }
+
   // ── תמלול ────────────────────────────────────────────────────────────────
   // memo: רשומת הקלטה { name, blob, lang?, ... } ; onProgress(msg) אופציונלי.
   // מחזיר { text, chunks, engine, translation? } — והשומר הוא הקורא (memos.js).
@@ -295,8 +324,15 @@
   async function run(memo, onProgress) {
     var d = deps();
     var lang = memo.lang === 'en' ? 'en' : 'he';
-    if (onProgress) onProgress('מפענח את ההקלטה…');
-    var decoded = await d.A._decodeAnyFileToPcm(memo.blob, onProgress);
+    // פענוח חסכוני-בזיכרון קודם; נכשל → נפילה ל-VT_AUDIO (P-44) שמכסה כל container
+    var decoded;
+    try {
+      decoded = await _decodeLean(memo.blob, onProgress);
+    } catch (leanErr) {
+      console.warn('[voice-transcribe] lean decode failed, falling back to VT_AUDIO:', leanErr && leanErr.message);
+      if (onProgress) onProgress('מפענח את ההקלטה…');
+      decoded = await d.A._decodeAnyFileToPcm(memo.blob, onProgress);
+    }
     if (!decoded.pcm || !decoded.pcm.length) throw new Error('ההקלטה ריקה או לא ניתנת לפענוח');
 
     var result = null;
