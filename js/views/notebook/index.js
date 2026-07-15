@@ -24,23 +24,34 @@
   });
 
   // ── Scroll-position memory ────────────────────────────────────────────────
-  // The note scrolls the whole WINDOW (body grid grows; .main has no overflow —
-  // see ARCHITECTURE §15). App.render() rebuilds #view on every cloud echo /
-  // data-ready pass and when returning to the notebook, which collapses the
-  // document to empty and resets window scroll to 0 → the note "jumped to the
-  // top" and flickered. Remember the active topic's scroll, re-apply it after
-  // each render, and persist it (sessionStorage) so a refresh reopens the same
-  // note in the same place.
+  // ⚠️ There are TWO possible scrollers (ARCHITECTURE §15):
+  //   • Desktop: the note scrolls INSIDE `.nb-editor-col` (overflow-y:auto,
+  //     capped at max-height:100% — since the vh-unzoom fix the cap is real,
+  //     so the window itself never scrolls).
+  //   • Mobile (≤600px): `.nb-editor-col` is overflow:visible and the WINDOW
+  //     scrolls.
+  // App.render() rebuilds #view on every cloud echo / focusout-deferred render /
+  // data-ready pass and when returning to the notebook — a rebuilt column starts
+  // at scrollTop 0 → the note "jumped to the top" (the bug returned when the
+  // scroller moved from the window into the column). Remember BOTH positions for
+  // the active topic, re-apply them after each render, and persist them
+  // (sessionStorage) so a refresh/tab-restore reopens the same note in place.
   const NB_SCROLL_KEY = 'nb.scroll';
-  let lastScrollY = 0;
-  let restorePending = null;   // { id, y } — applied on the first render after a page load
+  let lastScrollY = 0;         // window scroll (mobile scroller)
+  let lastColY = 0;            // .nb-editor-col scrollTop (desktop scroller)
+  let restorePending = null;   // { id, y, colY } — applied on the first render after a page load
+  let _restoreGuard = 0;       // while > now: a restore is settling — don't let the
+                               // collapse-to-0 scroll events overwrite the saved spot
   try {
     const raw = sessionStorage.getItem(NB_SCROLL_KEY);
-    // Seed lastScrollY too: a refresh renders twice (immediate + after Store.ready),
-    // so the second (data-ready) render must target the same restored position
-    // and not fall back to 0 before the scroll listener has caught up.
-    if (raw) { const o = JSON.parse(raw); if (o && o.id) { restorePending = o; lastScrollY = o.y || 0; } }
+    // Seed lastScrollY/lastColY too: a refresh renders twice (immediate + after
+    // Store.ready), so the second (data-ready) render must target the same
+    // restored position and not fall back to 0 before the listeners caught up.
+    if (raw) { const o = JSON.parse(raw); if (o && o.id) { restorePending = o; lastScrollY = o.y || 0; lastColY = o.colY || 0; } }
   } catch {}
+  function _persistScroll() {
+    try { sessionStorage.setItem(NB_SCROLL_KEY, JSON.stringify({ id: activeId, y: lastScrollY, colY: lastColY })); } catch {}
+  }
   let _scrollRaf = 0;
   window.addEventListener('scroll', () => {
     // only track while the notebook is the visible view
@@ -48,11 +59,45 @@
     if (_scrollRaf) return;
     _scrollRaf = requestAnimationFrame(() => {
       _scrollRaf = 0;
-      if (!activeId) return;
+      if (!activeId || performance.now() < _restoreGuard) return;
       lastScrollY = window.scrollY || (document.scrollingElement || {}).scrollTop || 0;
-      try { sessionStorage.setItem(NB_SCROLL_KEY, JSON.stringify({ id: activeId, y: lastScrollY })); } catch {}
+      _persistScroll();
     });
   }, { passive: true });
+  // Column scroller: scroll events don't bubble, but they DO capture — one
+  // document-level capture listener survives every re-render (no re-wiring).
+  let _colRaf = 0;
+  document.addEventListener('scroll', (e) => {
+    if (!location.hash || location.hash.indexOf('#/notebook') !== 0) return;
+    const el = e.target;
+    if (!el || el.nodeType !== 1 || !el.classList || !el.classList.contains('nb-editor-col')) return;
+    if (_colRaf) return;
+    _colRaf = requestAnimationFrame(() => {
+      _colRaf = 0;
+      if (!activeId || performance.now() < _restoreGuard) return;
+      lastColY = el.scrollTop;
+      _persistScroll();
+    });
+  }, { capture: true, passive: true });
+  // Re-apply a remembered position after a render. Image-heavy notes grow in
+  // height as images decode, so a single scrollTo gets clamped short — retry
+  // briefly until the target sticks, aborting the moment the user scrolls.
+  function applyScrollAfterRender(winY, colY) {
+    _restoreGuard = performance.now() + 1500;
+    let appliedCol = -1, tries = 0;
+    const attempt = () => {
+      const col = document.querySelector('.nb-editor-col');
+      if (col) {
+        if (appliedCol >= 0 && Math.abs(col.scrollTop - appliedCol) > 2) { _restoreGuard = 0; return; } // user took over
+        col.scrollTop = colY;
+        appliedCol = col.scrollTop;
+      }
+      window.scrollTo(0, winY);
+      if (col && appliedCol < colY - 2 && ++tries < 10) setTimeout(attempt, 140);
+      else { _restoreGuard = 0; lastColY = colY; lastScrollY = winY; }
+    };
+    requestAnimationFrame(attempt);
+  }
 
   // Restore saved sidebar width once on first load
   try {
@@ -180,22 +225,22 @@
     }
     const active = getById(activeId);
 
-    // Decide where the window should sit AFTER this render is built:
-    let scrollTarget;
+    // Decide where BOTH scrollers should sit AFTER this render is built:
+    let scrollTarget, colTarget;
     if (restorePending && activeId === restorePending.id) {
-      scrollTarget = restorePending.y || 0;   // first paint after a page refresh → same place
+      scrollTarget = restorePending.y || 0;    // first paint after a page refresh → same place
+      colTarget    = restorePending.colY || 0;
       restorePending = null;
       lastRenderedId = activeId;               // not a topic switch
     } else if (active && activeId !== lastRenderedId) {
       lastRenderedId = activeId;
       scrollTarget = 0;                        // switched to a different note → start at top
+      colTarget    = 0;
     } else {
       scrollTarget = lastScrollY;              // same note re-rendered (cloud echo / return) → keep the place
+      colTarget    = lastColY;
     }
-    if (active) {
-      const _y = scrollTarget;
-      requestAnimationFrame(() => window.scrollTo({ top: _y, behavior: 'instant' in document.documentElement.style ? 'instant' : 'auto' }));
-    }
+    if (active) applyScrollAfterRender(scrollTarget, colTarget);
 
     const addRootBtn = App.el('button', {
       class: 'nb-sidebar-add-btn',
