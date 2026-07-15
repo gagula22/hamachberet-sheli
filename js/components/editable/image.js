@@ -378,6 +378,7 @@
     // Process every <img> in the pasted HTML
     const imgEls = Array.from(tmp.querySelectorAll('img'));
     let blobIdx = 0;
+    let missing = 0;
 
     for (const imgEl of imgEls) {
       const src = imgEl.getAttribute('src') || '';
@@ -413,7 +414,25 @@
         }
       } catch { /* skip broken image */ }
 
-      if (!dataUrl) { imgEl.remove(); continue; }
+      if (!dataUrl) {
+        // Unrecoverable image (Word references a local file:// path the browser
+        // is not allowed to read, and no matching clipboard bitmap was found).
+        // ⚠️ Never remove silently — that read as "the notebook loses my
+        // images". Leave a visible placeholder the user can act on or delete.
+        missing++;
+        const ph = document.createElement('figure');
+        ph.className = 'nb-img nb-img-missing';
+        ph.contentEditable = 'false';
+        ph.style.width = '420px';
+        ph.innerHTML =
+          '<div style="border:2px dashed #C9B48F;border-radius:10px;background:#FAF6EC;' +
+          'padding:18px 14px;text-align:center;color:#6B5840;font-size:13px;line-height:1.7">' +
+          '🖼️ <b>תמונה שלא הועברה בהעתקה</b><br>' +
+          '<span style="font-size:12px;color:#8a7a62">חזור למקור, לחץ על התמונה עצמה לחיצה ימנית ← ' +
+          '"העתק תמונה", והדבק אותה כאן במקום התיבה הזו</span></div>';
+        imgEl.replaceWith(ph);
+        continue;
+      }
 
       imgEl.setAttribute('src', dataUrl);
 
@@ -458,7 +477,10 @@
     });
 
     save && save();
-    if (window.App) App.toast('התוכן הודבק ✓');
+    if (window.App) {
+      if (missing) App.toast('⚠️ הודבק, אבל ' + missing + ' תמונות לא הועברו מהמקור — ראה את התיבות המסומנות');
+      else App.toast('התוכן הודבק ✓');
+    }
   }
 
   function attachImageBehaviors(editor, save) {
@@ -470,10 +492,28 @@
       const cd = e.clipboardData || window.clipboardData;
       const items = Array.from(cd?.items || []);
       const types = Array.from(cd?.types || []);
+      const html = types.includes('text/html') ? cd.getData('text/html') : '';
 
-      // Priority 1: raw image file (screenshot / copy-image)
+      // Does the clipboard HTML carry real content beyond a single image?
+      // (select-all copy from Word / Docs / a web page.) Word puts BOTH rich
+      // HTML and a bitmap item on the clipboard — ⚠️ taking the raw image
+      // first used to discard ALL the text and the remaining images ("pastes
+      // only part of what I copied"). Rich HTML must win; the raw-image
+      // branch is only for pure image pastes (screenshot / copy-image).
+      let richHtml = false;
+      if (html && html.trim()) {
+        const probe = document.createElement('div');
+        probe.innerHTML = html;
+        probe.querySelectorAll('script,style,meta,link,head').forEach(el => el.remove());
+        const textLen = (probe.textContent || '').trim().length;
+        const imgCount = probe.querySelectorAll('img').length;
+        richHtml = textLen > 0 || imgCount > 1;
+      }
+
+      // Priority 1: raw image file (screenshot / copy-image) — only when the
+      // clipboard is essentially just that image
       const imgItem = items.find(it => it.type && it.type.startsWith('image/') && it.kind === 'file');
-      if (imgItem) {
+      if (imgItem && !richHtml) {
         const file = imgItem.getAsFile();
         if (file) {
           e.preventDefault();
@@ -489,13 +529,10 @@
       }
 
       // Priority 2: rich HTML (Word / Google Docs / any formatted paste)
-      if (types.includes('text/html')) {
-        const html = cd.getData('text/html');
-        if (html && html.trim()) {
-          e.preventDefault();
-          await pasteHtmlContent(html, items, editor, save);
-          return;
-        }
+      if (richHtml) {
+        e.preventDefault();
+        await pasteHtmlContent(html, items, editor, save);
+        return;
       }
 
       // Priority 3: plain text — let browser handle natively
