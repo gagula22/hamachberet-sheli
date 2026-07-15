@@ -137,7 +137,11 @@
   // 3 נתחים במקביל חופפים העלאה עם תמלול ומורידים לאזור 2-3 דקות.
   // משתמש ב-_transcribeViaWorker פר-נתח (לא בלולאה הטורית של הכלי) ומרכיב
   // את התוצאות לפי הסדר עם היסט חותמות-זמן.
-  var CLOUD_CHUNK_SEC = 90, CLOUD_CONCURRENCY = 3;
+  // עמידות להקלטות ארוכות (3 שעות ≈ 120 נתחים): (1) **ניסיון חוזר per-נתח** —
+  // טעות רגעית של Cloudflare (rate-limit) לא מפילה נתח; (2) **המשך-חלקי** — נתח
+  // שנכשל אחרי כל הניסיונות מדולג (לא מפיל את השאר), כך שמתקבל 119/120 במקום כלום.
+  // רק אם **כל** הנתחים נכשלו זורקים → הקורא נופל לתמלול מקומי.
+  var CLOUD_CHUNK_SEC = 90, CLOUD_CONCURRENCY = 3, CLOUD_RETRIES = 3;
   async function cloudChunkedParallel(base, pcm, sampleRate, onProgress, lang) {
     var d = deps();
     var totalSec = pcm.length / sampleRate;
@@ -149,21 +153,44 @@
 
     if (onProgress) onProgress('מתמלל בענן… 0/' + bounds.length);
     var results = new Array(bounds.length);
-    var next = 0, done = 0;
+    var next = 0, done = 0, failed = 0;
+    function report() {
+      if (onProgress) onProgress('מתמלל בענן… ' + done + '/' + bounds.length +
+        ' (' + Math.round((done / bounds.length) * 100) + '%)' +
+        (failed ? ' · ⚠️ ' + failed + ' נתחים נכשלו' : ''));
+    }
     async function lane() {
       while (next < bounds.length) {
         var i = next++;
         var b = bounds[i];
         var wav = d.A._pcmToWavBytes(d.A._slicePcmSec(pcm, b[0], b[1], sampleRate), sampleRate);
-        var r = await d.W._transcribeViaWorker(base, wav, lang || 'he', null);
-        results[i] = { r: r, off: b[0] };
+        var ok = false, lastErr = null;
+        for (var attempt = 1; attempt <= CLOUD_RETRIES && !ok; attempt++) {
+          try {
+            var r = await d.W._transcribeViaWorker(base, wav, lang || 'he', null);
+            results[i] = { r: r, off: b[0] };
+            ok = true;
+          } catch (err) {
+            lastErr = err;
+            // המתנה מדורגת בין ניסיונות (2.5ש, 5ש) — נותן ל-rate-limit להתאושש
+            if (attempt < CLOUD_RETRIES) await new Promise(function (res) { setTimeout(res, attempt * 2500); });
+          }
+        }
         done++;
-        if (onProgress) onProgress('מתמלל בענן… ' + done + '/' + bounds.length + ' (' + Math.round((done / bounds.length) * 100) + '%)');
+        if (!ok) {
+          failed++;
+          console.warn('[voice-transcribe] chunk ' + (i + 1) + '/' + bounds.length +
+            ' failed after ' + CLOUD_RETRIES + ' tries:', lastErr && lastErr.message);
+        }
+        report();
       }
     }
     var lanes = [];
     for (var k = 0; k < Math.min(CLOUD_CONCURRENCY, bounds.length); k++) lanes.push(lane());
     await Promise.all(lanes);
+
+    // כל הנתחים נכשלו → זרוק כדי שהקורא ייפול לתמלול מקומי
+    if (failed === bounds.length) throw new Error('כל ' + bounds.length + ' נתחי הענן נכשלו');
 
     var text = [], chunks = [];
     results.forEach(function (x) {
@@ -174,7 +201,9 @@
         chunks.push({ timestamp: [(ts[0] || 0) + x.off, (ts[1] || ts[0] || 0) + x.off], text: c.text });
       });
     });
-    return { text: text.filter(Boolean).join(' '), chunks: chunks, engine: 'ענן · Whisper-Large-v3' };
+    var engine = 'ענן · Whisper-Large-v3';
+    if (failed) engine += ' · ' + failed + '/' + bounds.length + ' נתחים חסרים';
+    return { text: text.filter(Boolean).join(' '), chunks: chunks, engine: engine, missing: failed, total: bounds.length };
   }
 
   // ── תרגום אנגלית→עברית ───────────────────────────────────────────────────
