@@ -48,9 +48,23 @@
     // the request body is being uploaded — no full base64 string in memory,
     // no idle timeout because bytes flow continuously. Falls back to
     // buffered upload on browsers that don't support duplex streams.
+    //
+    // ⚠️ Watchdog-timeout (תיקון "התמלול נתקע בהקלטות ארוכות", 15.7.2026):
+    // בלי timeout, בקשה שנתלית (חיבור שנפל בשקט / Worker שלא עונה) מקפיאה
+    // את ה-lane שלה לנצח; בהקלטה של שעתיים-שלוש (‎90-120 נתחים) הסיכוי שזה
+    // יקרה לפחות פעם אחת גבוה — ושלושה fetch-ים תלויים = כל המנוע קפוא בלי
+    // שום שגיאה ("נתקע"). AbortController קוטע כל ניסיון אחרי
+    // VT_WORKER.FETCH_TIMEOUT_MS (ברירת מחדל 3 דק' — נדיב גם לחיבור איטי),
+    // מה שהופך תקיעה לכשל רגיל שמנגנון ה-retry של ה-lanes מטפל בו.
+    // ה-signal מכסה גם את קריאת גוף-התשובה (r.json), לא רק את ההעלאה.
+    var timeoutMs = (window.VT_WORKER && VT_WORKER.FETCH_TIMEOUT_MS) || 180000;
+    var ctrl = (typeof AbortController === 'function') ? new AbortController() : null;
+    var timedOut = false;
+    var timer = ctrl ? setTimeout(function () { timedOut = true; ctrl.abort(); }, timeoutMs) : null;
     var streamingSupported = (typeof ReadableStream === 'function');
     var r;
 
+    try {
     if (streamingSupported) {
       try {
         if (onProgress) onProgress('שולח ' + sizeMB + ' MB ל-Cloudflare (streaming)…');
@@ -78,9 +92,13 @@
           method: 'POST',
           headers: { 'Content-Type': 'text/plain' },
           body: stream,
-          duplex: 'half'
+          duplex: 'half',
+          signal: ctrl ? ctrl.signal : undefined
         });
       } catch (streamErr) {
+        // timeout שלנו ≠ חוסר-תמיכה ב-streaming: אסור ליפול ל-buffered (שהיה
+        // מוסיף עוד 3 דק' תלויות לאותו ניסיון) — זורקים כדי שה-retry יטפל.
+        if (timedOut) throw new Error('הענן לא הגיב תוך ' + Math.round(timeoutMs / 60000) + ' דק׳ (timeout) — מנסה שוב');
         console.warn('[transcribe] stream upload failed, falling back to buffered:', streamErr);
         r = null;
       }
@@ -95,7 +113,8 @@
       r = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain' },
-        body: audioBase64
+        body: audioBase64,
+        signal: ctrl ? ctrl.signal : undefined
       });
     }
     if (!r.ok) {
@@ -105,6 +124,12 @@
     }
     if (onProgress) onProgress('הענן מתמלל ב-Whisper-Large-v3-Turbo…');
     var data = await r.json();
+    } catch (err) {
+      if (timedOut) throw new Error('הענן לא הגיב תוך ' + Math.round(timeoutMs / 60000) + ' דק׳ (timeout) — מנסה שוב');
+      throw err;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
     if (data.error) throw new Error('Worker: ' + data.error);
 
     // Normalise to { text, chunks: [{timestamp:[s,e], text}] }
@@ -386,5 +411,5 @@
   // File System Access API — let the user pick where to save. Falls back to
   // a normal anchor download in browsers that don't support the picker.
   // opts: { description, extension, mimeType }
-  window.VT_WORKER = { WORKER_URL:WORKER_URL, LOCAL_WHISPER_SRC:LOCAL_WHISPER_SRC, _transcribeViaWorker:_transcribeViaWorker, _translateText:_translateText, _runChunkLanes:_runChunkLanes, _transcribeViaWorkerParallel:_transcribeViaWorkerParallel, _pingWorker:_pingWorker, _preflightWorker:_preflightWorker, _transcribeYouTubeViaWorker:_transcribeYouTubeViaWorker };
+  window.VT_WORKER = { WORKER_URL:WORKER_URL, LOCAL_WHISPER_SRC:LOCAL_WHISPER_SRC, FETCH_TIMEOUT_MS:180000, _transcribeViaWorker:_transcribeViaWorker, _translateText:_translateText, _runChunkLanes:_runChunkLanes, _transcribeViaWorkerParallel:_transcribeViaWorkerParallel, _pingWorker:_pingWorker, _preflightWorker:_preflightWorker, _transcribeYouTubeViaWorker:_transcribeYouTubeViaWorker };
 })();
