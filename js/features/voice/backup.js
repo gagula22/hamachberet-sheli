@@ -24,6 +24,18 @@
 
   var DOC_BUDGET = 900 * 1024;   // תקציב-בייטים בטוח מתחת ל-1MB/מסמך
 
+  // ⚠️ תיחום-זמן לכל פעולת-שרת (15.7): set() של Firestore עם offline-persistence
+  // נשאר pending לנצח כשאין רשת (המשתמש עדיין "מחובר" אבל offline) — הכפתור
+  // היה נתקע על ⏳ בלי שגיאה. Promise.race עם OP_TIMEOUT_MS (חשוף לכיוון/בדיקות)
+  // הופך את זה לשגיאה ברורה; הכתיבה עצמה תושלם ברקע כשהרשת תחזור, אבל לא
+  // מציגים "גובה ואומת" בלי אישור-שרת אמיתי בזמן סביר.
+  function _bounded(promise, msg) {
+    var ms = (window.VoiceBackup && VoiceBackup.OP_TIMEOUT_MS) || 30000;
+    return Promise.race([promise, new Promise(function (_, rej) {
+      setTimeout(function () { rej(new Error(msg || 'הענן לא הגיב בזמן — בדוק את החיבור ונסה שוב')); }, ms);
+    })]);
+  }
+
   function _fb() {
     return (window.firebase && firebase.apps && firebase.apps.length) ? firebase : null;
   }
@@ -75,14 +87,15 @@
     if (!memo || !memo.transcript) throw new Error('אין תמלול לגבות — תמלל קודם (📝)');
     if (!enabled()) throw new Error('לא מחובר לענן — התחבר קודם (איזור המשתמש בסרגל)');
     var doc = _payload(memo);
-    await _ref(memo.id).set(doc);   // resolves only on backend commit
+    // resolves only on backend commit; bounded so offline never hangs the button
+    await _bounded(_ref(memo.id).set(doc), 'הגיבוי לא אושר ע"י השרת בזמן — בדוק חיבור ונסה שוב');
     return doc.backedUpAt;
   }
 
   // רשימת הגיבויים הקיימים בענן (מטא בלבד — לשימוש עתידי של מסך-שחזור).
   async function list() {
     if (!enabled()) throw new Error('לא מחובר לענן');
-    var snap = await _db().collection('users/' + _user().uid + '/voice-transcripts').get();
+    var snap = await _bounded(_db().collection('users/' + _user().uid + '/voice-transcripts').get());
     var out = [];
     snap.forEach(function (d) {
       var v = d.data() || {};
@@ -94,9 +107,9 @@
   // שליפת גיבוי מלא (לשחזור עתידי / בדיקות).
   async function fetchOne(id) {
     if (!enabled()) throw new Error('לא מחובר לענן');
-    var d = await _ref(id).get();
+    var d = await _bounded(_ref(id).get());
     return d.exists ? d.data() : null;
   }
 
-  window.VoiceBackup = { enabled: enabled, backup: backup, list: list, fetchOne: fetchOne };
+  window.VoiceBackup = { enabled: enabled, backup: backup, list: list, fetchOne: fetchOne, OP_TIMEOUT_MS: 30000 };
 })();
