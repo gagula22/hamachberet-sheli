@@ -147,6 +147,9 @@
     attachMoodBehaviors(editor, save);
     wrapImagesInEditor(editor);
     attachTableResizers(editor, save); // uses RAF internally — safe at load time
+    // ריפוי-אוטומטי P-12: קבצים מצורפים מקומיים-בלבד (data-content) מועלים
+    // לענן ברקע ומוחלפים ל-data-fs — כדי שיהיו זמינים גם ממכשירים אחרים.
+    if (_MED.upgradeLocalAttachments) _MED.upgradeLocalAttachments(editor, save);
 
     // Clipboard image/screenshot paste is owned by editable/image.js
     // (Editable.attachImageBehaviors above) — no separate handler here, so a

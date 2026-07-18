@@ -486,12 +486,78 @@
   // components/editable/image.js (figure.nb-img + compression), so paste,
   // toolbar and drag-drop all produce identical images. (The local
   // insertImage / insertImageFile above are now unused legacy code.)
+  // ── ריפוי-אוטומטי: קבצים מקומיים-בלבד → ענן (P-12, 15.7.2026) ────────────
+  // קובץ שצורף במצב-נפילה (data-content base64) חי רק במכשיר שצירף אותו:
+  // שומר-הגודל של הסנכרון (_sizeSafeTopic) מרוקן אותו מהעותק-בענן (>900KB),
+  // והמכשירים האחרים מקבלים כרטיס ריק — "אני לא רואה את הקובץ ממחשב אחר".
+  // ברגע שהענן זמין, מעלים כל קובץ כזה ל-Firestore-chunks ומחליפים את הכרטיס
+  // ל-data-fs — בדיוק כמו צירוף חדש. אידמפוטנטי (אותו data-att-id ⇒ אותו מסמך
+  // בענן), רץ ברקע אחד-אחד (זיכרון נמוך), מדלג על כרטיסים ריקים (העותק החתוך
+  // שבמכשירים אחרים — אין שם מה להעלות) ועל קבצים מעל תקרת-הענן (20MB).
+  var _upgrading = Object.create(null);   // data-att-id → בתהליך-העלאה (מונע כפל כשעורך נבנה-מחדש באמצע)
+  var _upgraded  = Object.create(null);   // data-att-id → meta של העלאה שהושלמה בסשן. ⚠️ חיוני: השמירה
+                                          // דחויה (debounce 500ms) — בנייה-מחדש שמגיעה לפני שהגוף נשמר
+                                          // קוראת עדיין data-content ישן; בלי המטמון הקובץ היה עולה שוב.
+  function upgradeLocalAttachments(editor, save) {
+    if (!(window.CloudFiles && CloudFiles.enabled && CloudFiles.enabled())) return;
+    var cards = Array.prototype.slice.call(
+      editor.querySelectorAll('.file-attachment[data-content^="data:"]'));
+    if (!cards.length) return;
+    (async function () {
+      var done = 0;
+      for (var i = 0; i < cards.length; i++) {
+        var el = cards[i];
+        var szEl = el.querySelector('.file-size');
+        var szOrig = szEl ? szEl.textContent : '';
+        var id = el.dataset.attId || ('att' + Date.now().toString(36) + i);
+        if (_upgraded[id]) {               // כבר הועלה בסשן — רק מחליפים את הכרטיס הישן
+          if (el.isConnected) {
+            var tmp0 = document.createElement('div');
+            tmp0.innerHTML = _attachHtml(_upgraded[id]);
+            el.replaceWith(tmp0.firstChild);
+            save();
+            done++;
+          }
+          continue;
+        }
+        if (_upgrading[id]) continue;      // עולה כרגע מבנייה קודמת של העורך
+        _upgrading[id] = true;
+        try {
+          var dataUrl = el.getAttribute('data-content') || '';
+          if (dataUrl.indexOf('data:') !== 0 || dataUrl.length < 100) continue;
+          var name = el.dataset.name || 'file';
+          var blob = await (await fetch(dataUrl)).blob();
+          if (!CloudFiles.fits(blob.size)) continue;   // מעל 20MB — נשאר מקומי בכוונה
+          var type = el.dataset.type || blob.type || '';
+          var meta = await CloudFiles.upload(new File([blob], name, { type: type }), id, function (frac) {
+            if (szEl) szEl.textContent = 'מעלה לענן ' + Math.round(frac * 100) + '%…';
+          });
+          meta.id = id;
+          _upgraded[id] = meta;                        // גם אם הכרטיס כבר לא מחובר — הבנייה הבאה תחליף מהמטמון
+          if (el.isConnected) {                        // המשתמש אולי כבר עבר פתק — לא נוגעים
+            var tmp = document.createElement('div');
+            tmp.innerHTML = _attachHtml(meta);
+            el.replaceWith(tmp.firstChild);
+            save();
+            done++;
+          }
+        } catch (e) {
+          console.warn('[media] cloud-upgrade of local attachment failed:', e && e.message);
+          if (szEl) szEl.textContent = szOrig;         // מחזירים את תווית-הגודל — ינוסה בפתיחה הבאה
+        } finally {
+          delete _upgrading[id];
+        }
+      }
+      if (done && window.App) App.toast('☁️ ' + done + ' קבצים מקומיים הועלו לענן — יהיו זמינים מכל מכשיר');
+    })();
+  }
+
   window.nbMedia = {
     insertImage: function (dataUrl, editor, save) { return window.Editable.insertImage(dataUrl, editor, save); },
     restoreMoodBlocks: restoreMoodBlocks, attachMoodBehaviors: attachMoodBehaviors,
     insertImageFile: function (file, editor, save) { return window.Editable.insertImageFromFile(file, editor, save); },
     attachTableResizers: attachTableResizers, wrapImagesInEditor: wrapImagesInEditor,
     startImageResize: startImageResize, openAttachment: openAttachment, downloadAttachment: downloadAttachment,
-    insertFileAttachment: insertFileAttachment, _fmtSize: _fmtSize
+    insertFileAttachment: insertFileAttachment, upgradeLocalAttachments: upgradeLocalAttachments, _fmtSize: _fmtSize
   };
 })();
