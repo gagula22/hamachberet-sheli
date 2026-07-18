@@ -211,8 +211,11 @@
 
   // ── רינדור ────────────────────────────────────────────────────────────────
   function memoRow(memo, ui) {
-    const playBtn = el('button', { class: 'vm-play', title: 'נגן / עצור' }, '▶');
-    playBtn.addEventListener('click', () => togglePlay(memo, playBtn));
+    // הקלטה משוחזרת-מהענן = טקסט בלבד: האודיו מעולם לא גובה (בכוונה), כך
+    // שבמכשיר אחר אין מה לנגן/להוריד/לתמלל-מחדש — רק התמלול וייצוא ה-Word.
+    const noAudio = !memo.blob;
+    const playBtn = el('button', { class: 'vm-play', title: noAudio ? 'שוחזר מהענן — האודיו לא גובה ואינו זמין במכשיר הזה' : 'נגן / עצור', disabled: noAudio || null }, '▶');
+    playBtn.addEventListener('click', () => { if (!noAudio) togglePlay(memo, playBtn); });
     const name = el('span', { class: 'vm-name', title: 'לחץ לשינוי שם' }, memo.name);
     name.addEventListener('click', () => {
       const input = el('input', { class: 'input vm-rename', type: 'text', value: memo.name });
@@ -244,7 +247,8 @@
     const transBtn = el('button', {
       class: 'vm-act vm-trans' + (hasT ? ' done' : ''),
       title: hasT ? 'תומלל ✓ — לחץ לתמלול מחדש'
-        : (isEn ? 'תמלל באנגלית ותרגם לעברית (Whisper + Google Translate)' : 'תמלל לטקסט (Whisper)')
+        : (isEn ? 'תמלל באנגלית ותרגם לעברית (Whisper + Google Translate)' : 'תמלל לטקסט (Whisper)'),
+      style: noAudio ? 'display:none' : ''   // בלי אודיו אין מה לתמלל-מחדש
     }, '📝');
     const wordBtn = el('button', {
       class: 'vm-act vm-word',
@@ -357,13 +361,13 @@
       playBtn,
       el('div', { class: 'vm-body' }, [
         name,
-        el('span', { class: 'vm-meta' }, fmtDur(memo.duration) + ' · ' + new Date(memo.createdAt).toLocaleDateString('he-IL') + (isEn ? ' · EN' : '') + (memo.engine ? ' · ' + memo.engine : ''))
+        el('span', { class: 'vm-meta' }, fmtDur(memo.duration) + ' · ' + new Date(memo.createdAt).toLocaleDateString('he-IL') + (isEn ? ' · EN' : '') + (memo.restored ? ' · ☁️ שוחזר מהענן (טקסט בלבד)' : '') + (memo.engine ? ' · ' + memo.engine : ''))
       ]),
       transBtn,
       wordBtn,
       wordEnBtn,
       backupBtn,
-      el('button', { class: 'vm-act', title: 'הורדה', onClick: () => download(memo) }, '⬇'),
+      el('button', { class: 'vm-act', title: 'הורדה', style: noAudio ? 'display:none' : '', onClick: () => download(memo) }, '⬇'),
       el('button', { class: 'vm-act vm-del', title: 'מחיקה', onClick: () => {
         if (confirm('למחוק את ההקלטה?')) {
           if (_playingId === memo.id) stopPlayback();
@@ -479,8 +483,124 @@
     return { card, ui };
   }
 
+  // ── שחזור-תמלולים מהענן (משלים את גיבוי-הלחיצה של backup.js) ─────────────
+  // מציג את כל הגיבויים שבענן מול מה שקיים במכשיר, ומשחזר לפי בחירה:
+  //   • אין הקלטה כזו במכשיר → נוצרת רשומת טקסט-בלבד (restored:true, בלי blob).
+  //   • יש הקלטה אך בלי תמלול → התמלול מוזג אליה (האודיו המקומי נשמר!).
+  //   • יש הקלטה עם תמלול → "קיים במכשיר" — בלי כפתור, כדי שגיבוי-ענן ישן
+  //     לא ידרוס בטעות תמלול מקומי חדש יותר.
+  async function openRestoreModal() {
+    if (!window.VoiceBackup) { App.toast('מודול הגיבוי לא נטען — רענן את הדף'); return; }
+    if (!VoiceBackup.enabled()) { App.toast('לא מחובר לענן — התחבר קודם (איזור המשתמש בסרגל)'); return; }
+    let cloud, local;
+    try {
+      [cloud, local] = await Promise.all([VoiceBackup.list(), listMemos()]);
+    } catch (e) { App.toast('טעינת הגיבויים נכשלה: ' + (e && e.message || '')); return; }
+    const byId = {};
+    local.forEach(m => { byId[m.id] = m; });
+
+    const overlay = el('div', { class: 'vm-bk-overlay' });
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+    const listEl = el('div', { class: 'vm-bk-list' });
+
+    async function restoreOne(meta, btn) {
+      btn.disabled = true; btn.textContent = '⏳';
+      const full = await VoiceBackup.fetchOne(meta.id);
+      if (!full || !full.transcript) throw new Error('הגיבוי לא נמצא בענן');
+      const loc = byId[meta.id];
+      if (loc) {
+        // מיזוג לתוך ההקלטה הקיימת — האודיו המקומי נשמר
+        loc.transcript = full.transcript;
+        if (full.transcriptChunks) loc.transcriptChunks = full.transcriptChunks;
+        if (full.translation) loc.translation = full.translation;
+        if (full.engine) loc.engine = full.engine;
+        loc.backedUpAt = full.backedUpAt;
+        await putMemo(loc);
+      } else {
+        const rec = {
+          id: full.id, name: full.name || 'הקלטה משוחזרת', lang: full.lang || 'he',
+          mime: '', createdAt: full.createdAt || Date.now(), duration: full.duration || 0,
+          transcript: full.transcript, engine: full.engine || '',
+          backedUpAt: full.backedUpAt, restored: true
+        };
+        if (full.transcriptChunks) rec.transcriptChunks = full.transcriptChunks;
+        if (full.translation) rec.translation = full.translation;
+        await putMemo(rec);
+        byId[rec.id] = rec;
+      }
+      btn.textContent = '✓ שוחזר';
+      btn.classList.add('vm-bk-done');
+      refreshAll();
+    }
+
+    const missing = [];
+    if (!cloud.length) {
+      listEl.appendChild(el('div', { class: 'vm-empty' },
+        'אין עדיין גיבויים בענן. גבה תמלול עם כפתור ☁️ שליד הקלטה מתומללת.'));
+    }
+    cloud.forEach(meta => {
+      const loc = byId[meta.id];
+      const state = loc ? (loc.transcript ? 'have' : 'merge') : 'missing';
+      if (state === 'missing') missing.push(meta);
+      const info = el('div', { class: 'vm-bk-info' }, [
+        el('div', { class: 'vm-bk-name' }, (meta.lang === 'en' ? '🇬🇧 ' : '🎙️ ') + (meta.name || meta.id)),
+        el('div', { class: 'vm-bk-meta' },
+          fmtDur(meta.duration || 0) + ' · הוקלט ' + new Date(meta.createdAt || 0).toLocaleDateString('he-IL') +
+          ' · גובה ' + new Date(meta.backedUpAt || 0).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' }))
+      ]);
+      let action;
+      if (state === 'have') {
+        action = el('span', { class: 'vm-bk-have' }, '✓ קיים במכשיר');
+      } else {
+        action = el('button', { class: 'vm-bk-btn' }, state === 'merge' ? '⬇ השלם תמלול להקלטה' : '⬇ שחזר');
+        action.title = state === 'merge'
+          ? 'ההקלטה קיימת במכשיר בלי תמלול — הגיבוי יוזג אליה (האודיו נשמר)'
+          : 'ייווצר פתק-תמלול טקסטי (האודיו לא גובה — נשאר רק במכשיר המקורי)';
+        action.addEventListener('click', () => {
+          restoreOne(meta, action).catch(e => {
+            action.disabled = false; action.textContent = '⬇ שחזר';
+            App.toast('השחזור נכשל: ' + (e && e.message || ''));
+          });
+        });
+      }
+      listEl.appendChild(el('div', { class: 'vm-bk-row' }, [info, action]));
+    });
+
+    const head = el('div', { class: 'vm-bk-head' }, [
+      el('h3', {}, '☁️ שחזור תמלולים מהענן'),
+      el('button', { class: 'vm-bk-close', title: 'סגירה', onClick: () => overlay.remove() }, '✕')
+    ]);
+    const sub = el('div', { class: 'vm-bk-sub' },
+      'הגיבויים הם טקסט בלבד (תמלול + תרגום) — האודיו לא מגובה. שחזור לא דורס תמלול שקיים במכשיר.');
+    const modal = el('div', { class: 'vm-bk-modal' }, [head, sub, listEl]);
+    if (missing.length > 1) {
+      const allBtn = el('button', { class: 'vm-bk-btn vm-bk-all' }, '⬇ שחזר את כל החסרים (' + missing.length + ')');
+      allBtn.addEventListener('click', async () => {
+        allBtn.disabled = true;
+        const btns = [...listEl.querySelectorAll('.vm-bk-btn')].filter(b => b.textContent === '⬇ שחזר');
+        let ok = 0;
+        for (let i = 0; i < missing.length; i++) {
+          try { await restoreOne(missing[i], btns[i] || allBtn); ok++; }
+          catch (e) { console.warn('[voice-restore]', missing[i].id, e && e.message); }
+        }
+        allBtn.textContent = '✓ שוחזרו ' + ok + '/' + missing.length;
+        App.toast('☁️ שוחזרו ' + ok + ' תמלולים');
+      });
+      modal.appendChild(allBtn);
+    }
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+  }
+
   function renderView(root) {
     stopPlayback();
+    // כפתור שחזור-מהענן — פס דק מעל הכרטיסים (זמין לשתי השפות)
+    const restoreBtn = el('button', {
+      class: 'vm-restore-btn',
+      title: 'הצגת התמלולים שגובו לענן (בכל מכשיר) ושחזורם לכאן'
+    }, '☁️ שחזור תמלולים מהענן');
+    restoreBtn.addEventListener('click', () => { openRestoreModal(); });
+    root.appendChild(el('div', { class: 'vm-restore-bar' }, [restoreBtn]));
     const he = buildCard('he');
     const en = buildCard('en');
     root.appendChild(he.card);
