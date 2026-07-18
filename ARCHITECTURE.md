@@ -345,7 +345,7 @@ Web Speech he-IL; טקסט סופי דרך `execCommand('insertText')` → שמ�
 `_runChunkLanes` (גנרי) + `_transcribeViaWorkerParallel` (PCM). הקול (`cloudChunkedParallel`) וכלי-הווידאו
 (נתיב PCM **ונתיב ה-MP3** ב-mp3.js) צורכים את אותו קוד — אין יותר שני עותקים. גם `VT_WORKER.WORKER_URL`
 וקוד ה-Whisper-המקומי (`LOCAL_WHISPER_SRC`, עם `useBrowserCache:true` — המודל ~150MB יורד פעם אחת)
-הם מקורות-אמת יחידים שם. ⚠️ אל תחזירו לולאת-נתחים טורית בלי retry ואל תשכפלו שוב את הכתובת/ה-src.
+הם מקורות-אמת יחידים שם. ⚠️ אל תחזירו לולאת-נתחים טורית בלי retry ואל תשכפלו שוב את הכתובת/ה-src. **⚠️ מלכודת-התקיעה (15.7):** בקשת-רשת בלי timeout במנוע-הנתחים = תלייה של lane לנצח (בהקלטת 2-3ש, ‎90-120 נתחים, זה קרה בפועל — "התמלול נתקע"). כל העלאה עטופה עכשיו ב-AbortController עם `VT_WORKER.FETCH_TIMEOUT_MS` (3 דק'; מכסה גם את קריאת-התשובה; timeout-בזרימה זורק ישר ל-retry, לא ל-buffered). **כלל: כל fetch חדש במנוע חייב signal.** בצד-הקול: פענוח ארוך מציג שעון-חי (חוסר-חיווי נראה כתקיעה).
 **פענוח חסכוני:** `_decodeLean` בקול (v=10) מחזיר **view** אל ה-AudioBuffer במקום העתקה מלאה →
 שיא ~1.5GB→~690MB ל-3ש; ומאז 15.7 (`fa52be7`) גם `VT_AUDIO._decodeAnyFileToPcm` עצמו רזה ל-mono
 (מחזיר `_buf` + view; סטריאו עדיין downmix-עותק). ⚠️ **מלכודת:** view אסור ב-transfer ל-Web-Worker —
