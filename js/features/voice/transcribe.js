@@ -209,23 +209,42 @@
   // נכשל (container ש-decodeAudioData לא מפענח) → הקורא נופל ל-VT_AUDIO (שכולל
   // גם fallback ל-HTMLVideoElement) — אפס רגרסיה, רק חיסכון זיכרון כשאפשר.
   async function _decodeLean(blob, onProgress) {
-    if (onProgress) onProgress('מפענח את ההקלטה…');
-    var ab = await blob.arrayBuffer();
-    var Ctx = window.AudioContext || window.webkitAudioContext;
-    if (!Ctx) throw new Error('no-audiocontext');
-    var ctx = new Ctx({ sampleRate: 16000 });
-    var buf = await ctx.decodeAudioData(ab);   // AudioBuffer יחיד; ab משוחרר אחר-כך
-    var pcm;
-    if (buf.numberOfChannels > 1) {
-      // downmix stereo→mono (העתקה — אבל הקלטות-קול הן כמעט תמיד מונו)
-      var c0 = buf.getChannelData(0), c1 = buf.getChannelData(1);
-      pcm = new Float32Array(c0.length);
-      for (var i = 0; i < c0.length; i++) pcm[i] = (c0[i] + c1[i]) * 0.5;
-    } else {
-      pcm = buf.getChannelData(0);             // VIEW — אפס העתקה
+    // הקלטה ארוכה = פענוח ארוך (webm/opus של שעתיים ≈ עשרות שניות עד דקות,
+    // בלי שום callback התקדמות מהדפדפן) — בלי חיווי זה נראה "נתקע". מציגים
+    // גודל + הערכת-משך + שעון-חי כל 5ש כדי שיהיה ברור שהעבודה מתקדמת.
+    var sizeMB = (blob.size / 1024 / 1024).toFixed(0);
+    var isLong = blob.size > 25 * 1024 * 1024;   // ~25MB ≈ חצי שעה ב-128kbps
+    var baseMsg = isLong
+      ? 'מפענח הקלטה ארוכה (' + sizeMB + 'MB)… זה יכול לקחת עד 2-3 דקות — לא נתקע'
+      : 'מפענח את ההקלטה…';
+    if (onProgress) onProgress(baseMsg);
+    var tick = null, t0 = Date.now();
+    if (onProgress && isLong) {
+      tick = setInterval(function () {
+        onProgress(baseMsg + ' · ' + Math.round((Date.now() - t0) / 1000) + 'ש');
+      }, 5000);
     }
-    try { ctx.close(); } catch (e) {}
-    return { pcm: pcm, sampleRate: 16000, durationSec: pcm.length / 16000, _buf: buf };
+    try {
+      var ab = await blob.arrayBuffer();
+      var Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) throw new Error('no-audiocontext');
+      var ctx = new Ctx({ sampleRate: 16000 });
+      var buf = await ctx.decodeAudioData(ab);   // AudioBuffer יחיד; ab משוחרר אחר-כך
+      var pcm;
+      if (buf.numberOfChannels > 1) {
+        // downmix stereo→mono (העתקה — אבל הקלטות-קול הן כמעט תמיד מונו)
+        var c0 = buf.getChannelData(0), c1 = buf.getChannelData(1);
+        pcm = new Float32Array(c0.length);
+        for (var i = 0; i < c0.length; i++) pcm[i] = (c0[i] + c1[i]) * 0.5;
+      } else {
+        pcm = buf.getChannelData(0);             // VIEW — אפס העתקה
+      }
+      try { ctx.close(); } catch (e) {}
+      if (onProgress && isLong) onProgress('הפענוח הסתיים — מכין נתחי-ענן…');
+      return { pcm: pcm, sampleRate: 16000, durationSec: pcm.length / 16000, _buf: buf };
+    } finally {
+      if (tick) clearInterval(tick);             // שעון-החיווי לעולם לא נשאר דולק
+    }
   }
 
   // ── תמלול ────────────────────────────────────────────────────────────────
@@ -260,7 +279,14 @@
           console.warn('[voice-transcribe] cloud via ' + bases[b] + ' failed:', cloudErr.message);
         }
       }
-      if (!result && onProgress) onProgress('הענן לא זמין — עובר לתמלול מקומי…');
+      if (!result && onProgress) {
+        // הקלטה ארוכה: תמלול מקומי אורך בערך כמשך ההקלטה — אומרים זאת ביושר
+        // במקום להיראות תקועים שעות.
+        var _mins = Math.round(decoded.durationSec / 60);
+        onProgress(_mins > 20
+          ? 'הענן לא זמין אחרי ניסיונות חוזרים — עובר לתמלול מקומי. הקלטה של ' + _mins + ' דק׳ צפויה להימשך בערך כמשך ההקלטה; אפשר להשאיר את הטאב ברקע'
+          : 'הענן לא זמין — עובר לתמלול מקומי…');
+      }
     }
     if (!result || !(result.text || '').trim()) {
       if (!navigator.onLine && !_lwReady) throw new Error('אין חיבור לאינטרנט (נדרש להורדת מודל התמלול בפעם הראשונה)');
