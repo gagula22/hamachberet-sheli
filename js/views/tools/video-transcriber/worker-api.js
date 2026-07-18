@@ -210,16 +210,32 @@
   }
 
   // מקטע יחיד דרך gtx. 'iw' = קוד העברית הישן של גוגל (עובד יציב). מחזיר null אם ריק.
+  // ⚠️ timeout חובה (15.7): בלי abort, בקשת-תרגום תלויה תוקעת את הריצה לנצח
+  // אחרי שהתמלול כבר הצליח — אותה מחלקת-באג כמו תקיעת-ההעלאות. timeout ⇒
+  // נזרק ⇒ הקורא נופל ל-MyMemory / מדווח כשל-תרגום, והתמלול עצמו תמיד נשמר.
+  var TRANSLATE_TIMEOUT_MS = 25000;
   async function _googleTranslatePart(part, targetLang) {
     var tl = (!targetLang || targetLang === 'he') ? 'iw' : targetLang;
     var url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=' +
               encodeURIComponent(tl) + '&dt=t&q=' + encodeURIComponent(part);
-    var r = await fetch(url);
-    if (!r.ok) throw new Error('google ' + r.status);
-    var data = await r.json();
+    var c = (typeof AbortController === 'function') ? new AbortController() : null;
+    var t = c ? setTimeout(function () { c.abort(); }, TRANSLATE_TIMEOUT_MS) : null;
+    var data;
+    try {
+      var r = await fetch(url, c ? { signal: c.signal } : undefined);
+      if (!r.ok) throw new Error('google ' + r.status);
+      data = await r.json();
+    } finally { if (t) clearTimeout(t); }
     var segs = (data && data[0]) || [];
     var out = segs.map(function (s) { return (s && s[0]) || ''; }).join('').trim();
     return out || null;
+  }
+
+  // תוחם promise חיצוני (PTR_ENGINE של P-43) בזמן — המפסיד רץ ברקע, אנחנו לא נתקעים.
+  function _raceTimeout(promise, ms, msg) {
+    return Promise.race([promise, new Promise(function (_, rej) {
+      setTimeout(function () { rej(new Error(msg || 'timeout')); }, ms);
+    })]);
   }
 
   // תרגום בלוק טקסט מלא. מחזיר { translation, targetLanguage, targetName }
@@ -245,7 +261,7 @@
       // fallback (יעד עברית בלבד): MyMemory דרך מנוע מתרגם ה-PDF
       if (t === null && targetLang === 'he' && window.PTR_ENGINE && PTR_ENGINE._translatePageText) {
         try {
-          var m = (await PTR_ENGINE._translatePageText(parts[i]) || '').trim();
+          var m = (await _raceTimeout(PTR_ENGINE._translatePageText(parts[i]), 20000, 'MyMemory timeout') || '').trim();
           // MyMemory מחזיר את המקור/אזהרה כשנכשל — טקסט זהה למקור = כישלון
           if (m && m !== parts[i] && m.indexOf('MYMEMORY') === -1 && m.indexOf('QUERY LIMIT') === -1) t = m;
         } catch (me) {
