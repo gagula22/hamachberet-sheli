@@ -552,12 +552,39 @@
     })();
   }
 
+  // ── ייבוא Word לפתק — כולל התמונות (P-12, 15.7.2026) ─────────────────────
+  // הפתרון האמיתי ל"העתקה מוורד מאבדת תמונות": וורד לא מוסר את ביטי-התמונות
+  // ללוח-ההעתקה (רק הפניות file:/// שדפדפן חסום מלקרוא) — אי אפשר לתקן דרך
+  // paste. במקום זה מייבאים את קובץ ה-docx עצמו: mammoth.js (כבר vendored,
+  // deferred ב-index.html) ממיר ל-HTML עם התמונות כ-base64, וההזרקה עוברת
+  // דרך צינור-ההדבקה הרגיל (ניקוי, דחיסה, עטיפת-figures) — כאילו הודבק מושלם.
+  function importDocxInline(file, editor, save) {
+    if (!file) return;
+    if (!/\.docx$/i.test(file.name || '')) { if (window.App) App.toast('בחר קובץ Word בפורמט ‎.docx (קובץ ‎.doc ישן — פתח בוורד ושמור-בשם docx)'); return; }
+    if (!window.mammoth || !mammoth.convertToHtml) { if (window.App) App.toast('מנוע ההמרה עדיין נטען — נסה שוב בעוד רגע'); return; }
+    if (window.App) App.toast('מייבא את ' + file.name + '…');
+    file.arrayBuffer().then(function (ab) {
+      return mammoth.convertToHtml({ arrayBuffer: ab });   // ברירת המחדל: תמונות כ-data-URI
+    }).then(function (result) {
+      var html = result && result.value || '';
+      if (!html.trim()) throw new Error('הקובץ ריק או לא ניתן להמרה');
+      var imgCount = (html.match(/<img /g) || []).length;
+      return window.EditableImage.insertHtmlWithImages(html, editor, save).then(function () {
+        if (window.App) App.toast('📥 ' + file.name + ' יובא לפתק' + (imgCount ? ' — כולל ' + imgCount + ' תמונות' : ''));
+      });
+    }).catch(function (e) {
+      console.warn('[media] docx import failed:', e);
+      if (window.App) App.toast('הייבוא נכשל: ' + (e && e.message || ''));
+    });
+  }
+
   window.nbMedia = {
     insertImage: function (dataUrl, editor, save) { return window.Editable.insertImage(dataUrl, editor, save); },
     restoreMoodBlocks: restoreMoodBlocks, attachMoodBehaviors: attachMoodBehaviors,
     insertImageFile: function (file, editor, save) { return window.Editable.insertImageFromFile(file, editor, save); },
     attachTableResizers: attachTableResizers, wrapImagesInEditor: wrapImagesInEditor,
     startImageResize: startImageResize, openAttachment: openAttachment, downloadAttachment: downloadAttachment,
-    insertFileAttachment: insertFileAttachment, upgradeLocalAttachments: upgradeLocalAttachments, _fmtSize: _fmtSize
+    insertFileAttachment: insertFileAttachment, upgradeLocalAttachments: upgradeLocalAttachments,
+    importDocxInline: importDocxInline, _fmtSize: _fmtSize
   };
 })();

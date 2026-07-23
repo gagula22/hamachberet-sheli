@@ -287,6 +287,15 @@
       attachInput.value = '';
     });
 
+    // ייבוא Word לפתק (P-12) — טקסט + כל התמונות inline. זה הפתרון להעתקה
+    // מוורד שמאבדת תמונות (וורד לא מוסר את ביטי-התמונות ללוח-ההעתקה).
+    const docxInput = App.el('input', { type: 'file', accept: '.docx', style: { display: 'none' } });
+    docxInput.addEventListener('change', () => {
+      const f = docxInput.files && docxInput.files[0];
+      if (f && window.nbMedia.importDocxInline) nbMedia.importDocxInline(f, editor, save);
+      docxInput.value = '';
+    });
+
     try { document.execCommand('styleWithCSS', false, true); } catch {}
 
     // A saved range is only usable if its nodes are still attached to the DOM
@@ -815,6 +824,7 @@
           tbBtn('🔗',  'קישור חיצוני',      () => insertLink()),
           tbBtn('🖼️', 'תמונה מהמחשב',   () => fileInput.click()),
           tbBtn('📎',  'צרף קובץ',        () => attachInput.click()),
+          tbBtn('📥',  'ייבוא Word לפתק (הטקסט + כל התמונות)', () => docxInput.click()),
           tbBtn('⊞',   'טבלה',            (e) => showTablePicker(e.currentTarget)),
           tbBtn('⟦⟧',  'קישור פנימי [[ ]]', () => insertWikiLink()),
           tbBtn('—',   'קו מפריד',        () => { exec('insertHorizontalRule'); save(); })
@@ -826,7 +836,7 @@
           tbBtn('🎯',  'מצב מיקוד (Escape ליציאה)', () => toggleFocusMode()),
           exportWrap
         ),
-        fileInput, attachInput
+        fileInput, attachInput, docxInput
       ])
     ]);
 

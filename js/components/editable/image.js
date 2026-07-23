@@ -428,8 +428,9 @@
           '<div style="border:2px dashed #C9B48F;border-radius:10px;background:#FAF6EC;' +
           'padding:18px 14px;text-align:center;color:#6B5840;font-size:13px;line-height:1.7">' +
           '🖼️ <b>תמונה שלא הועברה בהעתקה</b><br>' +
-          '<span style="font-size:12px;color:#8a7a62">חזור למקור, לחץ על התמונה עצמה לחיצה ימנית ← ' +
-          '"העתק תמונה", והדבק אותה כאן במקום התיבה הזו</span></div>';
+          '<span style="font-size:12px;color:#8a7a62">וורד לא מוסר את התמונות ללוח-ההעתקה. ' +
+          'שתי דרכים: (1) המהירה — כפתור <b>📥 ייבוא Word</b> בסרגל מכניס את הקובץ כולו עם כל התמונות; ' +
+          '(2) חזור למקור ← לחיצה ימנית על התמונה ← "העתק תמונה" ← הדבק כאן</span></div>';
         imgEl.replaceWith(ph);
         continue;
       }
@@ -581,5 +582,10 @@
     // ── Persist size after the user finishes resizing ─────────────────────
     editor.addEventListener('mouseup', () => { save && save(); });
   }
-  window.EditableImage = { insertImageFromFile: insertImageFromFile, insertImage: insertImage, attachImageBehaviors: attachImageBehaviors };
+  // הזרקת HTML-עם-תמונות דרך אותו צינור בדיוק כמו הדבקה (ניקוי, דחיסה,
+  // עטיפת-figures, התנהגויות) — משמש את ייבוא-ה-Word-לפתק של media.js.
+  function insertHtmlWithImages(html, editor, save) {
+    return pasteHtmlContent(html, [], editor, save);
+  }
+  window.EditableImage = { insertImageFromFile: insertImageFromFile, insertImage: insertImage, attachImageBehaviors: attachImageBehaviors, insertHtmlWithImages: insertHtmlWithImages };
 })();
