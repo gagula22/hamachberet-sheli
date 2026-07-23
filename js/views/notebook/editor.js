@@ -43,6 +43,11 @@
     function getCleanHTML() {
       const clone = editor.cloneNode(true);
       clone.querySelectorAll('.nb-col-resize-handle').forEach(h => h.remove());
+      // תמונות-ענן (P-12): ה-src המוזרק לתצוגה הוא base64 כבד — בגוף-השמור
+      // נשאר רק placeholder זעיר + data-fsimg (אחרת הגוף מתנפח חזרה מעל
+      // סף-הסנכרון וכל ההמרה מתאיינת). ההזרקה חוזרת ב-hydrateCloudImages.
+      clone.querySelectorAll('img[data-fsimg]').forEach(img =>
+        img.setAttribute('src', window.nbMedia.FSIMG_PLACEHOLDER));
       return clone.innerHTML;
     }
 
@@ -97,6 +102,7 @@
       Editable.attachImageBehaviors(editor, save);
       attachMoodBehaviors(editor, save);
       attachTableResizers(editor, save); // re-attach after undo/redo
+      if (_MED.hydrateCloudImages) _MED.hydrateCloudImages(editor); // snapshots שומרים placeholder
       saveImmediate();
     }
 
@@ -150,6 +156,10 @@
     // ריפוי-אוטומטי P-12: קבצים מצורפים מקומיים-בלבד (data-content) מועלים
     // לענן ברקע ומוחלפים ל-data-fs — כדי שיהיו זמינים גם ממכשירים אחרים.
     if (_MED.upgradeLocalAttachments) _MED.upgradeLocalAttachments(editor, save);
+    // תמונות-ענן P-12: הזרקת src לתמונות data-fsimg (מטמון/ענן), והמרת
+    // תמונות-כבדות לענן כשהגוף חוצה את סף-הסנכרון.
+    if (_MED.hydrateCloudImages) _MED.hydrateCloudImages(editor);
+    if (_MED.convertHeavyImagesToCloud) _MED.convertHeavyImagesToCloud(editor, save);
 
     // Clipboard image/screenshot paste is owned by editable/image.js
     // (Editable.attachImageBehaviors above) — no separate handler here, so a
@@ -289,7 +299,9 @@
 
     // ייבוא Word לפתק (P-12) — טקסט + כל התמונות inline. זה הפתרון להעתקה
     // מוורד שמאבדת תמונות (וורד לא מוסר את ביטי-התמונות ללוח-ההעתקה).
-    const docxInput = App.el('input', { type: 'file', accept: '.docx', style: { display: 'none' } });
+    // accept כולל ‎.doc: קבצים כאלה הם לרוב docx/MHTML במסווה (הזיהוי לפי
+    // חתימת-בייטים ב-importDocxInline); בלי זה הבורר מסתיר אותם מהמשתמש.
+    const docxInput = App.el('input', { type: 'file', accept: '.docx,.doc', style: { display: 'none' } });
     docxInput.addEventListener('change', () => {
       const f = docxInput.files && docxInput.files[0];
       if (f && window.nbMedia.importDocxInline) nbMedia.importDocxInline(f, editor, save);

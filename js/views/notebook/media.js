@@ -552,28 +552,204 @@
     })();
   }
 
+  // ── תמונות-פתק כבדות → ענן (P-12, 23.7.2026) ─────────────────────────────
+  // הבעיה: פתק שגופו חוצה ~900KB מסונכרן טקסט-בלבד (שומר-הגודל של הסנכרון חותך
+  // base64) — התמונות נשארו במכשיר שיצר אותן. הפתרון: כשהגוף חוצה סף, התמונות
+  // הגדולות עוברות לאחסון-הענן של הקבצים המצורפים (Firestore-chunks):
+  // ה-<img> מקבל data-fsimg="<id>", בגוף-השמור ה-src מוחלף ב-placeholder זעיר
+  // (getCleanHTML ב-editor.js), הגוף יורד מתחת לסף ומסתנכרן מלא, ובכל מכשיר
+  // hydrateCloudImages מזריק את ה-src מהמטמון המקומי או מהענן.
+  // ⚠️ ה-placeholder הוא SVG בכוונה — לא ה-GIF-1×1 של שומר-הגודל: מגן-המדיה
+  // (_isStrippedTopic ב-firebase-sync) מזהה את ה-GIF ההוא כ"עותק חתוך" והיה
+  // חוסם את קבלת הגוף-המומר במכשירים אחרים. אסור להחליף ל-GIF הזה!
+  var FSIMG_PLACEHOLDER = 'data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20width=%224%22%20height=%223%22%3E%3Crect%20width=%224%22%20height=%223%22%20fill=%22%23f1ece2%22/%3E%3C/svg%3E';
+  var IMG_CONVERT_WHEN = 800 * 1024;    // גוף גדול מזה ⇒ ממירים (מרווח מתחת ל-900KB של הסנכרון)
+  var IMG_CONVERT_TARGET = 650 * 1024;  // ממירים תמונות (גדולה-תחילה) עד שהגוף יורד לכאן
+
+  // מטמון תמונות-ענן מקומי (IndexedDB) — נכתב בהמרה (מכשיר-המקור) ובשליפה
+  // (שאר המכשירים) ⇒ צפייה offline אחרי שהתמונה נראתה פעם אחת.
+  var IMGDB = 'hamachberet-imgcache';
+  var _imgDbP = null;
+  function _imgDb() {
+    if (_imgDbP) return _imgDbP;
+    _imgDbP = new Promise(function (res, rej) {
+      var q = indexedDB.open(IMGDB, 1);
+      q.onupgradeneeded = function () { if (!q.result.objectStoreNames.contains('imgs')) q.result.createObjectStore('imgs', { keyPath: 'id' }); };
+      q.onsuccess = function () { res(q.result); };
+      q.onerror = function () { rej(q.error); };
+    });
+    return _imgDbP;
+  }
+  function _imgCachePut(id, dataUrl) {
+    return _imgDb().then(function (db) {
+      return new Promise(function (res) { var t = db.transaction('imgs', 'readwrite'); t.objectStore('imgs').put({ id: id, dataUrl: dataUrl }); t.oncomplete = res; t.onerror = res; });
+    }).catch(function () {});
+  }
+  function _imgCacheGet(id) {
+    return _imgDb().then(function (db) {
+      return new Promise(function (res) { var g = db.transaction('imgs', 'readonly').objectStore('imgs').get(id); g.onsuccess = function () { res(g.result && g.result.dataUrl || null); }; g.onerror = function () { res(null); }; });
+    }).catch(function () { return null; });
+  }
+
+  var _fsimgBusy = false;                       // המרה אחת בכל רגע (rebuild באמצע לא מכפיל)
+  function convertHeavyImagesToCloud(editor, save) {
+    if (_fsimgBusy) return;
+    if (!(window.CloudFiles && CloudFiles.enabled && CloudFiles.enabled())) return;
+    var size = new Blob([editor.innerHTML]).size;
+    if (size <= IMG_CONVERT_WHEN) return;
+    // תמונות base64 שעדיין לא בענן, גדולה-תחילה
+    var imgs = Array.prototype.slice.call(editor.querySelectorAll('img'))
+      .filter(function (im) { return !im.getAttribute('data-fsimg') && (im.getAttribute('src') || '').indexOf('data:image') === 0 && im.getAttribute('src').length > 30 * 1024; })
+      .sort(function (a, b) { return b.getAttribute('src').length - a.getAttribute('src').length; });
+    if (!imgs.length) return;
+    _fsimgBusy = true;
+    (async function () {
+      var moved = 0;
+      try {
+        for (var i = 0; i < imgs.length && size > IMG_CONVERT_TARGET; i++) {
+          var im = imgs[i];
+          if (!im.isConnected) continue;
+          var src = im.getAttribute('src');
+          try {
+            var blob = await (await fetch(src)).blob();
+            if (!CloudFiles.fits(blob.size)) continue;
+            var id = 'img' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+            var ext = (blob.type.split('/')[1] || 'png').split('+')[0];
+            await CloudFiles.upload(new File([blob], 'note-image.' + ext, { type: blob.type }), id, null);
+            await _imgCachePut(id, src);              // מכשיר-המקור ממשיך לראות גם offline
+            if (!im.isConnected) continue;            // העורך התחלף בזמן ההעלאה — הפתיחה הבאה תמיר
+            im.setAttribute('data-fsimg', id);        // ה-src בתצוגה נשאר מלא; getCleanHTML מפשיט בשמירה
+            size -= src.length;                       // הערכת הגודל אחרי ההפשטה
+            moved++;
+            save();
+          } catch (e) {
+            console.warn('[media] image→cloud failed:', e && e.message);
+          }
+        }
+      } finally { _fsimgBusy = false; }
+      if (moved && window.App) App.toast('☁️ ' + moved + ' תמונות כבדות הועברו לענן — הפתק יסתנכרן מלא לכל המכשירים');
+    })();
+  }
+
+  // הזרקת src לתמונות-ענן (data-fsimg) שה-src שלהן הוא placeholder — מהמטמון
+  // או מהענן. רץ בכל בניית-עורך ואחרי undo/redo.
+  var _hydrating = Object.create(null);
+  function hydrateCloudImages(editor) {
+    var imgs = Array.prototype.slice.call(editor.querySelectorAll('img[data-fsimg]'))
+      .filter(function (im) { return (im.getAttribute('src') || '').length < 300; });   // placeholder בלבד
+    imgs.forEach(function (im) {
+      var id = im.getAttribute('data-fsimg');
+      if (!id || _hydrating[id]) return;
+      _hydrating[id] = true;
+      _imgCacheGet(id).then(function (cached) {
+        if (cached) return cached;
+        if (!(window.CloudFiles && CloudFiles.enabled && CloudFiles.enabled())) return null;
+        return CloudFiles.fetch(id).then(function (f) { _imgCachePut(id, f.dataUrl); return f.dataUrl; });
+      }).then(function (dataUrl) {
+        if (dataUrl && im.isConnected) im.setAttribute('src', dataUrl);
+        else if (!dataUrl && im.isConnected) im.title = 'תמונה בענן — התחבר לאינטרנט/לחשבון כדי לראות אותה';
+      }).catch(function (e) {
+        console.warn('[media] image hydrate failed:', id, e && e.message);
+        if (im.isConnected) im.title = 'טעינת התמונה מהענן נכשלה — ינוסה בפתיחה הבאה';
+      }).finally(function () { delete _hydrating[id]; });
+    });
+  }
+
   // ── ייבוא Word לפתק — כולל התמונות (P-12, 15.7.2026) ─────────────────────
   // הפתרון האמיתי ל"העתקה מוורד מאבדת תמונות": וורד לא מוסר את ביטי-התמונות
   // ללוח-ההעתקה (רק הפניות file:/// שדפדפן חסום מלקרוא) — אי אפשר לתקן דרך
   // paste. במקום זה מייבאים את קובץ ה-docx עצמו: mammoth.js (כבר vendored,
   // deferred ב-index.html) ממיר ל-HTML עם התמונות כ-base64, וההזרקה עוברת
   // דרך צינור-ההדבקה הרגיל (ניקוי, דחיסה, עטיפת-figures) — כאילו הודבק מושלם.
+  // תמיכה בשלושה פורמטים, מזוהים לפי חתימת-הבייטים (לא לפי הסיומת — קבצי ‎.doc
+  // רבים הם בעצם docx או MHTML במסווה):
+  //   PK..           → docx (מנוע mammoth)
+  //   "MIME-Ver"     → MHTML — ‏"Web Archive" ‏(כולל קובצי הייצוא-ל-Word של
+  //                    המחברת עצמה!) — מפוענח כאן: HTML ‏(quoted-printable) +
+  //                    תמונות base64 לפי Content-Location
+  //   D0 CF 11 E0    → ‎.doc בינארי ישן אמיתי — אין מנוע בדפדפן; הודעה ברורה
+  function _qpDecodeToUtf8(qp) {
+    qp = qp.replace(/=\r?\n/g, '');
+    var bytes = [];
+    for (var i = 0; i < qp.length; i++) {
+      var ch = qp.charAt(i);
+      if (ch === '=' && /^[0-9A-Fa-f]{2}$/.test(qp.substr(i + 1, 2))) {
+        bytes.push(parseInt(qp.substr(i + 1, 2), 16)); i += 2;
+      } else bytes.push(ch.charCodeAt(0) & 0xFF);
+    }
+    return new TextDecoder('utf-8').decode(new Uint8Array(bytes));
+  }
+
+  function _mhtmlToHtml(text) {
+    var bm = text.match(/boundary="([^"]+)"/);
+    if (!bm) throw new Error('MHTML בלי boundary — קובץ פגום');
+    var parts = text.split('--' + bm[1]);
+    var html = null;
+    var images = [];   // { loc, dataUrl }
+    for (var i = 1; i < parts.length; i++) {
+      var sep = parts[i].indexOf('\r\n\r\n');
+      if (sep === -1) sep = parts[i].indexOf('\n\n');
+      if (sep === -1) continue;
+      var hdr = parts[i].slice(0, sep);
+      var body = parts[i].slice(sep).replace(/^\r?\n\r?\n?/, '');
+      var type = (hdr.match(/Content-Type:\s*([^;\r\n]+)/i) || [])[1] || '';
+      var loc = (hdr.match(/Content-Location:\s*([^\r\n]+)/i) || [])[1] || '';
+      var enc = ((hdr.match(/Content-Transfer-Encoding:\s*([^\r\n]+)/i) || [])[1] || '').trim().toLowerCase();
+      if (/text\/html/i.test(type) && html === null) {
+        html = enc === 'quoted-printable' ? _qpDecodeToUtf8(body) : body;
+      } else if (/^image\//i.test(type) && loc) {
+        images.push({ loc: loc.trim(), dataUrl: 'data:' + type.trim() + ';base64,' + body.replace(/[\r\n\s]/g, '') });
+      }
+    }
+    if (!html) throw new Error('לא נמצא תוכן HTML בקובץ');
+    // גוף בלבד (בלי head/style/title שיהפכו לטקסט גלוי)
+    var bodyM = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+    if (bodyM) html = bodyM[1];
+    // החלפת ההפניות ב-data-URIs. ⚠️ ה-HTML מפנה לתמונות בשלוש צורות אפשריות:
+    // המיקום המלא (file:///C:/imageNNN.webp), או — כמו בקובצי-הייצוא של המחברת
+    // עצמה — **שם-קובץ יחסי בלבד** (src="image001.webp"). מחליפים את כולן,
+    // בעיגון לתכונת src כדי לא לגעת בטקסט חופשי.
+    images.forEach(function (im) {
+      var base = im.loc.split('/').pop();
+      html = html.split(im.loc).join(im.dataUrl);
+      if (base && base !== im.loc) {
+        html = html.split('file:///C:/' + base).join(im.dataUrl);
+        html = html.split('src="' + base + '"').join('src="' + im.dataUrl + '"');
+        html = html.split("src='" + base + "'").join("src='" + im.dataUrl + "'");
+      }
+    });
+    return html;
+  }
+
   function importDocxInline(file, editor, save) {
     if (!file) return;
-    if (!/\.docx$/i.test(file.name || '')) { if (window.App) App.toast('בחר קובץ Word בפורמט ‎.docx (קובץ ‎.doc ישן — פתח בוורד ושמור-בשם docx)'); return; }
-    if (!window.mammoth || !mammoth.convertToHtml) { if (window.App) App.toast('מנוע ההמרה עדיין נטען — נסה שוב בעוד רגע'); return; }
     if (window.App) App.toast('מייבא את ' + file.name + '…');
-    file.arrayBuffer().then(function (ab) {
-      return mammoth.convertToHtml({ arrayBuffer: ab });   // ברירת המחדל: תמונות כ-data-URI
-    }).then(function (result) {
-      var html = result && result.value || '';
-      if (!html.trim()) throw new Error('הקובץ ריק או לא ניתן להמרה');
+    file.slice(0, 8).arrayBuffer().then(function (headBuf) {
+      var b = new Uint8Array(headBuf);
+      var isZip = b[0] === 0x50 && b[1] === 0x4B;                                   // PK → docx
+      var isOle = b[0] === 0xD0 && b[1] === 0xCF && b[2] === 0x11 && b[3] === 0xE0; // doc ישן
+      var headTxt = new TextDecoder('utf-8').decode(b);
+      var isMht = headTxt.indexOf('MIME-Ver') === 0;
+
+      if (isZip) {
+        if (!window.mammoth || !mammoth.convertToHtml) throw new Error('מנוע ההמרה עדיין נטען — נסה שוב בעוד רגע');
+        return file.arrayBuffer()
+          .then(function (ab) { return mammoth.convertToHtml({ arrayBuffer: ab }); })
+          .then(function (result) { return result && result.value || ''; });
+      }
+      if (isMht) return file.text().then(_mhtmlToHtml);
+      if (isOle) throw new Error('זהו קובץ Word בפורמט הישן (בינארי) — פתח אותו בוורד ושמור-בשם ‎.docx, ואז ייבא');
+      throw new Error('הקובץ אינו docx / Word-MHTML — פתח בוורד ושמור-בשם ‎.docx');
+    }).then(function (html) {
+      if (!html || !html.trim()) throw new Error('הקובץ ריק או לא ניתן להמרה');
       var imgCount = (html.match(/<img /g) || []).length;
       return window.EditableImage.insertHtmlWithImages(html, editor, save).then(function () {
         if (window.App) App.toast('📥 ' + file.name + ' יובא לפתק' + (imgCount ? ' — כולל ' + imgCount + ' תמונות' : ''));
+        // ייבוא כבד עלול להקפיץ את הגוף מעל סף-הסנכרון — מנתבים תמונות לענן מיד
+        setTimeout(function () { convertHeavyImagesToCloud(editor, save); }, 800);
       });
     }).catch(function (e) {
-      console.warn('[media] docx import failed:', e);
+      console.warn('[media] word import failed:', e);
       if (window.App) App.toast('הייבוא נכשל: ' + (e && e.message || ''));
     });
   }
@@ -585,6 +761,8 @@
     attachTableResizers: attachTableResizers, wrapImagesInEditor: wrapImagesInEditor,
     startImageResize: startImageResize, openAttachment: openAttachment, downloadAttachment: downloadAttachment,
     insertFileAttachment: insertFileAttachment, upgradeLocalAttachments: upgradeLocalAttachments,
-    importDocxInline: importDocxInline, _fmtSize: _fmtSize
+    importDocxInline: importDocxInline,
+    convertHeavyImagesToCloud: convertHeavyImagesToCloud, hydrateCloudImages: hydrateCloudImages,
+    FSIMG_PLACEHOLDER: FSIMG_PLACEHOLDER, _fmtSize: _fmtSize
   };
 })();
