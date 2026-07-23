@@ -54,6 +54,11 @@
     function saveImmediate() {
       updateTopic(topic.id, { body: getCleanHTML(), updatedAt: Date.now() });
       refreshPageLabels();
+      // תמונות-ענן P-12: כל שמירה בודקת אם הגוף חצה את סף-הסנכרון (הדבקה
+      // כבדה, צילומי-מסך מרובים…) וממירה תמונות לענן מיד — לא רק בפתיחה
+      // הבאה. הפונקציה חוזרת מיד כשהגוף קל / ההמרה כבר רצה (_fsimgBusy),
+      // כך שאין רקורסיה דרך ה-save שההמרה עצמה מפעילה.
+      if (_MED.convertHeavyImagesToCloud) _MED.convertHeavyImagesToCloud(editor, save);
     }
     const save = Editable.debounce(saveImmediate, 500);
 

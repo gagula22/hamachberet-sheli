@@ -745,8 +745,8 @@
       var imgCount = (html.match(/<img /g) || []).length;
       return window.EditableImage.insertHtmlWithImages(html, editor, save).then(function () {
         if (window.App) App.toast('📥 ' + file.name + ' יובא לפתק' + (imgCount ? ' — כולל ' + imgCount + ' תמונות' : ''));
-        // ייבוא כבד עלול להקפיץ את הגוף מעל סף-הסנכרון — מנתבים תמונות לענן מיד
-        setTimeout(function () { convertHeavyImagesToCloud(editor, save); }, 800);
+        // ההמרה-לענן של גוף כבד מופעלת מ-saveImmediate של העורך (רץ על כל
+        // שמירה — כולל זו של הייבוא) — אין צורך בקריאה נוספת כאן.
       });
     }).catch(function (e) {
       console.warn('[media] word import failed:', e);
