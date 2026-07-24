@@ -34,6 +34,12 @@
           const nw = img.naturalWidth || 0, nh = img.naturalHeight || 0;
           if (!nw || !nh) { resolve(dataUrl); return; }
           const TARGET_BYTES = 150 * 1024;             // ~150KB per image
+          // איכות (23.7.2026): תמונה שכבר עומדת ביעד-הגודל ובתקרת-המימדים
+          // מוחזרת ביט-בביט — אפס קידוד-מחדש = אפס איבוד-דורי. זה המקרה
+          // הנפוץ (תמונות וורד/צילומי-מסך קטנים); קודם גם הן עברו קידוד
+          // webp אחד מיותר. פתקים כבדים ממילא מוגנים עכשיו ע"י ההעברה-לענן,
+          // כך שהוויתור על הצמצום-הזעיר הזה בטוח.
+          if (nw <= maxW && dataUrl.length * 0.75 <= TARGET_BYTES) { resolve(dataUrl); return; }
           const widths = [Math.min(nw, maxW), Math.min(nw, 1600), Math.min(nw, 1280)];
           const quals  = [quality, 0.82, 0.72];
           let best = dataUrl;
