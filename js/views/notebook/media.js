@@ -595,7 +595,14 @@
   function convertHeavyImagesToCloud(editor, save) {
     if (_fsimgBusy) return;
     if (!(window.CloudFiles && CloudFiles.enabled && CloudFiles.enabled())) return;
+    // ⚠️ מודדים את גודל הגוף-שיישמר, לא את ה-DOM: תמונות שכבר בענן נושאות
+    // בתצוגה src מלא אבל בשמירה הן placeholder זעיר. מדידת ה-DOM הגולמי
+    // גרמה להמרת-יתר — הגודל "לא ירד" אחרי המרות והלולאה העבירה לענן גם
+    // תמונות קטנות שהיו אמורות להישאר inline.
     var size = new Blob([editor.innerHTML]).size;
+    editor.querySelectorAll('img[data-fsimg]').forEach(function (im) {
+      size -= (im.getAttribute('src') || '').length;
+    });
     if (size <= IMG_CONVERT_WHEN) return;
     // תמונות base64 שעדיין לא בענן, גדולה-תחילה
     var imgs = Array.prototype.slice.call(editor.querySelectorAll('img'))
