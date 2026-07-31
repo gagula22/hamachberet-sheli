@@ -112,6 +112,44 @@
 .vm-word-en:hover { filter: brightness(.95); }
 .vm-word.busy { animation: vmBusy 1s linear infinite; cursor: progress; }
 
+/* ── הקלטת וידאו מחלון/טאב (שורה נפרדת בכרטיס העברי) ── */
+.vm-vid-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--sp-4);
+  padding-top: var(--sp-3);
+  border-top: 1px dashed var(--line);
+}
+.vm-vid-btn { background: var(--lavender, #E6DDF4); }
+.vm-vid-btn:hover { background: var(--lavender-deep, #C9B8E8); }
+.vm-vid-btn.recording {
+  background: var(--lavender-deep, #C9B8E8);
+  animation: voicePulse 1.2s ease-in-out infinite;
+}
+.vm-vid-len-lbl {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+.vm-vid-len {
+  padding: 7px 10px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.vm-vid-len:disabled { opacity: .55; cursor: not-allowed; }
+/* השלט הצף של הווידאו — נבדל בצבע מזה של השמע */
+.vm-vid-pill { border-color: var(--lavender-deep, #C9B8E8); }
+.vm-vid-pill .vm-pill-ico { font-size: 13px; }
+
 /* ── כפתור "הקלט שמע מהטאב" + מדריך ההפעלה ── */
 .vm-controls { flex-wrap: wrap; }
 .vm-tab-btn { background: var(--sky); }

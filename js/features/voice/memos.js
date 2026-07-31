@@ -178,6 +178,165 @@
     if (_mr && _mr.state !== 'inactive') { try { _mr.stop(); } catch (e) {} }
   }
 
+  // ── הקלטת וידאו מטאב/חלון (אחריות הקול; היעד = קובץ בדיסק, לא IndexedDB) ──
+  // ⚠️ למה לא IndexedDB (בניגוד להקלטות השמע): 3 שעות וידאו ≈ ג'יגה-בייטים —
+  // אחסון כזה ינפח את ה-DB בלי תועלת (אין תמלול/ניגון-בתוך-האפליקציה לווידאו).
+  // לכן הקובץ נכתב לדיסק, בשני מסלולים:
+  //   • **מועדף — File System Access (זרימה):** היעד נבחר *לפני* ההקלטה והנתונים
+  //     נכתבים אליו תוך כדי → אפס גידול-זיכרון, ואם הדפדפן קורס מה שהוקלט כבר
+  //     על הדיסק. ⚠️ חובה לקרוא ל-picker **לפני** getDisplayMedia: שתי הקריאות
+  //     דורשות user-gesture ו-getDisplayMedia מכלה אותו.
+  //   • **נפילה — צבירה בזיכרון:** ה-Blob-ים נצברים (הדפדפן מגלגל אותם לדיסק)
+  //     ובסיום יורדים אוטומטית לתיקיית ההורדות.
+  // הקלטת וידאו והקלטת שמע הן בלעדיות זו לזו (שלט צף אחד, בלי תחרות על CPU).
+  const VID_MAX_SEC = 3 * 3600;                       // תקרה: 3 שעות
+  let _vmr = null, _vT0 = 0, _vTimerI = null, _vStopT = null, _vLimitSec = 0;
+  let _vWriter = null, _vWriteChain = null, _vChunks = null, _vName = '', _vUi = null;
+  let _vPill = null, _vPillTime = null;
+
+  function pickVideoMime() {
+    const opts = [
+      'video/mp4;codecs=avc1.42E01E,mp4a.40.2',       // MP4 — הכי נוח לצפייה/עריכה
+      'video/mp4',
+      'video/webm;codecs=vp9,opus',
+      'video/webm;codecs=vp8,opus',
+      'video/webm'
+    ];
+    for (const m of opts) {
+      if (window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m)) return m;
+    }
+    return '';
+  }
+
+  function showVidPill() {
+    if (_vPill) return;
+    _vPillTime = el('span', { class: 'vm-pill-time' }, '00:00');
+    const stopBtn = el('button', { class: 'vm-pill-stop', title: 'עצור ושמור' }, '⏹');
+    stopBtn.addEventListener('click', stopVideoRec);
+    _vPill = el('div', { class: 'vm-rec-pill vm-vid-pill', title: 'הקלטת וידאו פעילה — ממשיכה בכל עמוד' },
+      [el('span', { class: 'vm-pill-dot' }), el('span', { class: 'vm-pill-ico' }, '🎥'), _vPillTime, stopBtn]);
+    document.body.appendChild(_vPill);
+  }
+  function hideVidPill() { if (_vPill) { _vPill.remove(); _vPill = null; _vPillTime = null; } }
+
+  // כתיבות ל-writable חייבות להיות טוריות — משרשרים במקום לירות במקביל
+  function _vWrite(blob) {
+    if (!_vWriter) { if (_vChunks) _vChunks.push(blob); return; }
+    _vWriteChain = _vWriteChain
+      .then(() => _vWriter && _vWriter.write(blob))
+      .catch(err => console.error('[voice-video] write failed:', err));
+  }
+
+  async function startTabVideoRec(limitSec) {
+    if (_mr)  { App.toast('הקלטת שמע פעילה — עצור אותה קודם'); return; }
+    if (_vmr) { App.toast('הקלטת וידאו כבר פעילה'); return; }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia || !window.MediaRecorder) {
+      App.toast('הדפדפן לא תומך בהקלטת וידאו מחלון (נדרש Chrome / Edge / Brave)');
+      return;
+    }
+    limitSec = Math.min(Math.max(0, parseInt(limitSec, 10) || 0), VID_MAX_SEC);
+
+    const mime = pickVideoMime();
+    const ext  = mime.indexOf('mp4') > -1 ? '.mp4' : '.webm';
+    const d = new Date();
+    const stamp = d.toLocaleDateString('he-IL').replace(/[/.]/g, '-') + ' ' +
+                  String(d.getHours()).padStart(2, '0') + '-' + String(d.getMinutes()).padStart(2, '0');
+    _vName = 'הקלטת מסך ' + stamp + ext;
+
+    // (1) יעד הכתיבה — לפני getDisplayMedia (שמכלה את ה-user-gesture)
+    _vWriter = null; _vWriteChain = Promise.resolve(); _vChunks = [];
+    if (window.showSaveFilePicker) {
+      try {
+        const accept = {}; accept[ext === '.mp4' ? 'video/mp4' : 'video/webm'] = [ext];
+        const handle = await window.showSaveFilePicker({
+          suggestedName: _vName,
+          types: [{ description: ext === '.mp4' ? 'MP4 video' : 'WebM video', accept: accept }]
+        });
+        _vWriter = await handle.createWritable();
+        _vName = handle.name || _vName;
+      } catch (e) {
+        _vWriter = null;   // ביטול/חוסר-תמיכה → צבירה בזיכרון + הורדה אוטומטית
+      }
+    }
+
+    // (2) בחירת החלון / הטאב / המסך להקלטה
+    let ds;
+    try {
+      ds = await navigator.mediaDevices.getDisplayMedia({
+        video: { frameRate: { ideal: 30, max: 30 } },
+        audio: true
+      });
+    } catch (e) {
+      if (_vWriter) { try { await _vWriter.abort(); } catch (_) {} _vWriter = null; }
+      App.toast('בחירת החלון בוטלה');
+      return;
+    }
+    if (!ds.getVideoTracks().length) {
+      ds.getTracks().forEach(t => t.stop());
+      if (_vWriter) { try { await _vWriter.abort(); } catch (_) {} _vWriter = null; }
+      App.toast('לא נבחר וידאו — נסה שוב');
+      return;
+    }
+    if (!ds.getAudioTracks().length) {
+      App.toast('⚠️ מקליט וידאו בלי קול — לשמע סמן "שתף גם שמע" בחלון הבחירה');
+    }
+
+    const opts = mime
+      ? { mimeType: mime, videoBitsPerSecond: 2500000, audioBitsPerSecond: 128000 }
+      : { videoBitsPerSecond: 2500000 };
+    _vmr = new MediaRecorder(ds, opts);
+    _vT0 = Date.now();
+    _vLimitSec = limitSec;
+    _vmr.ondataavailable = e => { if (e.data && e.data.size) _vWrite(e.data); };
+    _vmr.onstop = async () => {
+      clearInterval(_vTimerI); clearTimeout(_vStopT);
+      const recMime = (_vmr && _vmr.mimeType) || 'video/webm';
+      const dur = (Date.now() - _vT0) / 1000;
+      ds.getTracks().forEach(t => t.stop());
+      try {
+        if (_vWriter) {
+          await _vWriteChain;                 // לוודא שכל הנתחים נכתבו
+          await _vWriter.close();
+          App.toast('🎥 הווידאו נשמר: ' + _vName + ' · ' + fmtDur(dur));
+        } else {
+          const blob = new Blob(_vChunks || [], { type: recMime });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url; a.download = _vName;
+          document.body.appendChild(a); a.click(); a.remove();
+          setTimeout(() => { try { URL.revokeObjectURL(url); } catch (_) {} }, 15000);
+          App.toast('🎥 הווידאו ירד לתיקיית ההורדות: ' + _vName + ' · ' + fmtDur(dur));
+        }
+      } catch (err) {
+        App.toast('שמירת הווידאו נכשלה: ' + ((err && err.message) || ''));
+      }
+      _vWriter = null; _vChunks = null; _vmr = null;
+      hideVidPill();
+      window.removeEventListener('beforeunload', _unloadGuard);
+      if (_vUi) _vUi.setRecording(false);
+    };
+
+    _vmr.start(5000);                          // נתח כל 5 שניות → נכתב מיד לדיסק
+    // "הפסק שיתוף" של הדפדפן → עצירה ושמירה (לא מאבדים את מה שהוקלט)
+    ds.getVideoTracks()[0].addEventListener('ended', stopVideoRec);
+    showVidPill();
+    window.addEventListener('beforeunload', _unloadGuard);
+    if (_vUi) _vUi.setRecording(true);
+    if (limitSec > 0) _vStopT = setTimeout(stopVideoRec, limitSec * 1000);
+    _vTimerI = setInterval(() => {
+      const elapsed = (Date.now() - _vT0) / 1000;
+      let t = fmtDur(elapsed);
+      if (_vLimitSec > 0) t += ' / ' + fmtDur(_vLimitSec);
+      if (_vUi) _vUi.setTimer(t);
+      if (_vPillTime) _vPillTime.textContent = t;
+    }, 500);
+  }
+
+  function stopVideoRec() {
+    clearTimeout(_vStopT);
+    if (_vmr && _vmr.state !== 'inactive') { try { _vmr.stop(); } catch (e) {} }
+  }
+
   // ── נגן משותף ────────────────────────────────────────────────────────────
   let _audio = null, _playingId = null, _url = null;
   function stopPlayback() {
@@ -395,6 +554,8 @@
         // בזמן הקלטה כפתור לכידת-הטאב (והחלון הקופץ שלו) מוסתר — הקלטה אחת בכל
         // רגע; כפתור העצירה הראשי עוצר גם הקלטת-טאב
         tabWrap.style.display = on ? 'none' : '';
+        // הקלטת-וידאו בלעדית להקלטת-שמע → מסתירים גם אותה
+        if (vidRow) vidRow.style.display = on ? 'none' : '';
         timer.style.display = on ? 'inline' : 'none';
         if (!on) timer.textContent = '00:00';
       },
@@ -471,12 +632,83 @@
       el('div', { class: 'vm-tab-help-body' }, guideBody())
     ]);
 
+    // ── הקלטת וידאו מחלון/טאב — כרטיס עברי בלבד (לא תלוי-שפה, אין תמלול) ────
+    // היעד הוא קובץ בדיסק (ראה מנוע הווידאו למעלה), ולכן זה לא מופיע ברשימת
+    // ההקלטות ואינו נוגע ב-IndexedDB של הערות-הקול.
+    let vidRow = null;
+    if (!isEn) {
+      const vidLabel = '🎥 הקלט וידאו מהחלון';
+      const vidBtn = el('button', { class: 'vm-rec-btn vm-vid-btn', title: 'בחירת חלון/טאב והקלטת וידאו + קול לקובץ' }, vidLabel);
+      const vidTimer = el('span', { class: 'vm-timer' }, '00:00');
+      const vidSel = el('select', { class: 'vm-vid-len', title: 'משך ההקלטה — בסיומו ההקלטה נעצרת ונשמרת אוטומטית' });
+      [['10800', '3 שעות (מקסימום)'], ['7200', 'שעתיים'], ['5400', 'שעה וחצי'], ['3600', 'שעה'],
+       ['2700', '45 דקות'], ['1800', '30 דקות'], ['900', '15 דקות'], ['300', '5 דקות'], ['0', 'ללא הגבלה — עד שאעצור']]
+        .forEach(function (o) { vidSel.appendChild(el('option', { value: o[0] }, o[1])); });
+      vidSel.value = '10800';   // ברירת מחדל = התקרה (3 שעות): נעצר ונשמר לבד
+
+      const vUi = {
+        setRecording(on) {
+          vidBtn.textContent = on ? '⏹ עצור ושמור וידאו' : vidLabel;
+          vidBtn.classList.toggle('recording', on);
+          vidSel.disabled = on;
+          vidTimer.style.display = on ? 'inline' : 'none';
+          if (!on) vidTimer.textContent = '00:00';
+          // הקלטת שמע בלעדית להקלטת וידאו → מסתירים את כפתורי השמע
+          recBtn.style.display = on ? 'none' : '';
+          tabWrap.style.display = on ? 'none' : '';
+        },
+        setTimer(t) { vidTimer.textContent = t; }
+      };
+      _vUi = vUi;   // ה-ui החי של הווידאו (מוחלף בכל רינדור, כמו _cards)
+
+      vidBtn.addEventListener('click', function () {
+        if (_vmr) stopVideoRec();
+        else startTabVideoRec(vidSel.value);
+      });
+
+      function vidGuideBody() {
+        return [
+          el('p', {}, 'הקלטת וידאו + קול של חלון, טאב או המסך כולו — לשיעור, שיחה או הדגמה. ' +
+            'בניגוד להקלטות הקול, הווידאו אינו נשמר באפליקציה אלא ישירות לקובץ במחשב.'),
+          el('p', { class: 'vm-tab-help-steps-title' }, 'שלבי הפעלה:'),
+          el('ol', {}, [
+            el('li', {}, 'בחר את משך ההקלטה ברשימה (עד 3 שעות). בסוף הזמן ההקלטה נעצרת ונשמרת אוטומטית — אין צורך לשבת מול המסך.'),
+            el('li', {}, 'לחץ "🎥 הקלט וידאו מהחלון".'),
+            el('li', {}, 'ייפתח חלון שמירה — אשר את שם הקובץ (ברירת מחדל: תיקיית ההורדות). ' +
+              'הווידאו נכתב לקובץ תוך כדי ההקלטה, כך שגם 3 שעות לא הולכות לאיבוד.'),
+            el('li', {}, 'ייפתח חלון בחירת המקור — בחר "כרטיסייה" / "חלון" / "כל המסך", ' +
+              'וודא ש"שתף גם שמע" דלוק (אחרת ייצא וידאו בלי קול). אשר.'),
+            el('li', {}, 'ההקלטה רצה ברקע — השלט הצף מציג את הזמן שעבר מתוך המשך שבחרת. ' +
+              'אפשר לעצור בכל רגע ב-"⏹ עצור ושמור וידאו" (כאן או בשלט הצף), והקובץ נסגר ונשמר.')
+          ]),
+          el('p', { class: 'vm-tab-help-note' }, 'נדרש Chrome / Edge / Brave. הקלטת וידאו והקלטת שמע אינן רצות יחד — ' +
+            'בזמן אחת מהן השנייה מוסתרת. שים לב: 3 שעות וידאו הן קובץ גדול (כמה ג׳יגה-בייטים).')
+        ];
+      }
+      const vidPop = el('div', { class: 'vm-tab-pop', role: 'tooltip' }, [
+        el('div', { class: 'vm-tab-pop-title' }, '🎥 הקלט וידאו מהחלון — מדריך')
+      ].concat(vidGuideBody()));
+      const vidWrap = el('div', { class: 'vm-tab-wrap' }, [vidBtn, vidPop]);
+      vidWrap.addEventListener('mouseenter', () => vidWrap.classList.add('vm-pop-open'));
+      vidWrap.addEventListener('mouseleave', () => vidWrap.classList.remove('vm-pop-open'));
+      vidWrap.addEventListener('focusin',  () => vidWrap.classList.add('vm-pop-open'));
+      vidWrap.addEventListener('focusout', () => vidWrap.classList.remove('vm-pop-open'));
+
+      vidRow = el('div', { class: 'vm-vid-row' }, [
+        vidWrap,
+        el('label', { class: 'vm-vid-len-lbl' }, ['משך:', vidSel]),
+        vidTimer
+      ]);
+      vidTimer.style.display = 'none';
+    }
+
     const card = el('div', { class: 'card vm-card' + (isEn ? ' vm-card-en' : '') }, [
       el('h2', {}, isEn ? '🇬🇧 הערות קול באנגלית' : '🎙️ הערות קול'),
       el('div', { class: 'vm-sub' }, isEn
         ? 'הקלטה ותמלול בשפה האנגלית — מהמיקרופון או משמע של טאב אחר (🔊, לסרטונים/שיעורים). כפתור 📝 מתמלל (Whisper) ומתרגם אוטומטית לעברית; כפתור 📄 מייצא ל-Word את התרגום בעברית (עם המקור האנגלי בהמשך המסמך), וכפתור 🇬🇧 מייצא את המקור באנגלית בלבד. ההקלטות נשמרות מקומית בלבד וממשיכות ברקע — כמו בעברית.'
         : 'תזכירים קוליים — מהמיקרופון או משמע של טאב אחר (🔊, לסרטונים/שיעורים). מוקלטים ונשמרים מקומית בלבד, וההקלטה ממשיכה ברקע גם במעבר לעמוד או לחלון אחר, עד שעוצרים אותה. להכתבה לטקסט השתמש בכפתור 🎤 שבעורך המחברת.'),
       el('div', { class: 'vm-controls' }, [recBtn, tabWrap, timer]),
+      vidRow || el('span', { style: 'display:none' }),
       help,
       listWrap
     ]);
@@ -614,6 +846,13 @@
       const u = activeUi();
       u.setRecording(true);
       u.setTimer(fmtDur((Date.now() - _t0) / 1000));
+    }
+    // שחזור מצב הקלטת-וידאו (buildCard כבר עדכן את _vUi לכרטיס החדש)
+    if (_vmr && _vUi) {
+      _vUi.setRecording(true);
+      let t = fmtDur((Date.now() - _vT0) / 1000);
+      if (_vLimitSec > 0) t += ' / ' + fmtDur(_vLimitSec);
+      _vUi.setTimer(t);
     }
     he.ui.refresh();
     en.ui.refresh();
