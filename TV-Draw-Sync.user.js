@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TradingView Draw Sync (layout mirror)
 // @namespace    maoz.tv.drawsync
-// @version      1.4
+// @version      1.5
 // @description  מעתיק אוטומטית ציורים ותיקיות מפריסת המקור ("פריסה שלי") לחלונות פריסת היעד ("אסטרטגיה 4 שעתי") — לפי המטבע של כל חלון. רץ בדפדפן, בלי תלות באפליקציה שבמחשב.
 // @updateURL    https://gagula22.github.io/hamachberet-sheli/TV-Draw-Sync.user.js
 // @downloadURL  https://gagula22.github.io/hamachberet-sheli/TV-Draw-Sync.user.js
@@ -24,6 +24,7 @@
   const SRC_4H = '240';               // source chart that feeds top windows
   const SRC_15M = '15';               // source chart that feeds bottom windows
   const EMPTY_READS_BEFORE_DELETE = 5; // a still-loading chart reports 0 drawings
+  const FULL_APPLY_RATIO = 0.4;        // >40% of the tools changed → a full re-apply is cheaper
   const TAG = '[Draw-Sync]';
 
   const log = (...a) => console.log(TAG, ...a);
@@ -112,6 +113,19 @@
       return String(c.getAllShapes().length) + '|' + JSON.stringify(gm.state());
     } catch (e) { return null; }
   }
+  // per-tool fingerprints → lets us apply ONLY what changed instead of wiping and
+  // re-applying thousands of drawings (that took 60-90s per window).
+  function h32(str) {
+    let h = 5381;
+    for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0;
+    return (h >>> 0).toString(36);
+  }
+  function fpMap(json) {
+    const raw = typeof json === 'string' ? JSON.parse(json) : json;
+    const m = {};
+    for (const [id, v] of raw.sources) m[id] = h32(JSON.stringify(v && v.state) + '|' + (v && v.groupId || ''));
+    return m;
+  }
   // ⚠️ hash only the meaningful content — serverUpdateTime changes on every export
   // and would make every cycle look like a change (endless re-mirroring).
   function fingerprint(json) {
@@ -138,21 +152,39 @@
     });
   }
 
-  async function applyToChart(idx, json, sym) {
+  async function applyToChart(idx, json, sym, plan) {
     const c = window.TradingViewApi.chart(idx);
     if (String(c.symbol()) !== sym) return 'symbol changed';
     const raw = JSON.parse(json);
-    try { c.removeAllShapes(); } catch (e) {}
-    await new Promise(r => setTimeout(r, 600));
-    if (raw.sources.length) {
-      await Promise.resolve(c.applyLineToolsState({
-        clientId: raw.clientId,
-        sources: new Map(raw.sources),
-        groups: new Map(raw.groups),
-        lineToolsToValidate: raw.lineToolsToValidate,
-        groupsToValidate: raw.groupsToValidate,
-      }));
-      await new Promise(r => setTimeout(r, 2500));
+    const partial = plan && plan.mode === 'partial';
+    if (partial) {
+      // remove what disappeared / changed, then re-create only those
+      for (const id of plan.removed.concat(plan.changed)) { try { c.removeEntity(id); } catch (e) {} }
+      await new Promise(r => setTimeout(r, 400));
+      const subset = raw.sources.filter(([id]) => plan.changed.includes(id));
+      if (subset.length) {
+        await Promise.resolve(c.applyLineToolsState({
+          clientId: raw.clientId,
+          sources: new Map(subset),
+          groups: new Map(raw.groups),
+          lineToolsToValidate: subset.map(([id]) => id),
+          groupsToValidate: raw.groups.map(([id]) => id),
+        }));
+        await new Promise(r => setTimeout(r, 1200));
+      }
+    } else {
+      try { c.removeAllShapes(); } catch (e) {}
+      await new Promise(r => setTimeout(r, 600));
+      if (raw.sources.length) {
+        await Promise.resolve(c.applyLineToolsState({
+          clientId: raw.clientId,
+          sources: new Map(raw.sources),
+          groups: new Map(raw.groups),
+          lineToolsToValidate: raw.lineToolsToValidate,
+          groupsToValidate: raw.groupsToValidate,
+        }));
+        await new Promise(r => setTimeout(r, 2500));
+      }
     }
     // exact mirror: locked drawings survive removeAllShapes — drop any leftover
     try {
@@ -231,11 +263,30 @@
           const appliedKey = 'applied:' + location.pathname + ':' + key;
           if (lsGet(appliedKey) === rec.hash) continue;    // up to date
           if (rec.count === 0 && !lsGet(appliedKey)) continue;
-          const res = await applyToChart(ch.i, rec.json, ch.sym);
+
+          // ── incremental plan: apply only what actually changed ──────────────
+          const mapKey = 'map|' + location.pathname + '|' + key;
+          const prev = await idbGet(mapKey);
+          const cur = fpMap(rec.json);
+          let plan = { mode: 'full' }, summary = '';
+          if (prev && prev.map) {
+            const changedIds = [], removedIds = [];
+            for (const id of Object.keys(cur)) if (prev.map[id] !== cur[id]) changedIds.push(id);
+            for (const id of Object.keys(prev.map)) if (cur[id] === undefined) removedIds.push(id);
+            const total = Object.keys(cur).length || 1;
+            if (changedIds.length + removedIds.length === 0) { lsSet(appliedKey, rec.hash); await idbSet(mapKey, { map: cur, ts: Date.now() }); continue; }
+            if ((changedIds.length + removedIds.length) / total <= FULL_APPLY_RATIO) {
+              plan = { mode: 'partial', changed: changedIds, removed: removedIds };
+              summary = ` (מצטבר: +${changedIds.length} / -${removedIds.length} מתוך ${total})`;
+            } else summary = ` (מלא: ${changedIds.length + removedIds.length} שינויים מתוך ${total})`;
+          }
+          const t0 = Date.now();
+          const res = await applyToChart(ch.i, rec.json, ch.sym, plan);
           if (String(res).startsWith('ok:')) {
             lsSet(appliedKey, rec.hash);
+            await idbSet(mapKey, { map: cur, ts: Date.now() });
             changed = true;
-            log(`🔄 ${key} → חלון ${ch.i}: ${res.slice(3)} ציורים`);
+            log(`🔄 ${key} → חלון ${ch.i}: ${res.slice(3)} ציורים${summary} · ${Math.round((Date.now() - t0) / 1000)}s`);
           } else log(`⚠️ ${key}: ${res}`);
         }
         if (changed) { saveLayout(); log('💾 הפריסה נשמרה'); }
