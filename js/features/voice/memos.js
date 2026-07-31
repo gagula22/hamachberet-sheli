@@ -189,10 +189,22 @@
   //   • **נפילה — צבירה בזיכרון:** ה-Blob-ים נצברים (הדפדפן מגלגל אותם לדיסק)
   //     ובסיום יורדים אוטומטית לתיקיית ההורדות.
   // הקלטת וידאו והקלטת שמע הן בלעדיות זו לזו (שלט צף אחד, בלי תחרות על CPU).
+  // ⚠️ דו-לשוני כמו השמע: הכפתור קיים בשני הכרטיסים, ו-`_vLang` זוכר מאיזה
+  // כרטיס ההקלטה התחילה — קובע את שם-הקובץ ואת הכרטיס שמשחזר את המצב בחזרה
+  // לעמוד. `_vCards` = ה-ui של שני הכרטיסים ברינדור האחרון (מקביל ל-`_cards`).
   const VID_MAX_SEC = 3 * 3600;                       // תקרה: 3 שעות
   let _vmr = null, _vT0 = 0, _vTimerI = null, _vStopT = null, _vLimitSec = 0;
-  let _vWriter = null, _vWriteChain = null, _vChunks = null, _vName = '', _vUi = null;
+  let _vWriter = null, _vWriteChain = null, _vChunks = null, _vName = '';
+  let _vCards = null, _vLang = 'he';
   let _vPill = null, _vPillTime = null;
+  function activeVidUi() { return (_vCards && _vCards[_vLang]) || null; }
+  // מעדכן את שני הכרטיסים: הפעיל מקבל on, השני ננעל (בלעדיות בין השפות)
+  function setVidRecordingAll(on) {
+    if (!_vCards) return;
+    ['he', 'en'].forEach(function (l) {
+      if (_vCards[l]) _vCards[l].setRecording(on && l === _vLang, on && l !== _vLang);
+    });
+  }
 
   function pickVideoMime() {
     const opts = [
@@ -227,7 +239,7 @@
       .catch(err => console.error('[voice-video] write failed:', err));
   }
 
-  async function startTabVideoRec(limitSec) {
+  async function startTabVideoRec(limitSec, lang) {
     if (_mr)  { App.toast('הקלטת שמע פעילה — עצור אותה קודם'); return; }
     if (_vmr) { App.toast('הקלטת וידאו כבר פעילה'); return; }
     if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia || !window.MediaRecorder) {
@@ -235,13 +247,16 @@
       return;
     }
     limitSec = Math.min(Math.max(0, parseInt(limitSec, 10) || 0), VID_MAX_SEC);
+    _vLang = lang === 'en' ? 'en' : 'he';
 
     const mime = pickVideoMime();
     const ext  = mime.indexOf('mp4') > -1 ? '.mp4' : '.webm';
     const d = new Date();
-    const stamp = d.toLocaleDateString('he-IL').replace(/[/.]/g, '-') + ' ' +
+    const isEnV = _vLang === 'en';
+    const stamp = d.toLocaleDateString(isEnV ? 'en-GB' : 'he-IL').replace(/[/.]/g, '-') + ' ' +
                   String(d.getHours()).padStart(2, '0') + '-' + String(d.getMinutes()).padStart(2, '0');
-    _vName = 'הקלטת מסך ' + stamp + ext;
+    // שם הקובץ לפי הכרטיס שממנו הוקלט (עברית/אנגלית)
+    _vName = (isEnV ? 'Screen recording ' : 'הקלטת מסך ') + stamp + ext;
 
     // (1) יעד הכתיבה — לפני getDisplayMedia (שמכלה את ה-user-gesture)
     _vWriter = null; _vWriteChain = Promise.resolve(); _vChunks = [];
@@ -278,7 +293,8 @@
       return;
     }
     if (!ds.getAudioTracks().length) {
-      App.toast('⚠️ מקליט וידאו בלי קול — לשמע סמן "שתף גם שמע" בחלון הבחירה');
+      // המתג "שיתוף גם של האודיו מהכרטיסייה" בחלון הבחירה היה כבוי → אין פס-קול.
+      App.toast('⚠️ מקליט בלי קול! המתג "שיתוף גם של האודיו מהכרטיסייה" היה כבוי — עצור והתחל מחדש עם המתג דלוק');
     }
 
     const opts = mime
@@ -313,7 +329,7 @@
       _vWriter = null; _vChunks = null; _vmr = null;
       hideVidPill();
       window.removeEventListener('beforeunload', _unloadGuard);
-      if (_vUi) _vUi.setRecording(false);
+      setVidRecordingAll(false);
     };
 
     _vmr.start(5000);                          // נתח כל 5 שניות → נכתב מיד לדיסק
@@ -321,13 +337,13 @@
     ds.getVideoTracks()[0].addEventListener('ended', stopVideoRec);
     showVidPill();
     window.addEventListener('beforeunload', _unloadGuard);
-    if (_vUi) _vUi.setRecording(true);
+    setVidRecordingAll(true);
     if (limitSec > 0) _vStopT = setTimeout(stopVideoRec, limitSec * 1000);
     _vTimerI = setInterval(() => {
       const elapsed = (Date.now() - _vT0) / 1000;
       let t = fmtDur(elapsed);
       if (_vLimitSec > 0) t += ' / ' + fmtDur(_vLimitSec);
-      if (_vUi) _vUi.setTimer(t);
+      const vu = activeVidUi(); if (vu) vu.setTimer(t);
       if (_vPillTime) _vPillTime.textContent = t;
     }, 500);
   }
@@ -635,58 +651,74 @@
     // ── הקלטת וידאו מחלון/טאב — כרטיס עברי בלבד (לא תלוי-שפה, אין תמלול) ────
     // היעד הוא קובץ בדיסק (ראה מנוע הווידאו למעלה), ולכן זה לא מופיע ברשימת
     // ההקלטות ואינו נוגע ב-IndexedDB של הערות-הקול.
-    let vidRow = null;
-    if (!isEn) {
-      const vidLabel = '🎥 הקלט וידאו מהחלון';
-      const vidBtn = el('button', { class: 'vm-rec-btn vm-vid-btn', title: 'בחירת חלון/טאב והקלטת וידאו + קול לקובץ' }, vidLabel);
+    let vidRow = null, vUiRef = null;
+    {
+      // תוויות הפקדים לפי שפת הכרטיס (כמו שאר הכרטיס: פקדים בשפה, הסברים בעברית)
+      const vidLabel = isEn ? '🎥 Record window video' : '🎥 הקלט וידאו מהחלון';
+      const vidStop  = isEn ? '⏹ Stop & save video'   : '⏹ עצור ושמור וידאו';
+      const vidBtn = el('button', {
+        class: 'vm-rec-btn vm-vid-btn',
+        title: isEn ? 'Pick a window/tab and record video + sound to a file (English content)'
+                    : 'בחירת חלון/טאב והקלטת וידאו + קול לקובץ'
+      }, vidLabel);
       const vidTimer = el('span', { class: 'vm-timer' }, '00:00');
       const vidSel = el('select', { class: 'vm-vid-len', title: 'משך ההקלטה — בסיומו ההקלטה נעצרת ונשמרת אוטומטית' });
-      [['10800', '3 שעות (מקסימום)'], ['7200', 'שעתיים'], ['5400', 'שעה וחצי'], ['3600', 'שעה'],
-       ['2700', '45 דקות'], ['1800', '30 דקות'], ['900', '15 דקות'], ['300', '5 דקות'], ['0', 'ללא הגבלה — עד שאעצור']]
-        .forEach(function (o) { vidSel.appendChild(el('option', { value: o[0] }, o[1])); });
+      (isEn
+        ? [['10800', '3 hours (max)'], ['7200', '2 hours'], ['5400', '1.5 hours'], ['3600', '1 hour'],
+           ['2700', '45 min'], ['1800', '30 min'], ['900', '15 min'], ['300', '5 min'], ['0', 'No limit']]
+        : [['10800', '3 שעות (מקסימום)'], ['7200', 'שעתיים'], ['5400', 'שעה וחצי'], ['3600', 'שעה'],
+           ['2700', '45 דקות'], ['1800', '30 דקות'], ['900', '15 דקות'], ['300', '5 דקות'], ['0', 'ללא הגבלה — עד שאעצור']]
+      ).forEach(function (o) { vidSel.appendChild(el('option', { value: o[0] }, o[1])); });
       vidSel.value = '10800';   // ברירת מחדל = התקרה (3 שעות): נעצר ונשמר לבד
 
       const vUi = {
-        setRecording(on) {
-          vidBtn.textContent = on ? '⏹ עצור ושמור וידאו' : vidLabel;
-          vidBtn.classList.toggle('recording', on);
-          vidSel.disabled = on;
-          vidTimer.style.display = on ? 'inline' : 'none';
-          if (!on) vidTimer.textContent = '00:00';
-          // הקלטת שמע בלעדית להקלטת וידאו → מסתירים את כפתורי השמע
-          recBtn.style.display = on ? 'none' : '';
-          tabWrap.style.display = on ? 'none' : '';
+        // mine = ההקלטה התחילה מהכרטיס הזה; otherBusy = רצה בכרטיס השני
+        setRecording(mine, otherBusy) {
+          vidBtn.textContent = mine ? vidStop : vidLabel;
+          vidBtn.classList.toggle('recording', !!mine);
+          vidBtn.disabled = !!otherBusy;
+          vidSel.disabled = !!(mine || otherBusy);
+          vidTimer.style.display = mine ? 'inline' : 'none';
+          if (!mine) vidTimer.textContent = '00:00';
+          // הקלטת שמע בלעדית להקלטת וידאו → מסתירים את כפתורי השמע בשני הכרטיסים
+          const busy = !!(mine || otherBusy);
+          recBtn.style.display = busy ? 'none' : '';
+          tabWrap.style.display = busy ? 'none' : '';
         },
         setTimer(t) { vidTimer.textContent = t; }
       };
-      _vUi = vUi;   // ה-ui החי של הווידאו (מוחלף בכל רינדור, כמו _cards)
 
       vidBtn.addEventListener('click', function () {
-        if (_vmr) stopVideoRec();
-        else startTabVideoRec(vidSel.value);
+        if (_vmr) {
+          if (_vLang !== lang) { App.toast('הקלטת וידאו כבר פעילה בכרטיס השני — עצור אותה שם'); return; }
+          stopVideoRec();
+        } else startTabVideoRec(vidSel.value, lang);
       });
 
       function vidGuideBody() {
         return [
-          el('p', {}, 'הקלטת וידאו + קול של חלון, טאב או המסך כולו — לשיעור, שיחה או הדגמה. ' +
-            'בניגוד להקלטות הקול, הווידאו אינו נשמר באפליקציה אלא ישירות לקובץ במחשב.'),
+          el('p', {}, 'הקלטת וידאו + קול של חלון, טאב או המסך כולו — לשיעור, שיחה או הדגמה' +
+            (isEn ? ' באנגלית' : '') + '. בניגוד להקלטות הקול, הווידאו אינו נשמר באפליקציה אלא ישירות לקובץ במחשב' +
+            (isEn ? ' (שם הקובץ באנגלית: "Screen recording …")' : '') + '.'),
           el('p', { class: 'vm-tab-help-steps-title' }, 'שלבי הפעלה:'),
           el('ol', {}, [
             el('li', {}, 'בחר את משך ההקלטה ברשימה (עד 3 שעות). בסוף הזמן ההקלטה נעצרת ונשמרת אוטומטית — אין צורך לשבת מול המסך.'),
-            el('li', {}, 'לחץ "🎥 הקלט וידאו מהחלון".'),
+            el('li', {}, 'לחץ "' + vidLabel + '".'),
             el('li', {}, 'ייפתח חלון שמירה — אשר את שם הקובץ (ברירת מחדל: תיקיית ההורדות). ' +
               'הווידאו נכתב לקובץ תוך כדי ההקלטה, כך שגם 3 שעות לא הולכות לאיבוד.'),
-            el('li', {}, 'ייפתח חלון בחירת המקור — בחר "כרטיסייה" / "חלון" / "כל המסך", ' +
-              'וודא ש"שתף גם שמע" דלוק (אחרת ייצא וידאו בלי קול). אשר.'),
+            el('li', {}, 'ייפתח חלון בחירת המקור — בחר "כרטיסייה" / "חלון" / "כל המסך".'),
+            el('li', { class: 'vm-audio-warn' }, '⚠️ חובה: הדלק את המתג "שיתוף גם של האודיו מהכרטיסייה" ' +
+              'בתחתית חלון הבחירה — הוא כבוי כברירת מחדל, ובלעדיו הסרטון יֵצא ללא קול. ' +
+              '(המתג מופיע בלשונית "כרטיסייה"; ב"כל המסך" הוא נקרא "שיתוף אודיו המערכת", ובלשונית "חלון" אין שמע כלל.)'),
             el('li', {}, 'ההקלטה רצה ברקע — השלט הצף מציג את הזמן שעבר מתוך המשך שבחרת. ' +
-              'אפשר לעצור בכל רגע ב-"⏹ עצור ושמור וידאו" (כאן או בשלט הצף), והקובץ נסגר ונשמר.')
+              'אפשר לעצור בכל רגע ב-"' + vidStop + '" (כאן או בשלט הצף), והקובץ נסגר ונשמר.')
           ]),
-          el('p', { class: 'vm-tab-help-note' }, 'נדרש Chrome / Edge / Brave. הקלטת וידאו והקלטת שמע אינן רצות יחד — ' +
-            'בזמן אחת מהן השנייה מוסתרת. שים לב: 3 שעות וידאו הן קובץ גדול (כמה ג׳יגה-בייטים).')
+          el('p', { class: 'vm-tab-help-note' }, 'נדרש Chrome / Edge / Brave. הקלטה אחת בכל רגע — ' +
+            'בזמן הקלטת וידאו שאר הכפתורים (כולל בכרטיס השני) ננעלים. שים לב: 3 שעות וידאו הן קובץ גדול (כמה ג׳יגה-בייטים).')
         ];
       }
       const vidPop = el('div', { class: 'vm-tab-pop', role: 'tooltip' }, [
-        el('div', { class: 'vm-tab-pop-title' }, '🎥 הקלט וידאו מהחלון — מדריך')
+        el('div', { class: 'vm-tab-pop-title' }, vidLabel + ' — מדריך')
       ].concat(vidGuideBody()));
       const vidWrap = el('div', { class: 'vm-tab-wrap' }, [vidBtn, vidPop]);
       vidWrap.addEventListener('mouseenter', () => vidWrap.classList.add('vm-pop-open'));
@@ -696,10 +728,14 @@
 
       vidRow = el('div', { class: 'vm-vid-row' }, [
         vidWrap,
-        el('label', { class: 'vm-vid-len-lbl' }, ['משך:', vidSel]),
-        vidTimer
+        el('label', { class: 'vm-vid-len-lbl' }, [isEn ? 'Length:' : 'משך:', vidSel]),
+        vidTimer,
+        // תזכורת קבועה ליד הכפתור — המתג הזה כבוי כברירת מחדל וזו התקלה הנפוצה
+        el('span', { class: 'vm-vid-hint', title: 'בחלון בחירת המקור, בתחתיתו, יש מתג "שיתוף גם של האודיו מהכרטיסייה". הוא כבוי כברירת מחדל — בלי להדליק אותו הסרטון יוקלט בלי קול.' },
+          '⚠️ הדלק "שיתוף גם של האודיו מהכרטיסייה" — אחרת אין קול')
       ]);
       vidTimer.style.display = 'none';
+      vUiRef = vUi;
     }
 
     const card = el('div', { class: 'card vm-card' + (isEn ? ' vm-card-en' : '') }, [
@@ -712,7 +748,7 @@
       help,
       listWrap
     ]);
-    return { card, ui };
+    return { card, ui, vUi: vUiRef };
   }
 
   // ── שחזור-תמלולים מהענן (משלים את גיבוי-הלחיצה של backup.js) ─────────────
@@ -847,12 +883,16 @@
       u.setRecording(true);
       u.setTimer(fmtDur((Date.now() - _t0) / 1000));
     }
-    // שחזור מצב הקלטת-וידאו (buildCard כבר עדכן את _vUi לכרטיס החדש)
-    if (_vmr && _vUi) {
-      _vUi.setRecording(true);
-      let t = fmtDur((Date.now() - _vT0) / 1000);
-      if (_vLimitSec > 0) t += ' / ' + fmtDur(_vLimitSec);
-      _vUi.setTimer(t);
+    // חיבור ה-ui של הווידאו משני הכרטיסים + שחזור מצב בחזרה לעמוד
+    _vCards = { he: he.vUi, en: en.vUi };
+    setVidRecordingAll(!!_vmr);
+    if (_vmr) {
+      const vu = activeVidUi();
+      if (vu) {
+        let t = fmtDur((Date.now() - _vT0) / 1000);
+        if (_vLimitSec > 0) t += ' / ' + fmtDur(_vLimitSec);
+        vu.setTimer(t);
+      }
     }
     he.ui.refresh();
     en.ui.refresh();
