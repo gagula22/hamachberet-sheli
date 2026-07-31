@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TradingView Draw Sync (layout mirror)
 // @namespace    maoz.tv.drawsync
-// @version      1.0
+// @version      1.1
 // @description  מעתיק אוטומטית ציורים ותיקיות מפריסת המקור ("פריסה שלי") לחלונות פריסת היעד ("אסטרטגיה 4 שעתי") — לפי המטבע של כל חלון. רץ בדפדפן, בלי תלות באפליקציה שבמחשב.
 // @updateURL    https://gagula22.github.io/hamachberet-sheli/TV-Draw-Sync.user.js
 // @downloadURL  https://gagula22.github.io/hamachberet-sheli/TV-Draw-Sync.user.js
@@ -15,6 +15,10 @@
 
   // ─── config ────────────────────────────────────────────────────────────────
   const POLL_MS = 3000;
+  // ⚠️ layouts are identified by their URL id — NEVER by chart count: during a
+  // layout switch the app still reports the previous layout's charts for a moment.
+  const SOURCE_ID = 'Xct1Lmad';       // "פריסה שלי"  (source — draw here)
+  const TARGET_ID = '50zbpK6M';       // "אסטרטגיה 4 שעתי" (target — mirror)
   const TOP_RES = ['240', '60'];      // top windows of the target layout
   const BOT_RES = ['30', '15'];       // bottom windows
   const SRC_4H = '240';               // source chart that feeds top windows
@@ -69,17 +73,27 @@
     }
     return out;
   }
+  let lastReading = null;
   function detect() {
     const charts = readCharts();
-    if (!charts) return null;
-    if (charts.length === 4) {
+    if (!charts) { lastReading = null; return null; }
+    const path = location.pathname;
+    // settle guard: act only after two identical consecutive readings
+    const sig = path + '|' + charts.map(c => c.sym + '@' + c.res).join(',');
+    const stable = lastReading === sig;
+    lastReading = sig;
+    if (!stable) return { mode: 'settling' };
+
+    if (path.includes(SOURCE_ID)) {
       const s4 = charts.find(c => c.res === SRC_4H), s15 = charts.find(c => c.res === SRC_15M);
       if (s4 && s15) return { mode: 'source', bands: { '4h': s4, '15m': s15 } };
+      return { mode: 'other' };
     }
-    if (charts.length === 6) {
+    if (path.includes(TARGET_ID)) {
       const tops = charts.filter(c => TOP_RES.includes(c.res));
       const bots = charts.filter(c => BOT_RES.includes(c.res));
-      if (tops.length === 3 && bots.length === 3) return { mode: 'target', tops, bots };
+      if (tops.length && bots.length) return { mode: 'target', tops, bots };
+      return { mode: 'other' };
     }
     return { mode: 'other' };
   }
@@ -118,6 +132,16 @@
       }));
       await new Promise(r => setTimeout(r, 2500));
     }
+    // exact mirror: locked drawings survive removeAllShapes — drop any leftover
+    try {
+      const want = new Set(raw.sources.map(e => String(e[0])));
+      let extra = 0;
+      for (const sh of c.getAllShapes()) {
+        const id = String(sh.id);
+        if (!want.has(id)) { try { c.removeEntity(id); extra++; } catch (e) {} }
+      }
+      if (extra) await new Promise(r => setTimeout(r, 800));
+    } catch (e) {}
     // push to TradingView's server so every device sees it (and a reload keeps it)
     try {
       const sync = c.lineToolsSynchronizer();
@@ -139,7 +163,7 @@
   async function tick() {
     if (busy) return;
     const d = detect();
-    if (!d || d.mode === 'other') return;
+    if (!d || d.mode === 'other' || d.mode === 'settling') return;
     busy = true;
     try {
       if (d.mode === 'source') {
