@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TradingView Draw Sync (layout mirror)
 // @namespace    maoz.tv.drawsync
-// @version      1.2
+// @version      1.3
 // @description  מעתיק אוטומטית ציורים ותיקיות מפריסת המקור ("פריסה שלי") לחלונות פריסת היעד ("אסטרטגיה 4 שעתי") — לפי המטבע של כל חלון. רץ בדפדפן, בלי תלות באפליקציה שבמחשב.
 // @updateURL    https://gagula22.github.io/hamachberet-sheli/TV-Draw-Sync.user.js
 // @downloadURL  https://gagula22.github.io/hamachberet-sheli/TV-Draw-Sync.user.js
@@ -85,8 +85,12 @@
     if (!stable) return { mode: 'settling' };
 
     if (path.includes(SOURCE_ID)) {
-      const s4 = charts.find(c => c.res === SRC_4H), s15 = charts.find(c => c.res === SRC_15M);
+      // accept 4h OR 1h for the top band, 15m OR 30m for the bottom band — the user
+      // switches these; demanding exactly 240/15 silently disabled capture (31.7).
+      const pick = list => { for (const r of list) { const c = charts.find(x => x.res === r); if (c) return c; } return null; };
+      const s4 = pick(['240', '60']), s15 = pick(['15', '30']);
       if (s4 && s15) return { mode: 'source', bands: { '4h': s4, '15m': s15 } };
+      if (!window.__dsWarnedBands) { window.__dsWarnedBands = 1; log('⚠️ פריסת המקור פתוחה אך אין צ׳ארט 4h/1h יחד עם 15m/30m — אין מה לצלם'); }
       return { mode: 'other' };
     }
     if (path.includes(TARGET_ID)) {
