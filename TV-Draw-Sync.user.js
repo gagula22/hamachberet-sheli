@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TradingView Draw Sync (layout mirror)
 // @namespace    maoz.tv.drawsync
-// @version      1.1
+// @version      1.2
 // @description  מעתיק אוטומטית ציורים ותיקיות מפריסת המקור ("פריסה שלי") לחלונות פריסת היעד ("אסטרטגיה 4 שעתי") — לפי המטבע של כל חלון. רץ בדפדפן, בלי תלות באפליקציה שבמחשב.
 // @updateURL    https://gagula22.github.io/hamachberet-sheli/TV-Draw-Sync.user.js
 // @downloadURL  https://gagula22.github.io/hamachberet-sheli/TV-Draw-Sync.user.js
@@ -99,6 +99,24 @@
   }
 
   // ─── export / apply (TradingView's own line-tools DTO) ────────────────────
+  // cheap signature: shapes count + folder structure. Used to skip the expensive
+  // full export when nothing actually changed.
+  function quickSig(idx) {
+    try {
+      const c = window.TradingViewApi.chart(idx);
+      const gm = window._exposed_chartWidgetCollection.getAll()[idx].model().model().lineToolsGroupModel();
+      return String(c.getAllShapes().length) + '|' + JSON.stringify(gm.state());
+    } catch (e) { return null; }
+  }
+  // ⚠️ hash only the meaningful content — serverUpdateTime changes on every export
+  // and would make every cycle look like a change (endless re-mirroring).
+  function fingerprint(json) {
+    const raw = JSON.parse(json);
+    const src = raw.sources.map(([id, v]) => id + ':' + JSON.stringify(v && v.state) + ':' + (v && v.groupId || '')).sort();
+    const grp = raw.groups.map(([id, v]) => id + ':' + (v && v.name || '')).sort();
+    return JSON.stringify({ src, grp });
+  }
+
   async function exportChart(idx) {
     const c = window.TradingViewApi.chart(idx);
     const SYM = String(c.symbol());
@@ -169,11 +187,13 @@
       if (d.mode === 'source') {
         for (const [band, ch] of Object.entries(d.bands)) {
           const key = band + '|' + ch.sym;
+          const qs = quickSig(ch.i);
+          if (qs && lsGet('qsig:' + key) === qs) continue;   // nothing changed
           const json = await exportChart(ch.i);
           if (!json) continue;
-          const h = await sha(json);
+          const h = await sha(fingerprint(json));
           const prev = await idbGet(key);
-          if (prev && prev.hash === h) { lsSet('zero:' + key, '0'); continue; }
+          if (prev && prev.hash === h) { lsSet('zero:' + key, '0'); if (qs) lsSet('qsig:' + key, qs); continue; }
           // still-loading guard: don't let an empty read wipe the mirror
           const n = JSON.parse(json).sources.length;
           if (n === 0 && prev && prev.count > 0) {
@@ -184,6 +204,7 @@
           }
           lsSet('zero:' + key, '0');
           await idbSet(key, { hash: h, count: n, json, ts: Date.now() });
+          if (qs) lsSet('qsig:' + key, qs);
           log(`📸 ${key}: ${n} ציורים`);
         }
       } else {
