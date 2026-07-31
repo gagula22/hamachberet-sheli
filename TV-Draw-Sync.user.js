@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TradingView Draw Sync (layout mirror)
 // @namespace    maoz.tv.drawsync
-// @version      1.3
+// @version      1.4
 // @description  מעתיק אוטומטית ציורים ותיקיות מפריסת המקור ("פריסה שלי") לחלונות פריסת היעד ("אסטרטגיה 4 שעתי") — לפי המטבע של כל חלון. רץ בדפדפן, בלי תלות באפליקציה שבמחשב.
 // @updateURL    https://gagula22.github.io/hamachberet-sheli/TV-Draw-Sync.user.js
 // @downloadURL  https://gagula22.github.io/hamachberet-sheli/TV-Draw-Sync.user.js
@@ -182,9 +182,19 @@
 
   // ─── main loop ────────────────────────────────────────────────────────────
   let busy = false;
+  let lastDiag = 0;
+  function diag(d) {
+    if (Date.now() - lastDiag < 30000) return;
+    lastDiag = Date.now();
+    const charts = readCharts();
+    const list = charts ? charts.map(c => c.i + ':' + c.sym.replace('BYBIT:', '') + '@' + c.res).join(' ') : 'לא נקראו צ׳ארטים (API לא מוכן?)';
+    const mode = !d ? 'אין קריאה' : d.mode === 'source' ? 'מקור ✅' : d.mode === 'target' ? 'יעד ✅' : d.mode === 'settling' ? 'מתייצב…' : 'לא מזוהה ❌';
+    log('מצב:', location.pathname, '|', list, '| זיהוי:', mode);
+  }
   async function tick() {
     if (busy) return;
     const d = detect();
+    diag(d);
     if (!d || d.mode === 'other' || d.mode === 'settling') return;
     busy = true;
     try {
