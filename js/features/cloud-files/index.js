@@ -114,26 +114,34 @@
     return { id: id, name: file.name, type: file.type || '', size: file.size, fs: true };
   }
 
-  // מוריד קובץ מ-Firestore ומחזיר { dataUrl, name, type, size }. זורק אם המטא
-  // חסר (העלאה לא הושלמה / נמחק). onProgress(frac) בין part ל-part.
-  async function fetchFile(id, onProgress) {
-    if (!_db()) throw new Error('firestore-unavailable');
-    if (!_user()) throw new Error('not-signed-in');
-    var ref = _attRef(id);
-    var metaSnap = await ref.get();
-    if (!metaSnap.exists) { var e = new Error('attachment-missing'); e.code = 'file/missing'; throw e; }
-    var meta = metaSnap.data() || {};
-    var N = meta.chunks || 0;
+  // ── קריאת ה-parts (משותפת ל-fetch ול-fetchBlob) ─────────────────────────
+  // קריאה **במקביל** (concurrency-capped) — אותו רווח-ביצועים כמו בכתיבה.
+  //
+  // ⚠️ מלכודת שנצפתה בשטח (26.8.2026): part שחוזר "לא קיים" הוחלף בשקט במחרוזת
+  // ריקה — והתוצאה הייתה קובץ **קצר יותר מהמקור שנראה תקין לגמרי** (PDF שנפתח
+  // אבל חסרים בו עמודים). זה בדיוק הכישלון המסוכן: הורדה שקטה ופגומה. לכן:
+  // (1) part חסר/ריק נקרא שוב **מהשרת** (`source:'server'`) לפני שמוותרים —
+  //     המטמון המקומי של Firestore מוגבל (~40MB) ומפנה מסמכים, ואחרי העלאה
+  //     כבדה חלק מה-parts כבר לא בו;
+  // (2) אם גם אז הוא חסר — **זורקים**, לא מחזירים קובץ חלקי;
+  // (3) הקורא מאמת את האורך הסופי מול meta.size (ראה _assertLen).
+  async function _readParts(ref, N, onProgress) {
     var partsCol = ref.collection('parts');
     var parts = new Array(N);
-
-    // קריאת ה-parts **במקביל** (concurrency-capped) — אותו רווח-ביצועים כמו בכתיבה.
     var next = 0, done = 0;
+    function get(i, fromServer) {
+      var q = fromServer ? partsCol.doc(String(i)).get({ source: 'server' }) : partsCol.doc(String(i)).get();
+      return q.then(function (ps) { return (ps.exists && ps.data() && ps.data().b) || ''; });
+    }
     function lane() {
       if (next >= N) return Promise.resolve();
       var i = next++;
-      return partsCol.doc(String(i)).get().then(function (ps) {
-        parts[i] = (ps.exists && ps.data() && ps.data().b) || '';
+      return get(i, false).then(function (b) {
+        if (b) return b;
+        return get(i, true);            // ריק/חסר במטמון → ניסיון-שרת מפורש
+      }).then(function (b) {
+        if (!b) { var e = new Error('attachment-part-missing:' + i); e.code = 'file/part-missing'; throw e; }
+        parts[i] = b;
         done++;
         if (onProgress) { try { onProgress(done / N); } catch (e) {} }
         return lane();
@@ -142,7 +150,34 @@
     var lanes = [];
     for (var k = 0; k < Math.min(CONCURRENCY, N); k++) lanes.push(lane());
     await Promise.all(lanes);
+    return parts;
+  }
 
+  // אימות-אורך סופי: base64 סטנדרטי עם ריפוד הוא בדיוק 4*ceil(size/3) תווים.
+  // אי-התאמה = קובץ חלקי → זורקים במקום למסור הורדה פגומה.
+  function _assertLen(parts, meta) {
+    if (!meta || !meta.size) return;
+    var got = 0;
+    for (var i = 0; i < parts.length; i++) got += parts[i].length;
+    var want = 4 * Math.ceil(meta.size / 3);
+    if (got !== want) {
+      var e = new Error('attachment-truncated: got ' + got + ' of ' + want);
+      e.code = 'file/truncated';
+      throw e;
+    }
+  }
+
+  // מוריד קובץ מ-Firestore ומחזיר { dataUrl, name, type, size }. זורק אם המטא
+  // חסר (העלאה לא הושלמה / נמחק) או אם התוכן חלקי. onProgress(frac) בין part ל-part.
+  async function fetchFile(id, onProgress) {
+    if (!_db()) throw new Error('firestore-unavailable');
+    if (!_user()) throw new Error('not-signed-in');
+    var ref = _attRef(id);
+    var metaSnap = await ref.get();
+    if (!metaSnap.exists) { var e = new Error('attachment-missing'); e.code = 'file/missing'; throw e; }
+    var meta = metaSnap.data() || {};
+    var parts = await _readParts(ref, meta.chunks || 0, onProgress);
+    _assertLen(parts, meta);
     var mime = meta.mime || meta.type || 'application/octet-stream';
     return { dataUrl: 'data:' + mime + ';base64,' + parts.join(''), name: meta.name || 'file', type: meta.type || '', size: meta.size || 0 };
   }
@@ -171,23 +206,8 @@
     if (!metaSnap.exists) { var e = new Error('attachment-missing'); e.code = 'file/missing'; throw e; }
     var meta = metaSnap.data() || {};
     var N = meta.chunks || 0;
-    var partsCol = ref.collection('parts');
-    var parts = new Array(N);
-
-    var next = 0, done = 0;
-    function lane() {
-      if (next >= N) return Promise.resolve();
-      var i = next++;
-      return partsCol.doc(String(i)).get().then(function (ps) {
-        parts[i] = (ps.exists && ps.data() && ps.data().b) || '';
-        done++;
-        if (onProgress) { try { onProgress(done / N); } catch (e) {} }
-        return lane();
-      });
-    }
-    var lanes = [];
-    for (var k = 0; k < Math.min(CONCURRENCY, N); k++) lanes.push(lane());
-    await Promise.all(lanes);
+    var parts = await _readParts(ref, N, onProgress);
+    _assertLen(parts, meta);
 
     var aligned = true;
     for (var j = 0; j < N - 1; j++) { if (parts[j].length % 4 !== 0) { aligned = false; break; } }
@@ -200,6 +220,10 @@
       blob = new Blob(parts, { type: mime });
     } else {
       blob = new Blob([_b64ToBytes(parts.join(''))], { type: mime });
+    }
+    if (meta.size && blob.size !== meta.size) {
+      var e2 = new Error('attachment-size-mismatch: ' + blob.size + ' vs ' + meta.size);
+      e2.code = 'file/truncated'; throw e2;
     }
     return { blob: blob, name: meta.name || 'file', type: meta.type || '', size: meta.size || 0 };
   }
