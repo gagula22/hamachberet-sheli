@@ -335,11 +335,11 @@
     if (fsId) {
       if (!window.CloudFiles) { App.toast('טעינת קבצי-ענן לא זמינה'); return; }
       App.toast('טוען מהענן…');
-      window.CloudFiles.fetch(fsId).then(function (f) {
-        var blob; try { blob = _dataUrlToBlob(f.dataUrl); } catch (e) { App.toast('שגיאה בהורדה'); return; }
+      _fetchCloudBlob(fsId, name).then(function (blob) {
         var burl = URL.createObjectURL(blob);
         _download(burl, name);
-        setTimeout(function () { URL.revokeObjectURL(burl); }, 4000);
+        // קובץ גדול נכתב לדיסק לאט — שחרור מוקדם מדי קוטע את ההורדה.
+        setTimeout(function () { URL.revokeObjectURL(burl); }, 120000);
         App.toast('⬇ הורד: ' + name);
       }).catch(function (e) {
         App.toast('שגיאה בטעינת הקובץ מהענן (ייתכן שההעלאה לא הושלמה)');
@@ -353,6 +353,20 @@
     _download(burl, name);
     setTimeout(function () { URL.revokeObjectURL(burl); }, 4000);
     App.toast('⬇ הורד: ' + name);
+  }
+
+  // שליפת קובץ-ענן כ-Blob, עם חיווי-אחוזים (קובץ של עשרות MB נטען עשרות שניות —
+  // בלי חיווי זה נראה תקוע). מעדיף את fetchBlob שמפענח part-אחרי-part; נופל
+  // ל-fetch המחרוזתי הישן אם הוא לא קיים (גרסת cloud-files ישנה במטמון).
+  function _fetchCloudBlob(fsId, name) {
+    var CF = window.CloudFiles;
+    var last = -1;
+    var onProgress = function (frac) {
+      var pct = Math.round(frac * 100);
+      if (pct >= last + 5) { last = pct; App.toast('טוען מהענן ' + pct + '%… ' + name); }
+    };
+    if (CF.fetchBlob) return CF.fetchBlob(fsId, onProgress).then(function (f) { return f.blob; });
+    return CF.fetch(fsId, onProgress).then(function (f) { return _dataUrlToBlob(f.dataUrl); });
   }
 
   function _dataUrlToBlob(dataUrl) {
@@ -373,16 +387,20 @@
   // so it's converted to a Blob URL, which renders reliably and can be downloaded.
   function _previewOrDownloadDataUrl(dataUrl, name, type) {
     var blob; try { blob = _dataUrlToBlob(dataUrl); } catch (e) { App.toast('שגיאה בפתיחת הקובץ'); return; }
+    _previewOrDownloadBlob(blob, name, type);
+  }
+  function _previewOrDownloadBlob(blob, name, type) {
+    type = type || '';
     var burl = URL.createObjectURL(blob);
     var previewable = type.startsWith('image/') || type === 'application/pdf'
       || type.startsWith('text/') || type.startsWith('video/') || type.startsWith('audio/');
     if (previewable) {
       var w = window.open(burl, '_blank', 'noopener');
       if (!w) _download(burl, name);
-      setTimeout(function () { URL.revokeObjectURL(burl); }, 60000);
+      setTimeout(function () { URL.revokeObjectURL(burl); }, 120000);
     } else {
       _download(burl, name);
-      setTimeout(function () { URL.revokeObjectURL(burl); }, 4000);
+      setTimeout(function () { URL.revokeObjectURL(burl); }, 120000);
       App.toast('הורד: ' + name);
     }
   }
@@ -399,8 +417,8 @@
     if (fsId) {
       if (!window.CloudFiles) { App.toast('טעינת קבצי-ענן לא זמינה'); return; }
       App.toast('טוען מהענן…');
-      window.CloudFiles.fetch(fsId).then(function (f) {
-        _previewOrDownloadDataUrl(f.dataUrl, name, f.type || type);
+      _fetchCloudBlob(fsId, name).then(function (blob) {
+        _previewOrDownloadBlob(blob, name, blob.type || type);
       }).catch(function (e) {
         App.toast('שגיאה בטעינת הקובץ מהענן (ייתכן שההעלאה לא הושלמה)');
       });
@@ -527,7 +545,7 @@
           if (dataUrl.indexOf('data:') !== 0 || dataUrl.length < 100) continue;
           var name = el.dataset.name || 'file';
           var blob = await (await fetch(dataUrl)).blob();
-          if (!CloudFiles.fits(blob.size)) continue;   // מעל 20MB — נשאר מקומי בכוונה
+          if (!CloudFiles.fits(blob.size)) continue;   // מעל FS_MAX — נשאר מקומי בכוונה
           var type = el.dataset.type || blob.type || '';
           var meta = await CloudFiles.upload(new File([blob], name, { type: type }), id, function (frac) {
             if (szEl) szEl.textContent = 'מעלה לענן ' + Math.round(frac * 100) + '%…';

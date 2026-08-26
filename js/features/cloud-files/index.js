@@ -30,7 +30,12 @@
   // כמה parts נכתבים/נקראים במקביל — חופף round-trips ומקצר את זמן ההעלאה
   // מ-N סדרתי ל-~ceil(N/CONCURRENCY) גלים. 5 בטוח לחלוטין ל-Firestore.
   var CONCURRENCY = 5;
-  var FS_MAX = 20 * 1024 * 1024;       // תקרת קובץ לאחסון-ענן (מעבר לזה → מקומי)
+  // תקרת קובץ לאחסון-ענן (מעבר לזה → מקומי). מיושר ל-HARD_CAP של media.js (50MB)
+  // כדי שכל קובץ שהמחברת בכלל מקבלת ייכנס לענן ויהיה זמין מכל מכשיר — קובץ
+  // שנשאר מקומי הוא בדיוק התקלה של "צירפתי במחשב אחד ואין אותו בשני".
+  // 50MB → ~67MB base64 → ~76 chunks; הקריאה מפענחת part-אחרי-part (fetchBlob)
+  // כדי שלא תיווצר מחרוזת-ענק אחת בזיכרון.
+  var FS_MAX = 50 * 1024 * 1024;
 
   function _fb() {
     return (window.firebase && firebase.apps && firebase.apps.length) ? firebase : null;
@@ -142,6 +147,63 @@
     return { dataUrl: 'data:' + mime + ';base64,' + parts.join(''), name: meta.name || 'file', type: meta.type || '', size: meta.size || 0 };
   }
 
+  // מפענח base64 בודד ל-Uint8Array.
+  function _b64ToBytes(b64) {
+    var bin = atob(b64 || '');
+    var out = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+
+  // מוריד קובץ ומחזיר { blob, name, type, size } — **הנתיב הנכון לקבצים גדולים.**
+  // ההבדל מ-fetch: כאן כל part מפוענח לבייטים בנפרד ואז ה-Blob נבנה ממערך
+  // הבייטים, כך שלעולם לא נוצרת מחרוזת base64 של הקובץ כולו. ב-50MB המסלול
+  // המחרוזתי מחזיק בו-זמנית ~67MB base64 + ~67MB עותק משורשר + ~50MB מחרוזת
+  // בינארית + ~50MB בייטים — מספיק כדי להקפיא או להפיל את הטאב.
+  // חוקיות הפענוח-לחתיכות: CHUNK הוא כפולה של 4, ו-base64 מיושר ל-4 בייטים,
+  // לכן כל part (פרט אולי לאחרון) הוא base64 תקף בפני עצמו. אם part כלשהו
+  // אינו כפולה של 4 (נכתב בגרסה עם CHUNK אחר) — נופלים לשרשור המלא, שנכון תמיד.
+  async function fetchBlob(id, onProgress) {
+    if (!_db()) throw new Error('firestore-unavailable');
+    if (!_user()) throw new Error('not-signed-in');
+    var ref = _attRef(id);
+    var metaSnap = await ref.get();
+    if (!metaSnap.exists) { var e = new Error('attachment-missing'); e.code = 'file/missing'; throw e; }
+    var meta = metaSnap.data() || {};
+    var N = meta.chunks || 0;
+    var partsCol = ref.collection('parts');
+    var parts = new Array(N);
+
+    var next = 0, done = 0;
+    function lane() {
+      if (next >= N) return Promise.resolve();
+      var i = next++;
+      return partsCol.doc(String(i)).get().then(function (ps) {
+        parts[i] = (ps.exists && ps.data() && ps.data().b) || '';
+        done++;
+        if (onProgress) { try { onProgress(done / N); } catch (e) {} }
+        return lane();
+      });
+    }
+    var lanes = [];
+    for (var k = 0; k < Math.min(CONCURRENCY, N); k++) lanes.push(lane());
+    await Promise.all(lanes);
+
+    var aligned = true;
+    for (var j = 0; j < N - 1; j++) { if (parts[j].length % 4 !== 0) { aligned = false; break; } }
+    var mime = meta.mime || meta.type || 'application/octet-stream';
+    var blob;
+    if (aligned) {
+      // דריסה במקום — משחררת כל מחרוזת base64 מיד עם פענוחה במקום להחזיק את שתי
+      // הצורות של הקובץ כולו בו-זמנית.
+      for (var m = 0; m < N; m++) parts[m] = _b64ToBytes(parts[m]);
+      blob = new Blob(parts, { type: mime });
+    } else {
+      blob = new Blob([_b64ToBytes(parts.join(''))], { type: mime });
+    }
+    return { blob: blob, name: meta.name || 'file', type: meta.type || '', size: meta.size || 0 };
+  }
+
   // מחיקה (בעת הסרת קובץ מהנושא). best-effort — לא זורק.
   // מוחק מטא + כל ה-parts ב-batch אטומי אחד (round-trip יחיד; מתפצל אם > מגבלת
   // ה-batch). המטא נכלל ב-batch הראשון → אם מחיקה מתפצלת ונקטעת, המטא כבר נמחק
@@ -164,5 +226,5 @@
     } catch (e) { /* הרשאה / כבר נמחק — best-effort */ }
   }
 
-  window.CloudFiles = { enabled: enabled, fits: fits, upload: upload, fetch: fetchFile, remove: remove, FS_MAX: FS_MAX };
+  window.CloudFiles = { enabled: enabled, fits: fits, upload: upload, fetch: fetchFile, fetchBlob: fetchBlob, remove: remove, FS_MAX: FS_MAX };
 })();
