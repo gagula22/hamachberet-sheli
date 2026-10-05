@@ -180,6 +180,8 @@
       }
       send.disabled = true;
       send.textContent = '⏳ שולח...';
+      // Start the local engine now, while still inside the click (user gesture).
+      window.WyckoffAPI.launchLocalRunner && window.WyckoffAPI.launchLocalRunner();
       try {
         await window.WyckoffAPI.triggerAnalysis(finalSymbol);
         send.textContent = '✅ נשלח';

@@ -31,11 +31,20 @@
     return data;
   }
 
+  // Starts the local engine on this PC through the wyckoff:// protocol.
+  // Must be called synchronously inside the click (browser requires a user gesture).
+  // Nothing runs at boot — the engine starts only from this click, handles one report, and exits.
+  function launchLocalRunner() {
+    if (!CFG.LOCAL_RUNNER_URL) return;
+    try { window.location.href = CFG.LOCAL_RUNNER_URL; }
+    catch (e) { console.warn('[wyckoff-api] local runner launch failed:', e.message); }
+  }
+
   async function fetchProgress() {
     const res = await fetch(CFG.WORKER_URL + '/progress', { cache: 'no-store' });
     if (!res.ok) return null;
     return res.json();
   }
 
-  window.WyckoffAPI = { loadWatchlist: loadWatchlist, triggerAnalysis: triggerAnalysis, fetchProgress: fetchProgress };
+  window.WyckoffAPI = { loadWatchlist: loadWatchlist, triggerAnalysis: triggerAnalysis, fetchProgress: fetchProgress, launchLocalRunner: launchLocalRunner };
 })();
