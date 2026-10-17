@@ -433,30 +433,44 @@ ${gratitude ? `<div>
 </div>` : ''}
 </div><p dir="rtl"><br></p>`;
 
-      // Close overlay FIRST so editor regains focus cleanly (same bug fix as applyTemplate)
+      // Close overlay FIRST so editor regains focus cleanly
       overlay.remove();
       setTimeout(() => {
         editor.focus();
-        const sel = window.getSelection();
-        let inserted = false;
-        if (sel && sel.rangeCount > 0) {
-          const range = sel.getRangeAt(0);
-          if (editor.contains(range.commonAncestorContainer)) {
-            try {
-              document.execCommand('insertHTML', false, html);
-              inserted = true;
-            } catch (e) {
-              inserted = false;
+
+        // If editor is essentially empty (just the default empty paragraph), clear it
+        // so the mood block starts from the first line (no leading blank line)
+        if (!editor.textContent.trim()) {
+          editor.innerHTML = '';
+        }
+
+        // Insert the mood block via DOM append (bypasses Range API issues)
+        const temp = document.createElement('div');
+        temp.innerHTML = html;
+        const insertedNodes = [];
+        while (temp.firstChild) {
+          const node = temp.firstChild;
+          editor.appendChild(node);
+          insertedNodes.push(node);
+        }
+
+        // Position the caret in the trailing empty paragraph so the user can start typing immediately
+        const trailing = insertedNodes[insertedNodes.length - 1];
+        if (trailing && trailing.nodeType === 1) {
+          try {
+            const range = document.createRange();
+            range.selectNodeContents(trailing);
+            range.collapse(true);
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+            // Scroll the trailing paragraph into view
+            if (trailing.scrollIntoView) {
+              trailing.scrollIntoView({ block: 'center', behavior: 'smooth' });
             }
-          }
+          } catch (e) {}
         }
-        if (!inserted) {
-          const temp = document.createElement('div');
-          temp.innerHTML = html;
-          while (temp.firstChild) {
-            editor.appendChild(temp.firstChild);
-          }
-        }
+
         save();
         App.toast('🎭 נרשם ביומן מצב הרוח');
       }, 100);
