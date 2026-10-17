@@ -186,29 +186,37 @@
     }
 
     function applyTemplate(html, name, tags) {
-      // Close the overlay FIRST so focus returns to the editor
+      // Close overlay FIRST so editor regains focus cleanly
       overlay.remove();
 
-      // Give the browser 50ms to finish removing the overlay
       setTimeout(() => {
         editor.focus();
 
-        // Check if there's a valid selection inside the editor
+        // Try to insert at current selection if valid and inside editor
         const sel = window.getSelection();
-        const hasValidSelection = sel && sel.rangeCount > 0 &&
-                                   editor.contains(sel.anchorNode);
+        let inserted = false;
 
-        if (!hasValidSelection) {
-          // No valid selection — place cursor at the end of the editor
-          const range = document.createRange();
-          range.selectNodeContents(editor);
-          range.collapse(false);
-          sel.removeAllRanges();
-          sel.addRange(range);
+        if (sel && sel.rangeCount > 0) {
+          const range = sel.getRangeAt(0);
+          if (editor.contains(range.commonAncestorContainer)) {
+            try {
+              document.execCommand('insertHTML', false, html);
+              inserted = true;
+            } catch (e) {
+              inserted = false;
+            }
+          }
         }
 
-        // Now insert the template HTML
-        document.execCommand('insertHTML', false, html);
+        // Fallback: append HTML directly to the end of the editor
+        if (!inserted) {
+          const temp = document.createElement('div');
+          temp.innerHTML = html;
+          while (temp.firstChild) {
+            editor.appendChild(temp.firstChild);
+          }
+        }
+
         save();
 
         // Auto-add template tags to the current topic (if any)
@@ -225,7 +233,7 @@
         }
 
         App.toast('✓ תבנית "' + name + '" הוכנסה');
-      }, 50);
+      }, 100);
     }
     function forkBuiltinTemplate(t) {
       const name = prompt('שם לעותק החדש:', t.name + ' (שלי)');
