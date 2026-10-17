@@ -433,11 +433,33 @@ ${gratitude ? `<div>
 </div>` : ''}
 </div><p dir="rtl"><br></p>`;
 
-      editor.focus();
-      document.execCommand('insertHTML', false, html);
-      save();
+      // Close overlay FIRST so editor regains focus cleanly (same bug fix as applyTemplate)
       overlay.remove();
-      App.toast('🎭 נרשם ביומן מצב הרוח');
+      setTimeout(() => {
+        editor.focus();
+        const sel = window.getSelection();
+        let inserted = false;
+        if (sel && sel.rangeCount > 0) {
+          const range = sel.getRangeAt(0);
+          if (editor.contains(range.commonAncestorContainer)) {
+            try {
+              document.execCommand('insertHTML', false, html);
+              inserted = true;
+            } catch (e) {
+              inserted = false;
+            }
+          }
+        }
+        if (!inserted) {
+          const temp = document.createElement('div');
+          temp.innerHTML = html;
+          while (temp.firstChild) {
+            editor.appendChild(temp.firstChild);
+          }
+        }
+        save();
+        App.toast('🎭 נרשם ביומן מצב הרוח');
+      }, 100);
     });
   }
 
