@@ -186,25 +186,47 @@
     }
 
     function applyTemplate(html, name, tags) {
-      editor.focus();
-      document.execCommand('insertHTML', false, html);
-      save();
-      // Auto-add template tags to the current topic (if any)
-      if (tags && tags.length && topicId) {
-        const current = getById(topicId);
-        if (current) {
-          const existing = Array.isArray(current.tags) ? current.tags : [];
-          const merged = [...existing];
-          tags.forEach(t => { if (!merged.includes(t)) merged.push(t); });
-          if (merged.length !== existing.length) {
-            updateTopic(topicId, { tags: merged });
+      // Close the overlay FIRST so focus returns to the editor
+      overlay.remove();
+
+      // Give the browser 50ms to finish removing the overlay
+      setTimeout(() => {
+        editor.focus();
+
+        // Check if there's a valid selection inside the editor
+        const sel = window.getSelection();
+        const hasValidSelection = sel && sel.rangeCount > 0 &&
+                                   editor.contains(sel.anchorNode);
+
+        if (!hasValidSelection) {
+          // No valid selection — place cursor at the end of the editor
+          const range = document.createRange();
+          range.selectNodeContents(editor);
+          range.collapse(false);
+          sel.removeAllRanges();
+          sel.addRange(range);
+        }
+
+        // Now insert the template HTML
+        document.execCommand('insertHTML', false, html);
+        save();
+
+        // Auto-add template tags to the current topic (if any)
+        if (tags && tags.length && topicId) {
+          const current = getById(topicId);
+          if (current) {
+            const existing = Array.isArray(current.tags) ? current.tags : [];
+            const merged = [...existing];
+            tags.forEach(t => { if (!merged.includes(t)) merged.push(t); });
+            if (merged.length !== existing.length) {
+              updateTopic(topicId, { tags: merged });
+            }
           }
         }
-      }
-      overlay.remove();
-      App.toast('✓ תבנית "' + name + '" הוכנסה');
-    }
 
+        App.toast('✓ תבנית "' + name + '" הוכנסה');
+      }, 50);
+    }
     function forkBuiltinTemplate(t) {
       const name = prompt('שם לעותק החדש:', t.name + ' (שלי)');
       if (!name || !name.trim()) return;
