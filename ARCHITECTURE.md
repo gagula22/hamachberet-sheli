@@ -319,7 +319,7 @@
 
 ### 6א. תבניות מובנות + הדבקת תבנית/מצב-רוח (P-13, 17–19.10.2026)
 **איפה:** `NB_BUILTIN_TEMPLATES` בראש `notebook/export.js` (טאב "תבניות מובנות"). כל רשומה:
-`{id, icon, name, desc, tags, html: () => \`...\`}`. "התבניות שלי" = `Store('customTemplates')` (מסונכרן Firestore,
+``{id, icon, name, desc, tags, html: () => `...`}``. "התבניות שלי" = `Store('customTemplates')` (מסונכרן Firestore,
 subcol, רק כשמחוברים לאותו חשבון) — **תבנית שחייבת להיות זהה בכל מחשב → מובנית, בקוד.**
 `adamant_checklist` ("📊 ציק ליסט סופי") = צ'קליסט ניתוח גרף, 15 סעיפים, שני עמודים; גיבוי HTML אצל המשתמש.
 **הדבקה (`applyTemplate` + שמירת מודאל מצב-רוח):** `overlay.remove()` **ראשון** → `setTimeout(100)` →
@@ -334,7 +334,7 @@ subcol, רק כשמחוברים לאותו חשבון) — **תבנית שחיי
 3. **RTL + לטינית:** כל קטע לטיני בתוך שורה עברית — `<bdi dir="ltr">…</bdi>`; מספר-כותרת `<bdi>1</bdi> - <bdi dir="ltr">TITLE</bdi>`;
    כותרת מעורבת (MANAGE · ניהול) — `dir="rtl"`; אפשרויות עם checkbox — כל אחת ב-`<bdi dir="rtl">`. בלי זה
    ה-bidi מזיז מספרים/סוגריים/LONG לצד הלא נכון. חצי-זרימה ב-RTL = `←`, מיושר `text-align:right`.
-4. בתוך `html: () => \`…\`` — אסור backtick או `${`.
+4. בתוך ``html: () => `…` `` — אסור backtick או `${`.
 **אימות שעבד בלי Word:** `node --check`; eval של `NB_BUILTIN_TEMPLATES` ב-node; צילומי Playwright/Chromium
 (`/opt/pw-browsers/chromium-*/chrome-linux/chrome`); המרת ה-.doc ב-LibreOffice (`soffice --convert-to pdf
 --infilter="HTML (StarWriter)"`) — מפרש HTML כמו Word, טוב להשוואת לפני/אחרי. ההדבקה בפועל — לא בפתקי המשתמש.
