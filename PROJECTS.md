@@ -119,6 +119,8 @@
 - **מהות:** צינור exportDoc, טבלאות-עטיפה לתמונות, A4, scale אדפטיבי, fallback הדפסה.
 - **תיקון קבוע (5.7.2026, `09a44a1`, export.js v=55):** תמונות ב-Word דרך **MHTML** במקום
   data-URI — סוף הבאג החוזר של "תמונה מקושרת שבורה" ב-Word. ראה ARCHITECTURE §6.
+- **בוצע (17–19.10.2026, export.js v=56):** הדבקת תבנית/מצב-רוח — overlay נסגר ראשון + fallback `appendChild`
+  (לא Range API). תבנית מובנית `adamant_checklist` ("ציק ליסט סופי"). ⚠️ כל שינוי ב-export.js = הקפצת `?v=` ב-index.html.
 - **משימות פתוחות:**
   - [ ] תוכן ישן שהודבק מ-Word עדיין מיוצא ב-13pt — לכפות 11pt בייצוא
 - **זהירות (ARCHITECTURE §6):** (1) רינדור PDF בפאס אחד עם windowWidth=680 — בלוק-בלוק שובר RTL.
