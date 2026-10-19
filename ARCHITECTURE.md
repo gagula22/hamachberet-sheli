@@ -317,6 +317,31 @@
 טקסט; הכלי מזהה (`totalTextChars<12`), מטמיע את תמונות העמודים, ומציג הודעה ברורה שמפנה ל"ייצוא ל-Word"
 של המחברת. *(נבנה ע"י workflow רב-סוכנים — מימוש מנצח שנבחר ע"י judge; ראה memory.)*
 
+### 6א. תבניות מובנות + הדבקת תבנית/מצב-רוח (P-13, 17–19.10.2026)
+**איפה:** `NB_BUILTIN_TEMPLATES` בראש `notebook/export.js` (טאב "תבניות מובנות"). כל רשומה:
+`{id, icon, name, desc, tags, html: () => \`...\`}`. "התבניות שלי" = `Store('customTemplates')` (מסונכרן Firestore,
+subcol, רק כשמחוברים לאותו חשבון) — **תבנית שחייבת להיות זהה בכל מחשב → מובנית, בקוד.**
+`adamant_checklist` ("📊 ציק ליסט סופי") = צ'קליסט ניתוח גרף, 15 סעיפים, שני עמודים; גיבוי HTML אצל המשתמש.
+**הדבקה (`applyTemplate` + שמירת מודאל מצב-רוח):** `overlay.remove()` **ראשון** → `setTimeout(100)` →
+`execCommand('insertHTML')` רק אם ה-selection בתוך העורך → אחרת **`appendChild`** מ-div זמני.
+⚠️ אסור Range API כ-fallback (`addRange(): The given range isn't in document` — הניסיון שנכשל, `21af0a6`).
+במצב-רוח: עורך ריק מתנקה לפני ההדבקה, והסמן מוצב בפסקה הריקה שאחרי הבלוק.
+**כללי HTML לתבנית שתיוצא ל-Word (נלמדו בכאב):**
+1. רקע/צבע לקופסה — **רק על `td`** של `<table>` (גם `bgcolor` וגם `background` ב-style). Word מתעלם מרקע על
+   `div`, מ-`display:flex/grid` ומ-border-radius ⇒ קופסה כהה יוצאת כטקסט בהיר על לבן ושברים.
+   עמודות = שורת-טבלה (`<td width="25%">`), לא flex. שורות-טקסט ב-`<p>`, לא div מקוננים.
+2. `display:table` inline על טבלאות-עיצוב — `layout.css` הופך `.nb-editor table` ל-block במובייל.
+3. **RTL + לטינית:** כל קטע לטיני בתוך שורה עברית — `<bdi dir="ltr">…</bdi>`; מספר-כותרת `<bdi>1</bdi> - <bdi dir="ltr">TITLE</bdi>`;
+   כותרת מעורבת (MANAGE · ניהול) — `dir="rtl"`; אפשרויות עם checkbox — כל אחת ב-`<bdi dir="rtl">`. בלי זה
+   ה-bidi מזיז מספרים/סוגריים/LONG לצד הלא נכון. חצי-זרימה ב-RTL = `←`, מיושר `text-align:right`.
+4. בתוך `html: () => \`…\`` — אסור backtick או `${`.
+**אימות שעבד בלי Word:** `node --check`; eval של `NB_BUILTIN_TEMPLATES` ב-node; צילומי Playwright/Chromium
+(`/opt/pw-browsers/chromium-*/chrome-linux/chrome`); המרת ה-.doc ב-LibreOffice (`soffice --convert-to pdf
+--infilter="HTML (StarWriter)"`) — מפרש HTML כמו Word, טוב להשוואת לפני/אחרי. ההדבקה בפועל — לא בפתקי המשתמש.
+**פריסה:** כל שינוי ב-export.js ⇒ הקפצת `?v=` ב-index.html (אחרת ה-SW מגיש את הישן). גם אחרי הקפצה, GitHub Pages
+מגיש HTML עם max-age=600 ⇒ עד ~10 דק' מחשב שביקר באתר עשוי לקבל index ישן — Ctrl+Shift+R. בדיקה חיה: `?r=N`
+בכתובת. מהקונטיינר github.io חסום — לבדוק דרך הדפדפן; סטטוס פריסה: `gh run list -R gagula22/hamachberet-sheli`.
+
 ---
 
 ## 7. אחריויות חדשות (תוספות Fable 5) — כל אחת תיקייה עצמאית
