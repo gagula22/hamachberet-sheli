@@ -338,9 +338,10 @@ subcol, רק כשמחוברים לאותו חשבון) — **תבנית שחיי
 **אימות שעבד בלי Word:** `node --check`; eval של `NB_BUILTIN_TEMPLATES` ב-node; צילומי Playwright/Chromium
 (`/opt/pw-browsers/chromium-*/chrome-linux/chrome`); המרת ה-.doc ב-LibreOffice (`soffice --convert-to pdf
 --infilter="HTML (StarWriter)"`) — מפרש HTML כמו Word, טוב להשוואת לפני/אחרי. ההדבקה בפועל — לא בפתקי המשתמש.
-**פריסה:** כל שינוי ב-export.js ⇒ הקפצת `?v=` ב-index.html (אחרת ה-SW מגיש את הישן). גם אחרי הקפצה, GitHub Pages
-מגיש HTML עם max-age=600 ⇒ עד ~10 דק' מחשב שביקר באתר עשוי לקבל index ישן — Ctrl+Shift+R. בדיקה חיה: `?r=N`
-בכתובת. מהקונטיינר github.io חסום — לבדוק דרך הדפדפן; סטטוס פריסה: `gh run list -R gagula22/hamachberet-sheli`.
+**פריסה:** כל שינוי ב-export.js ⇒ הקפצת `?v=` ב-index.html (קובץ שהשתנה בלי הקפצה מוגש מה-SW בגרסה הישנה עוד טעינה אחת).
+**נמדד 19.10:** GitHub Pages מגיש את index.html עם `no-cache, no-store` (תמיד טרי) ואת קבצי ה-JS עם `max-age=600` (מוגנים ב-`?v=`).
+אחרי פריסה יש דקה-שתיים של הפצה ב-CDN (Fastly) שבהן עוד עשוי להגיע index ישן. בדיקה חיה: `?r=N` בכתובת. מהקונטיינר
+github.io חסום — לבדוק דרך הדפדפן; סטטוס פריסה: `gh run list -R gagula22/hamachberet-sheli`.
 
 ---
 
