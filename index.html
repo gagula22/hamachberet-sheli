@@ -38,10 +38,31 @@
   <link rel="stylesheet" href="css/features/filedash.css?v=1" />
   <link rel="stylesheet" href="css/features/pmkit.css?v=1" />
   <link rel="stylesheet" href="css/features/jobnav.css?v=1" />
-  <!-- Vendor scripts: deferred so they never block first render.
-       html2pdf / mammoth / pdfjs are only needed when the user clicks Export. -->
-  <script defer src="js/vendor/html2pdf.bundle.min.js"></script>
-  <script defer src="js/vendor/mammoth.min.js"></script>
+  <!-- Vendor scripts (עודכן 20.10.2026):
+       • html2pdf.bundle (885KB) הוסר — שבור ולא בשימוש; ייצוא PDF טוען html2canvas+jsPDF בעצמו (components/html-to-pdf.js).
+       • mammoth (628KB) נטען רק בשימוש הראשון דרך ממלא-מקום (למטה) — 3 הצרכנים קוראים ל-convertToHtml/extractRawText
+         אחרי פעולת משתמש, והממלא-מקום טוען את הספרייה האמיתית ומעביר אליה. אין לגעת בצרכנים.
+       • pdfjs נשאר בטעינה מראש — כ-10 כלים ניגשים ל-pdfjsLib כבר בזמן הטעינה. -->
+  <script>
+    (function () {
+      var loading = null;
+      function load() {
+        if (!loading) loading = new Promise(function (resolve, reject) {
+          var stub = window.mammoth, s = document.createElement('script');
+          s.src = 'js/vendor/mammoth.min.js?v=1';
+          s.onload = function () { (window.mammoth && window.mammoth !== stub) ? resolve(window.mammoth) : reject(new Error('mammoth load failed')); };
+          s.onerror = function () { loading = null; reject(new Error('לא ניתן לטעון את מנוע ההמרה — בדוק חיבור ונסה שוב')); };
+          document.head.appendChild(s);
+        });
+        return loading;
+      }
+      window.mammoth = {
+        __lazy: true,
+        convertToHtml: function (input, options) { return load().then(function (m) { return m.convertToHtml(input, options); }); },
+        extractRawText: function (input) { return load().then(function (m) { return m.extractRawText(input); }); }
+      };
+    })();
+  </script>
   <script defer src="js/vendor/pdfjs.min.js"></script>
   <!-- Firebase SDK: מאורח מקומית (js/vendor/firebase) ולא מ-gstatic — רשתות
        ארגוניות חוסמות לעיתים CDN של גוגל, וכך ה-SDK מגיע מאותו origin כמו
@@ -144,7 +165,7 @@
   <script src="js/views/prompts/index.js?v=5"></script>
   <script src="js/views/torot/index.js?v=2"></script>
   <script src="js/views/tools/word-to-pdf/index.js?v=27"></script>
-  <script src="js/views/tools/pdf-to-word/index.js?v=35"></script>
+  <script src="js/views/tools/pdf-to-word/index.js?v=36"></script>
   <script src="js/views/tools/pdf-translator/translate.js?v=26"></script>
   <script src="js/views/tools/pdf-translator/index.js?v=27"></script>
   <script src="js/views/tools/video-transcriber/utils.js?v=26"></script>
@@ -276,6 +297,45 @@
         });
       });
     }
+
+    // "יש גרסה חדשה" — בזמן שהדף פתוח בודקים מול GitHub אם index.html השתנה (כל 5 דק' + בחזרה ללשונית).
+    // לא מרעננים אוטומטית (כדי לא לקטוע כתיבה) — מציגים הודעה, והמשתמש לוחץ לרענון.
+    // ?nosw=1 = ה-SW לא מיירט את הבקשה ⇒ תמיד מהרשת, בלי לשמור במטמון.
+    (function () {
+      var baseline = null, lastCheck = 0, shown = false;
+      function signature(html) { return (html.match(/(?:src|href)="[^"]+\?v=\d+"/g) || []).sort().join('|'); }
+      function fetchSig() {
+        return fetch('index.html?nosw=1&t=' + Date.now(), { cache: 'no-store' })
+          .then(function (r) { return r.ok ? r.text() : null; })
+          .then(function (t) { return t ? signature(t) : null; })
+          .catch(function () { return null; });
+      }
+      function showBanner() {
+        if (shown) return; shown = true;
+        var b = document.createElement('div');
+        b.id = 'updateBanner'; b.setAttribute('dir', 'rtl'); b.setAttribute('role', 'status');
+        b.style.cssText = 'position:fixed;bottom:18px;left:50%;transform:translateX(-50%);z-index:9999;background:#1F5F8B;color:#fff;' +
+          'padding:10px 16px;border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,.18);font:600 14px Heebo,Arial,sans-serif;display:flex;gap:12px;align-items:center;';
+        b.innerHTML = '<span>🔄 יש גרסה חדשה של המחברת</span>' +
+          '<button type="button" style="background:#fff;color:#1F5F8B;border:0;border-radius:7px;padding:6px 12px;font:700 13px Heebo,Arial,sans-serif;cursor:pointer">רענון</button>' +
+          '<button type="button" aria-label="סגור" style="background:transparent;color:#fff;border:0;font-size:18px;cursor:pointer;line-height:1">×</button>';
+        b.children[1].onclick = function () { location.reload(); };
+        b.children[2].onclick = function () { b.remove(); };
+        document.body.appendChild(b);
+      }
+      function check() {
+        if (shown || !navigator.onLine || Date.now() - lastCheck < 60000) return;
+        lastCheck = Date.now();
+        fetchSig().then(function (sig) {
+          if (!sig) return;
+          if (baseline === null) { baseline = sig; return; }
+          if (sig !== baseline) showBanner();
+        });
+      }
+      window.addEventListener('load', function () { setTimeout(check, 4000); });
+      setInterval(check, 5 * 60 * 1000);
+      document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') check(); });
+    })();
   </script>
 </body>
 </html>
