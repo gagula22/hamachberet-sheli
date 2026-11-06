@@ -15,6 +15,8 @@
   var SCOPE = 'https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.send';
   var API = 'https://gmail.googleapis.com/gmail/v1/users/me/';
   var LS_ID = 'emailSummary.clientId';
+  // Client ID ציבורי (לא סוד) של אפליקציית ה-OAuth של המשתמש; ניתן לדרוס דרך localStorage.
+  var DEFAULT_CLIENT_ID = '360506076697-4clpne30mkl4rj3s6q2qtej29mban19q.apps.googleusercontent.com';
   var MAX_MSGS_PER_TAB = 600;
 
   var CAT = { bank: 'התראות בנקאיות ומסחר', order: 'הזמנות ומשלוחים', job: 'התראות עבודה',
@@ -22,7 +24,7 @@
 
   function el(t, a, k) { return App.el(t, a || {}, k || []); }
   function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
-  function getClientId() { try { return localStorage.getItem(LS_ID) || (window.EMAIL_SUMMARY_CONFIG || {}).CLIENT_ID || ''; } catch (e) { return ''; } }
+  function getClientId() { try { return localStorage.getItem(LS_ID) || (window.EMAIL_SUMMARY_CONFIG || {}).CLIENT_ID || DEFAULT_CLIENT_ID; } catch (e) { return ''; } }
   function setClientId(v) { try { localStorage.setItem(LS_ID, v); } catch (e) { /* ignore */ } }
 
   // ── התחברות ──────────────────────────────────────────────────────────────
