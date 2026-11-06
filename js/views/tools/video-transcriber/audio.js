@@ -27,9 +27,53 @@
       return { pcm: pcm, sampleRate: 16000, durationSec: pcm.length / 16000, _buf: ch > 1 ? null : decoded };
     } catch (decodeErr) {
       try { audioCtx.close(); } catch (_) {}
-      // Fallback for video / unusual containers
-      if (onProgress) onProgress('פענוח ישיר נכשל — עובר ל-HTMLVideoElement (איטי יותר אבל עובד על MP4 וידאו)…');
+      // Fallback for video / long / unusual containers.
+      // ⚠️ תיקון 6.11.2026 ("תמלול גיבריש באנגלית שנעצר אחרי ~7 דקות"): decodeAudioData
+      // נכשל על קבצי וידאו ארוכים (111-130 דק'), והמסלול הישן (HTMLVideoElement ב-16x)
+      // הקליט את האודיו *מואץ פי 16* — כלומר ~7 דקות של גיבריש במקום שעתיים, ש-Whisper
+      // "תמלל" כאנגלית מומצאת. עכשיו: קודם ffmpeg.wasm (חילוץ אודיו אמיתי, בקצב מלא),
+      // והמסלול הישן נשאר רק כמוצא אחרון ולא מחזיר תוצאה מקוצרת (ראו הבדיקה בסוף).
+      if (window.VT_FFMPEG && window.VT_FFMPEG._loadFfmpeg) {
+        try {
+          if (onProgress) onProgress('פענוח ישיר נכשל — מחלץ אודיו עם ffmpeg.wasm (אמין לקבצים ארוכים)…');
+          return await _decodeViaFfmpeg(file, onProgress);
+        } catch (ffErr) {
+          console.warn('[decode] ffmpeg.wasm extraction failed, falling back to video element:', ffErr);
+        }
+      }
+      if (onProgress) onProgress('פענוח ישיר נכשל — עובר ל-HTMLVideoElement (איטי יותר, מיועד לקבצים קצרים)…');
       return _decodeViaVideoElement(file, onProgress);
+    }
+  }
+
+  // חילוץ אודיו אמיתי עם ffmpeg.wasm: מונו, 16kHz, PCM שלם (int16 → Float32).
+  // לא תלוי ב-decodeAudioData ולא בזמן-אמת, ולכן עובד גם על וידאו של שעתיים+.
+  async function _decodeViaFfmpeg(file, onProgress) {
+    const ffmpeg = await window.VT_FFMPEG._loadFfmpeg(onProgress);
+    const ext = ((file.name.match(/\.[^.]+$/) || ['.mp4'])[0]).toLowerCase();
+    const inName = 'dec_input' + ext, outName = 'dec_out.pcm';
+    const onProg = function (e) {
+      if (onProgress && e && typeof e.progress === 'number') {
+        onProgress('מחלץ אודיו עם ffmpeg · ' + Math.max(0, Math.min(100, e.progress * 100)).toFixed(0) + '%');
+      }
+    };
+    try {
+      if (onProgress) onProgress('מעלה ' + (file.size / 1024 / 1024).toFixed(0) + ' MB ל-ffmpeg…');
+      await ffmpeg.writeFile(inName, new Uint8Array(await file.arrayBuffer()));
+      ffmpeg.on('progress', onProg);
+      const code = await ffmpeg.exec(['-i', inName, '-vn', '-ac', '1', '-ar', '16000', '-f', 's16le', outName]);
+      if (code !== 0 && code !== undefined) throw new Error('ffmpeg exit code ' + code);
+      const raw = await ffmpeg.readFile(outName);
+      const n = Math.floor(raw.byteLength / 2);
+      if (n === 0) throw new Error('ffmpeg לא הפיק אודיו');
+      const i16 = new Int16Array(raw.buffer, raw.byteOffset, n);
+      const pcm = new Float32Array(n);
+      for (let i = 0; i < n; i++) pcm[i] = i16[i] / 32768;
+      return { pcm: pcm, sampleRate: 16000, durationSec: n / 16000 };
+    } finally {
+      try { ffmpeg.off('progress', onProg); } catch (_) {}
+      try { await ffmpeg.deleteFile(inName); } catch (_) {}
+      try { await ffmpeg.deleteFile(outName); } catch (_) {}
     }
   }
 
@@ -117,6 +161,13 @@
 
     if (totalSamples === 0) {
       throw new Error('לא נקלטו דגימות אודיו — ייתכן שלקובץ אין פסקול');
+    }
+    // בדיקת שלמות: ב-playbackRate גבוה הדפדפן מקצר/מאיץ את האודיו (נחשף ב-6.11.2026:
+    // 111 דק' → ~7 דק' מואצות). אם נקלט פחות מ-90% מהמשך — עדיף לעצור עם שגיאה
+    // מאשר להפיק תמלול שגוי בשקט.
+    if (totalSamples / sampleRate < duration * 0.9) {
+      throw new Error('פענוח הווידאו בדפדפן נקטע (נקלטו ' + Math.round(totalSamples / sampleRate / 60) +
+        ' דק׳ מתוך ' + Math.round(duration / 60) + '). חלצו אודיו (MP3/M4A) או חתכו את הקובץ וניסו שוב.');
     }
     const pcm = new Float32Array(totalSamples);
     let off = 0;
