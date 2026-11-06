@@ -1,0 +1,31 @@
+/* P-93 סיכום מיילים — אחריות עצמאית. כרטיס בלוח הבקרה + חלוניות. */
+.es-card .es-row, .es-modal .es-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0; }
+.es-note { color: var(--ink-soft); font-size: 13px; margin: 6px 0; }
+.es-cid { flex: 1 1 260px; min-width: 0; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); color: var(--ink); }
+.es-setup summary { cursor: pointer; font-weight: 600; }
+.es-setup ol { padding-inline-start: 22px; font-size: 13px; color: var(--ink-soft); }
+.es-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 2000; }
+.es-modal { background: var(--paper); color: var(--ink); border-radius: var(--r-md); max-width: 560px; width: 100%; max-height: 88vh; overflow: auto; padding: 20px; position: relative; box-shadow: var(--shadow-lg); }
+.es-modal.es-wide { max-width: 1000px; }
+.es-modal h3 { margin: 0 0 10px; padding-left: 40px; }
+.es-x { position: absolute; top: 12px; left: 12px; right: auto; width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--line); background: var(--paper); color: var(--ink); cursor: pointer; }
+.es-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.es-chip { padding: 8px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--cream); color: var(--ink); cursor: pointer; }
+.es-chip.on { background: var(--ink); color: #fff; }
+.es-num { width: 110px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); color: var(--ink); }
+.es-status { font-weight: 600; margin: 6px 0; }
+.es-attn { border: 1px solid var(--peach); background: var(--butter); border-radius: 10px; padding: 10px 14px; margin: 10px 0; }
+.es-attn ol { margin: 6px 0 0; padding-inline-start: 22px; }
+.es-filters select { padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); color: var(--ink); }
+.es-tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; margin: 8px 0; }
+.es-table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 13px; }
+.es-table th, .es-table td { text-align: right; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.es-table th { color: var(--ink-soft); white-space: nowrap; }
+.es-row-click { cursor: pointer; }
+.es-row-click:hover, .es-row-click:focus-visible { background: var(--cream); outline: none; }
+.es-row-click.attn { background: var(--butter); }
+.es-dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; }
+.es-dl dt { color: var(--ink-soft); } .es-dl dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.es-mailtext { white-space: pre-wrap; background: var(--cream); border-radius: 10px; padding: 12px; margin: 10px 0; }
+.es-plan { border: 1px solid var(--blush-deep); background: var(--blush); border-radius: 10px; padding: 12px; margin-top: 10px; }
+.es-modal a.btn { display: inline-block; text-decoration: none; }

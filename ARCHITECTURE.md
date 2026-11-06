@@ -845,3 +845,10 @@ PDF/Word דרך pdf.js/mammoth הקיימים; Chart.js מאותו vendor של "
 בדפוס mso; שמירת פרומפטים ל-`Store('prompts')` בסכימת עמוד הפרומטים (כמו P-47/P-48).
 נתוני שכר = טווחים ממוצעים; תפקיד שלא בטבלה → הכלי אומר זאת בכנות, לא ממציא. ⚠️ ממחזר
 כיתות `ds-*` מ-docstudio.css (תלות מתועדת).
+
+## 21. סיכום מיילים (`js/features/emailsummary/`, P-93) — 6.11.2026
+
+- כרטיס בדשבורד (`DASHBOARD_WIDGETS`). זרימה: `askRange` → `run` → `buildSummary` (Gmail REST: `messages.list` לפי `category:` + `after:`, `messages.get` format=metadata, מאגר 8 במקביל) → `classify` → `renderSummary` + `sendToSelf` (MIME multipart, base64url) → `trashAll` (`threads/{id}/trash`).
+- התחברות: GIS token client, scopes `gmail.modify` + `gmail.send`. ה-sw.js לא מיירט בקשות חוצות-מקור, לכן אין שינוי ב-SW.
+- Client ID: `localStorage['emailSummary.clientId']` או `window.EMAIL_SUMMARY_CONFIG.CLIENT_ID`.
+- מלכודות: במצב Testing של Google הטוקן/הסכמה פגים אחרי 7 ימים; מגבלת 600 הודעות לכל לשונית (מדווח כ"לא נסרק"); `classify` הוא היוריסטיקה — אל תרחיב מחיקה בלי לבדוק שאישי/אבטחה מוגנים.

@@ -357,6 +357,12 @@
 ### P-90 · לוח הבקרה
 - **בבעלות:** `js/views/dashboard/index.js` — מארח גנרי של `window.DASHBOARD_WIDGETS` (מיון לפי `fn.order`). לא יודע דבר על הפיצ'רים.
 
+### P-93 · סיכום מיילים (Gmail)
+- **בבעלות:** `js/features/emailsummary/index.js`, `css/features/emailsummary.css` (namespace `window.EmailSummary`, כרטיס ב-`DASHBOARD_WIDGETS`).
+- **נקודות מגע:** index.html (link+script בלבד). אין Store ואין Firebase. נשמר רק `localStorage['emailSummary.clientId']`.
+- **זהירות:** שליחה רק ל-gagula22@gmail.com; מחיקה = trash בלבד ורק אחרי אישור כפול בכרטיס; הכללים ב-`classify` זהים לסקיל gmail-topic-summary. הטוקן לא נשמר.
+- **משימות פתוחות:** בדיקה חיה מול Gmail אחרי יצירת Client ID; כוונון כללים.
+
 ### P-91 · לוח תובנות
 - **בבעלות:** `js/views/insights/` — index/charts (Chart.js מקומי, טעינה עצלה)
 - **זהירות:** אין unmount-hook — הריסת גרפים בכל רינדור; subscribe בודק `document.contains`.
