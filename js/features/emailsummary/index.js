@@ -69,6 +69,7 @@
     });
   }
 
+  var onWait = null;
   function api(path, opts, retry) {
     opts = opts || {};
     return signIn().then(function (tk) {
@@ -80,7 +81,14 @@
       if (r.status === 429 || r.status >= 500) {
         if ((retry || 0) < 3) return sleep(800 * ((retry || 0) + 1)).then(function () { return api(path, opts, (retry || 0) + 1); });
       }
-      if (!r.ok) return r.text().then(function (t) { throw new Error('Gmail ' + r.status + ': ' + t.slice(0, 160)); });
+      if (!r.ok) return r.text().then(function (t) {
+        // מכסת Gmail לדקה (403 quota/rateLimit): ממתינים ומנסים שוב עד 6 פעמים
+        if (r.status === 403 && /quota|rate ?limit/i.test(t) && (retry || 0) < 6) {
+          if (onWait) onWait('מכסת Gmail לדקה התמלאה, ממתין ומנסה שוב...');
+          return sleep(8000 + 4000 * (retry || 0)).then(function () { return api(path, opts, (retry || 0) + 1); });
+        }
+        throw new Error('Gmail ' + r.status + ': ' + t.slice(0, 160));
+      });
       return r.status === 204 ? {} : r.json();
     });
   }
@@ -191,7 +199,7 @@
         var fresh = r.ids.filter(function (id) { if (seen[id]) return false; seen[id] = 1; return true; });
         perTab[t] = { total: r.ids.length };
         var done = 0;
-        return pool(fresh, 8, function (id) { return getMeta(id).then(function (m) { done++; if (done % 20 === 0) onProg('קורא מיילים (' + t + '): ' + done + '/' + fresh.length); m.tab = t; return m; }); })
+        return pool(fresh, 4, function (id) { return getMeta(id).then(function (m) { done++; if (done % 20 === 0) onProg('קורא מיילים (' + t + '): ' + done + '/' + fresh.length); m.tab = t; return m; }); })
           .then(function (ms) { ms.forEach(function (m) { if (m) all.push(m); }); });
       }).then(function () { return next(i + 1); });
     }
@@ -317,7 +325,7 @@
     var m = openOverlay('סיכום מיילים: ' + sel.label, true);
     var status = el('p', { class: 'es-status', role: 'status' }, 'מתחבר ל-Gmail...');
     m.body.append(status);
-    buildSummary(sel.days, sel.label, function (t) { status.textContent = t; }).then(function (S) {
+    (onWait = function (t) { status.textContent = t; }, buildSummary(sel.days, sel.label, function (t) { status.textContent = t; })).then(function (S) {
       saveLast(S);
       status.textContent = 'שולח את הסיכום למייל...';
       renderSummary(m.body, S, status);
