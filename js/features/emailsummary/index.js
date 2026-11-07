@@ -44,8 +44,14 @@
     return gisPromise;
   }
 
+  var pendingSign = null;
   function signIn() {
     if (token && Date.now() < tokenExp - 60000) return Promise.resolve(token);
+    if (pendingSign) return pendingSign;
+    pendingSign = signIn0().then(function (t) { pendingSign = null; return t; }, function (e) { pendingSign = null; throw e; });
+    return pendingSign;
+  }
+  function signIn0() {
     var cid = getClientId();
     if (!cid) return Promise.reject(new Error('חסר Client ID. הוסף אותו בכרטיס.'));
     return loadGis().then(function () {
@@ -364,10 +370,11 @@
       S.groups.forEach(function (g, i) { if (!onlyChecked || checks[i].checked) ids = ids.concat(g.ids); });
       plan.textContent = '';
       if (!ids.length) { plan.hidden = false; plan.appendChild(el('div', {}, 'לא נבחר דבר.')); return; }
-      var ok = el('button', { class: 'btn', type: 'button', onClick: function () { trashAll(ids, ok, no, status); } }, 'אשר: העבר ' + ids.length + ' שיחות לפח');
+      var out = el('div', { class: 'es-status', role: 'status' });
+      var ok = el('button', { class: 'btn', type: 'button', onClick: function () { trashAll(ids, ok, no, status, out); } }, 'אשר: העבר ' + ids.length + ' שיחות לפח');
       var no = el('button', { class: 'btn btn-ghost', type: 'button', onClick: function () { plan.hidden = true; } }, 'בטל');
       plan.hidden = false;
-      plan.append(el('div', {}, 'יועברו לפח ' + ids.length + ' שיחות. עדיין לא נמחק כלום.'), el('div', { class: 'es-row' }, [ok, no]));
+      plan.append(el('div', {}, 'יועברו לפח ' + ids.length + ' שיחות. עדיין לא נמחק כלום.'), el('div', { class: 'es-row' }, [ok, no]), out);
     }
     body.appendChild(el('div', { class: 'es-row' }, [
       el('button', { class: 'btn', type: 'button', onClick: function () { prep(false); } }, 'הכל: העבר לפח'),
@@ -375,16 +382,24 @@
     body.appendChild(plan);
   }
 
-  function trashAll(ids, ok, no, status) {
+  function trashAll(ids, ok, no, status, out) {
     ok.disabled = no.disabled = true;
-    var done = 0, fail = 0;
-    return pool(ids, 4, function (id) {
-      return api('threads/' + id + '/trash', { method: 'POST' }).then(function () { done++; }, function () { fail++; }).then(function () {
-        status.textContent = 'מעביר לפח ' + (done + fail) + ' מתוך ' + ids.length + '...';
+    function say(t) { status.textContent = t; if (out) out.textContent = t; }
+    say('מתחבר ל-Gmail (אם נפתח חלון של Google, אשר בו)...');
+    var done = 0, fail = 0, lastErr = '';
+    return signIn().then(function () {
+      say('מעביר לפח 0 מתוך ' + ids.length + '...');
+      return pool(ids, 4, function (id) {
+        return api('threads/' + id + '/trash', { method: 'POST' }).then(function () { done++; }, function (e) { fail++; lastErr = e && e.message || ''; }).then(function () {
+          say('מעביר לפח ' + (done + fail) + ' מתוך ' + ids.length + '...');
+        });
       });
     }).then(function () {
-      status.textContent = 'הועברו לפח ' + done + ' שיחות' + (fail ? ', נכשלו ' + fail : '') + '. אפשר לשחזר מהפח ב-Gmail כ-30 יום.';
-      ok.parentNode.parentNode.hidden = true;
+      say('הועברו לפח ' + done + ' שיחות' + (fail ? ', נכשלו ' + fail + (lastErr ? ' (' + lastErr + ')' : '') : '') + '. אפשר לשחזר מהפח ב-Gmail כ-30 יום.');
+      if (fail) { ok.disabled = no.disabled = false; }
+    }, function (e) {
+      say('נכשל: ' + e.message + ' נסה שוב.');
+      ok.disabled = no.disabled = false;
     });
   }
 
