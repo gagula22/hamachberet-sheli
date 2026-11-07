@@ -397,6 +397,7 @@
     }).then(function () {
       say('הועברו לפח ' + done + ' שיחות' + (fail ? ', נכשלו ' + fail + (lastErr ? ' (' + lastErr + ')' : '') : '') + '. אפשר לשחזר מהפח ב-Gmail כ-30 יום.');
       if (fail) { ok.disabled = no.disabled = false; }
+      else { ok.textContent = 'אושר: ' + done + ' שיחות הועברו לפח'; ok.disabled = true; no.hidden = true; }
     }, function (e) {
       say('נכשל: ' + e.message + ' נסה שוב.');
       ok.disabled = no.disabled = false;
