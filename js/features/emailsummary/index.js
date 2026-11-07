@@ -243,21 +243,21 @@
     S.groups.forEach(function (g, i) { txt.push((i + 1) + '. ' + g.sender + ', ' + g.ids.length + ' | ' + g.example); });
 
     var td = 'style="border:1px solid #ccc;padding:3px 7px;text-align:right"';
-    var h = '<div dir="rtl" style="font-family:Arial,sans-serif;font-size:14px"><h2>סיכום מיילים: ' + esc(S.rangeLabel) + '</h2><p><a href="' + SITE_URL + '" style="background:#1a73e8;color:#fff;padding:8px 14px;border-radius:6px;text-decoration:none">פתח את הסיכום האינטראקטיבי באתר</a><br><small>באתר: לחצו "פתח את הסיכום האחרון" (באותו דפדפן שבו הופק). שם יש חלונית לכל מייל ובחירה למחיקת ספאם לפח.</small></p><p>נסרקו ' + S.scanned + ' מיילים.' +
+    var h = '<div dir="rtl" style="font-family:Arial,sans-serif;font-size:14px"><h2>סיכום מיילים: ' + esc(S.rangeLabel) + '</h2><p>הדף האינטראקטיבי: <a href="' + SITE_URL + '">פתח את הסיכום (חלונית לכל מייל + מחיקת ספאם)</a></p><p>נסרקו ' + S.scanned + ' מיילים.' +
       (S.notScanned.length ? ' לא נסרק במלואו: ' + esc(S.notScanned.join(', ')) + '.' : '') + '</p>';
     h += '<h3>דורש תשומת לב</h3>' + (att.length ? '<ol>' + att.map(function (r) { return '<li>' + esc(r.sender) + ': ' + esc(r.subject) + ' (' + esc(r.attn) + ')</li>'; }).join('') + '</ol>' : '<p>אין.</p>');
-    h += '<table style="border-collapse:collapse;font-size:13px"><tr>' + ['קטגוריה', 'שולח', 'נושא', 'תאריך', 'תיבה', 'מייל'].map(function (x) { return '<th ' + td + '>' + x + '</th>'; }).join('') + '</tr>';
+    h += '<table style="border-collapse:collapse;font-size:13px"><tr>' + ['קטגוריה', 'שולח', 'נושא', 'תאריך', 'במשפט אחד', 'מייל'].map(function (x) { return '<th ' + td + '>' + x + '</th>'; }).join('') + '</tr>';
     S.rows.forEach(function (r) {
       h += '<tr' + (r.attn ? ' style="background:#fbeadb"' : '') + '><td ' + td + '>' + esc(CAT[r.cat]) + '</td><td ' + td + '>' + esc(r.sender) + '</td><td ' + td + '>' + esc(r.subject) +
-        '</td><td ' + td + '>' + fmt(r.ts) + '</td><td ' + td + '>' + esc(r.box) + '</td><td ' + td + '><a href="' + gmailLink(r.threadId) + '">פתח</a></td></tr>';
+        '</td><td ' + td + '>' + fmt(r.ts) + '</td><td ' + td + '>' + esc(r.snippet || '') + '</td><td ' + td + '><a href="' + gmailLink(r.threadId) + '">פתח</a></td></tr>';
     });
     h += '</table><h3>ספאם ופרסומות</h3><table style="border-collapse:collapse;font-size:13px"><tr><th ' + td + '>#</th><th ' + td + '>שולח</th><th ' + td + '>כמה</th><th ' + td + '>נושא לדוגמה</th></tr>';
     S.groups.forEach(function (g, i) { h += '<tr><td ' + td + '>' + (i + 1) + '</td><td ' + td + '>' + esc(g.sender) + '</td><td ' + td + '>' + g.ids.length + '</td><td ' + td + '>' + esc(g.example) + '</td></tr>'; });
-    h += '</table><p>המחיקה לפח נעשית בכרטיס "סיכום מיילים" באתר "המחברת שלי".</p></div>';
+    h += '</table><p><b>למחוק את אלה? ענה בשיחה / בחר באתר: הכל / מספרים מסוימים / לא</b><br>בדף האינטראקטיבי יש תיבות סימון וכפתור העברה לפח. לא נמחק כלום עד אישור שלך.</p></div>';
     return { text: txt.join('\n'), html: h };
   }
 
-  var SITE_URL = 'https://gagula22.github.io/hamachberet-sheli/#/dashboard';
+  var SITE_URL = 'https://gagula22.github.io/hamachberet-sheli/?es=last#/dashboard';
   var LS_LAST = 'emailSummary.last';
   function saveLast(S) { try { localStorage.setItem(LS_LAST, JSON.stringify(S)); } catch (e) { /* ignore */ } }
   function loadLast() { try { var v = localStorage.getItem(LS_LAST); return v ? JSON.parse(v) : null; } catch (e) { return null; } }
@@ -430,5 +430,6 @@
   }
   renderCard.order = 40;
   (window.DASHBOARD_WIDGETS = window.DASHBOARD_WIDGETS || []).push(renderCard);
+  try { if (/[?&]es=last/.test(location.search)) setTimeout(function () { if (loadLast()) openLast(); }, 600); } catch (e) { /* ignore */ }
   window.EmailSummary = { classify: classify, senderName: senderName };
 })();
