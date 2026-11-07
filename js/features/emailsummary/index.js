@@ -239,11 +239,11 @@
     att.forEach(function (r, i) { txt.push((i + 1) + '. ' + r.sender + ': ' + r.subject + ' (' + r.attn + ')'); });
     txt.push('', 'לפי קטגוריה:');
     Object.keys(CAT).forEach(function (k) { if (k !== 'spam' && byCat[k]) txt.push(CAT[k] + ': ' + byCat[k]); });
-    txt.push('', 'ספאם ופרסומות (לא נמחק כלום; המחיקה נעשית באתר):');
+    txt.push('', 'לפתיחת הסיכום האינטראקטיבי (חלונית לכל מייל + בחירה למחיקת ספאם): ' + SITE_URL + ' ואז "פתח את הסיכום האחרון" (באותו דפדפן שבו הופק).', '', 'ספאם ופרסומות (לא נמחק כלום; המחיקה נעשית באתר):');
     S.groups.forEach(function (g, i) { txt.push((i + 1) + '. ' + g.sender + ', ' + g.ids.length + ' | ' + g.example); });
 
     var td = 'style="border:1px solid #ccc;padding:3px 7px;text-align:right"';
-    var h = '<div dir="rtl" style="font-family:Arial,sans-serif;font-size:14px"><h2>סיכום מיילים: ' + esc(S.rangeLabel) + '</h2><p>נסרקו ' + S.scanned + ' מיילים.' +
+    var h = '<div dir="rtl" style="font-family:Arial,sans-serif;font-size:14px"><h2>סיכום מיילים: ' + esc(S.rangeLabel) + '</h2><p><a href="' + SITE_URL + '" style="background:#1a73e8;color:#fff;padding:8px 14px;border-radius:6px;text-decoration:none">פתח את הסיכום האינטראקטיבי באתר</a><br><small>באתר: לחצו "פתח את הסיכום האחרון" (באותו דפדפן שבו הופק). שם יש חלונית לכל מייל ובחירה למחיקת ספאם לפח.</small></p><p>נסרקו ' + S.scanned + ' מיילים.' +
       (S.notScanned.length ? ' לא נסרק במלואו: ' + esc(S.notScanned.join(', ')) + '.' : '') + '</p>';
     h += '<h3>דורש תשומת לב</h3>' + (att.length ? '<ol>' + att.map(function (r) { return '<li>' + esc(r.sender) + ': ' + esc(r.subject) + ' (' + esc(r.attn) + ')</li>'; }).join('') + '</ol>' : '<p>אין.</p>');
     h += '<table style="border-collapse:collapse;font-size:13px"><tr>' + ['קטגוריה', 'שולח', 'נושא', 'תאריך', 'תיבה', 'מייל'].map(function (x) { return '<th ' + td + '>' + x + '</th>'; }).join('') + '</tr>';
@@ -257,6 +257,10 @@
     return { text: txt.join('\n'), html: h };
   }
 
+  var SITE_URL = 'https://gagula22.github.io/hamachberet-sheli/#/dashboard';
+  var LS_LAST = 'emailSummary.last';
+  function saveLast(S) { try { localStorage.setItem(LS_LAST, JSON.stringify(S)); } catch (e) { /* ignore */ } }
+  function loadLast() { try { var v = localStorage.getItem(LS_LAST); return v ? JSON.parse(v) : null; } catch (e) { return null; } }
   function sendToSelf(S) {
     var b = emailBodies(S), bd = 'b' + Date.now().toString(36);
     var subject = 'סיכום מיילים: ' + S.rangeLabel;
@@ -308,6 +312,7 @@
     var status = el('p', { class: 'es-status', role: 'status' }, 'מתחבר ל-Gmail...');
     m.body.append(status);
     buildSummary(sel.days, sel.label, function (t) { status.textContent = t; }).then(function (S) {
+      saveLast(S);
       status.textContent = 'שולח את הסיכום למייל...';
       renderSummary(m.body, S, status);
       return sendToSelf(S).then(function () { status.textContent = 'הסיכום נשלח אל ' + SELF + '.'; })
@@ -392,13 +397,22 @@
   }
 
   // ── כרטיס בלוח הבקרה ────────────────────────────────────────────────────
+  function openLast() {
+    var S = loadLast();
+    if (!S) { App.toast('אין סיכום שמור בדפדפן הזה'); return; }
+    var m = openOverlay('סיכום מיילים: ' + S.rangeLabel, true);
+    var status = el('p', { class: 'es-status', role: 'status' }, 'הסיכום האחרון שהופק בדפדפן הזה.');
+    renderSummary(m.body, S, status);
+  }
+
   function renderCard() {
     var has = !!getClientId();
     var kids = [el('h2', {}, '📧 סיכום מיילים'),
       el('p', { class: 'es-note' }, 'לחיצה אחת: בוחרים טווח, מקבלים סיכום באתר ובמייל, ומחליטים מה להעביר לפח. עובד ישירות מול Gmail, בלי Claude.')];
     if (has) {
       kids.push(el('div', { class: 'es-row' }, [el('button', { class: 'btn', type: 'button', onClick: askRange }, 'הפק סיכום מיילים'),
-        el('button', { class: 'btn btn-ghost btn-sm', type: 'button', onClick: function () { setClientId(''); App.toast('ה-Client ID נמחק'); location.reload(); } }, 'החלף Client ID')]));
+        loadLast() ? el('button', { class: 'btn btn-soft', type: 'button', onClick: openLast }, 'פתח את הסיכום האחרון') : null,
+        el('button', { class: 'btn btn-ghost btn-sm', type: 'button', onClick: function () { setClientId(''); App.toast('ה-Client ID נמחק'); location.reload(); } }, 'החלף Client ID')].filter(Boolean)));
     } else {
       var inp = el('input', { type: 'text', id: 'es-cid', class: 'es-cid', placeholder: 'xxxx.apps.googleusercontent.com', dir: 'ltr', 'aria-label': 'Google Client ID' });
       kids.push(el('details', { class: 'es-setup', open: 'open' }, [el('summary', {}, 'הגדרה חד-פעמית (3 דקות)'),
