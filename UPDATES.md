@@ -5,6 +5,7 @@
 Services (token client, בדפדפן בלבד, הטוקן בזיכרון); סריקה דרך Gmail REST (primary+updates מלא, אחר כך promotions+social, מגבלת 600 לכל לשונית);
 סיווג בכללים קבועים (`classify`) לפי הסקיל gmail-topic-summary; טבלה עם סינון וחלונית לכל שורה; שליחה אוטומטית לכתובת gagula22@gmail.com בלבד
 (HTML + טקסט); רשימת ספאם ממוספרת עם "הכל/המסומנים: העבר לפח" ואישור נוסף. מחיקה = `threads.trash` בלבד (ניתן לשחזור), אין מחיקה לצמיתות.
+**v=3 (7.11):** אחרי הרצה חיה ראשונה נמצאו: מספרי פוליסה/ת"ז בנושאי מיילים הופיעו בסיכום (תוקן: `maskNums` על כל נושא מספרים של 5+ ספרות), שולחים עם שם ארוך/מרכאות (תוקן ב-`senderName`), ומיילי ביטוח/פנסיה/תרומה/אישורי הגשה שסווגו ספאם (נוספו כללים).
 **עדכון (אותו יום):** ה-Client ID של המשתמש נקבע כברירת מחדל בקוד (`DEFAULT_CLIENT_ID`, ציבורי, v=2); נדרש עדיין Test user + origin ב-Google Cloud.
 **⚠️ דורש הגדרה חד-פעמית של המשתמש:** Client ID של Google (Gmail API + OAuth consent במצב Testing + Test user + origin `https://gagula22.github.io`).
 ה-ID נשמר ב-localStorage (`emailSummary.clientId`) דרך שדה בכרטיס. בלי זה הכרטיס מציג הוראות. במצב Testing ההתחברות פגה אחרי 7 ימים.

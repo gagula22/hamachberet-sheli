@@ -97,7 +97,7 @@
     return api('messages/' + id + '?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date&metadataHeaders=List-Unsubscribe').then(function (m) {
       var h = {};
       ((m.payload && m.payload.headers) || []).forEach(function (x) { h[x.name.toLowerCase()] = x.value; });
-      return { id: m.id, threadId: m.threadId, labels: m.labelIds || [], from: h.from || '', subject: h.subject || '(ללא נושא)',
+      return { id: m.id, threadId: m.threadId, labels: m.labelIds || [], from: h.from || '', subject: maskNums(h.subject || '(ללא נושא)'),
         ts: +m.internalDate || Date.parse(h.date) || 0, snippet: m.snippet || '', bulk: !!h['list-unsubscribe'] };
     });
   }
@@ -118,7 +118,9 @@
     var m = /^\s*"?([^"<]*?)"?\s*<([^>]+)>/.exec(from);
     var name = m ? m[1].trim() : '';
     var mail = m ? m[2] : from.trim();
-    return { name: name || mail, mail: mail.toLowerCase() };
+    name = name.replace(/\\/g, '').replace(/"/g, '').trim();
+    if (!name || name.length > 36) name = mail.split('@')[1] || mail;
+    return { name: name, mail: mail.toLowerCase() };
   }
 
   function classify(m, tab) {
@@ -130,9 +132,13 @@
     if (/calendar-notification@google|calendar\.google/.test(s.mail)) return 'pers';
     if (/new device|new ip|security alert|sign-in|signed in|login|התחברות|מכשיר חדש|הרשאות|permissions|verify|אימות|נכנסה לחשבון/i.test(sub) &&
         /github|google|accounts|families/i.test(f)) return 'pers';
+    // חשבונות פיננסיים/ביטוח/תרומות: מוגנים
+    if (/harel|הראל|phoenix|הפניקס|ביטוח ישיר|direct|אור יצחק|lis-noreply@google/i.test(f)) return 'pers';
+    // אישורי הגשת מועמדות
+    if (/thanks for applying|position you applied|you applied|הגשת מועמדות|קורות החיים/i.test(sub)) return 'job';
     // הקטגוריות שנבחרו
     if (/glassnode|rekt capital|wyckoff|hebrex|cryptojungle|crypto jungle/i.test(f)) return 'news';
-    if (/jobalerts|jobs-listings|linkedin job|indeed|jobnet|challenge group|googlealerts|google alerts/i.test(f) ||
+    if (/jobalerts|jobs-listings|linkedin job|indeed|jobnet|challenge|jobs2web|googlealerts|google alerts/i.test(f) ||
         (/linkedin/.test(f) && /משרה|jobs?|מנהל|hiring|alert/i.test(sub) && !/צפה|viewed/i.test(sub))) return 'job';
     if (/temu|aliexpress|amazon|ebay|shein|israel post|דואר ישראל|cheetah|wallashops/i.test(f) && !adSub && !promo &&
         /הזמנה|משלוח|order|ship|deliver|tracking|חבילה|package/i.test(sub)) return 'order';
@@ -160,8 +166,9 @@
     for (var i = 0; i < ATTN.length; i++) if (ATTN[i][0].test(m.subject)) return ATTN[i][1];
     return '';
   }
+  function maskNums(t) { return String(t).replace(/\d{5,}/g, '•••'); }
   function maskSnippet(t) {
-    return (t || '').replace(/\d{9,}/g, '•••').replace(/\s+/g, ' ').trim().slice(0, 110);
+    return (t || '').replace(/\d{5,}/g, '•••').replace(/\s+/g, ' ').trim().slice(0, 110);
   }
 
   // ── הפקה ─────────────────────────────────────────────────────────────────
