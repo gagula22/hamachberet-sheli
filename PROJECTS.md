@@ -125,6 +125,7 @@
 - **בוצע (17–19.10.2026, export.js v=59):** הדבקת תבנית/מצב-רוח (overlay ראשון + fallback `appendChild`, לא Range API);
   תבנית מובנית `adamant_checklist` ("📊 ציק ליסט סופי") — RTL עם `<bdi>`, קופסאות תכלת בטוחות-Word (td+bgcolor).
   כללים: **ARCHITECTURE §6א**. ⚠️ כל שינוי ב-export.js = הקפצת `?v=` ב-index.html.
+- **עודכן (19.11.2026, export.js v=60):** תוכן `adamant_checklist` לפי adamant-chart-checklist-v2.pdf (טקסטים בלבד, אותו מבנה).
 - **משימות פתוחות:**
   - [ ] תוכן ישן שהודבק מ-Word עדיין מיוצא ב-13pt — לכפות 11pt בייצוא
 - **זהירות (ARCHITECTURE §6):** (1) רינדור PDF בפאס אחד עם windowWidth=680 — בלוק-בלוק שובר RTL.
