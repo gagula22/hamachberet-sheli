@@ -9,8 +9,9 @@
   //   • The whole content MUST be rendered in ONE html2canvas pass with explicit
   //     width/windowWidth — otherwise html2canvas clips the off-screen host to the
   //     viewport width, cutting RTL text on the side and overlapping lines.
-  //   • The tall canvas is sliced into pages ONLY at top-level block boundaries,
-  //     so a page break never cuts through a paragraph or an image.
+  //   • The tall canvas is sliced into pages ONLY at block boundaries (top-level, or
+  //     inside a block taller than a page — see breakStops), so a page break never
+  //     cuts through a paragraph or an image.
 
   let _libsPromise = null;
   function ensureLibs() {
@@ -29,6 +30,26 @@
       if (!(window.jspdf && window.jspdf.jsPDF)) await load('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
     })();
     return _libsPromise;
+  }
+
+  // Bottom edges that are safe to cut at. Descends (max 8 levels) into any block taller
+  // than a page, but only into plain vertical flow (display:block) and table rows —
+  // never into flex/grid/inline content, where siblings sit side by side.
+  function breakStops(host, pageMaxDomH, totalDomH) {
+    const top0 = host.getBoundingClientRect().top;
+    const out = [0, totalDomH];
+    const kids = el => el.tagName === 'TABLE' ? Array.from(el.rows) : Array.from(el.children);
+    (function walk(el, depth) {
+      kids(el).forEach(b => {
+        const r = b.getBoundingClientRect();
+        if (r.height <= 0) return;
+        out.push(Math.round(r.bottom - top0));
+        if (depth >= 8 || r.height <= pageMaxDomH) return;
+        const d = getComputedStyle(b).display;
+        if (b.tagName === 'TABLE' || d === 'block' || d === 'list-item') walk(b, depth + 1);
+      });
+    })(host, 0);
+    return Array.from(new Set(out)).filter(y => y >= 0 && y <= totalDomH).sort((a, b) => a - b);
   }
 
   // generate(title, bodyHtml, opts)
@@ -82,17 +103,14 @@
         width: HOST_W, windowWidth: HOST_W, windowHeight: totalDomH
       });
 
-      // Safe page-break positions = the bottom edge of each top-level block (px).
-      const bounds = [0];
-      Array.from(host.children).forEach(b => {
-        const bottom = b.offsetTop + b.offsetHeight;
-        if (bottom > 0) bounds.push(bottom);
-      });
-      bounds.push(totalDomH);
-      const stops = Array.from(new Set(bounds)).sort((a, b) => a - b);
-
       const ptPerPx = CW / HOST_W;
       const pageMaxDomH = Math.floor(usableH / ptPerPx);
+
+      // Safe page-break positions (px from the host top) = the bottom edge of each block.
+      // A block taller than a page (e.g. a whole template wrapped in ONE <div>) is opened
+      // up: its own block children / table rows become break positions too. Without this
+      // the first page held only the title and the next pages were hard-cut mid-line.
+      const stops = breakStops(host, pageMaxDomH, totalDomH);
 
       let startY = 0, first = true, guard = 0;
       while (startY < totalDomH - 1 && guard++ < 400) {
