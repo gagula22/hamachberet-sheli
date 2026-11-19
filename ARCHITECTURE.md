@@ -357,6 +357,8 @@ subcol, רק כשמחוברים לאותו חשבון) — **תבנית שחיי
    קופסה עם עמודות = טבלה אחת (שורת כותרת `colspan`) + `colgroup` מפורש + `table-layout:fixed`. שני פריטים באותה שורה = טבלה של 2 תאים.
 6. **תיבות-סימון בייצוא Word** (19.11): `exportDoc` מחליף `input[type=checkbox]` ב-☐/☑ — Word הופך input לפקד צף שנוחת על הטקסט.
    גם "כדורים"/מלבנים קטנים (span עם border-radius) = תאי-טבלה, אחרת Word ממזג אותם לרצועה.
+7. **קו-צד צבעוני ב-RTL** (19.11): לא `border-right` (על div — נשבר לכל פסקה; על td בטבלת RTL — מתהפך לשמאל ב-Word/LO).
+   במקום: תא ראשון צר צבוע (`width=4 bgcolor`) + `colgroup` מפורש.
 **אימות שעבד בלי Word:** `node --check`; eval של `NB_BUILTIN_TEMPLATES` ב-node; צילומי Playwright/Chromium
 (`/opt/pw-browsers/chromium-*/chrome-linux/chrome`); המרת ה-.doc ב-LibreOffice (`soffice --convert-to pdf
 --infilter="HTML (StarWriter)"`) — מפרש HTML כמו Word, טוב להשוואת לפני/אחרי. ההדבקה בפועל — לא בפתקי המשתמש.
