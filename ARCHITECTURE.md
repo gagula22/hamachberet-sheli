@@ -353,6 +353,8 @@ subcol, רק כשמחוברים לאותו חשבון) — **תבנית שחיי
    כותרת מעורבת (MANAGE · ניהול) — `dir="rtl"`; אפשרויות עם checkbox — כל אחת ב-`<bdi dir="rtl">`. בלי זה
    ה-bidi מזיז מספרים/סוגריים/LONG לצד הלא נכון. חצי-זרימה ב-RTL = `←`, מיושר `text-align:right`.
 4. בתוך ``html: () => `…` `` — אסור backtick או `${`.
+5. **אין טבלה בתוך טבלה** (19.11): `attachTableResizers` (media.js) בונה `colgroup` לטבלה פנימית לפי רוחב רגעי ⇒ קופסה מכווצת.
+   קופסה עם עמודות = טבלה אחת (שורת כותרת `colspan`) + `colgroup` מפורש + `table-layout:fixed`. שני פריטים באותה שורה = טבלה של 2 תאים.
 **אימות שעבד בלי Word:** `node --check`; eval של `NB_BUILTIN_TEMPLATES` ב-node; צילומי Playwright/Chromium
 (`/opt/pw-browsers/chromium-*/chrome-linux/chrome`); המרת ה-.doc ב-LibreOffice (`soffice --convert-to pdf
 --infilter="HTML (StarWriter)"`) — מפרש HTML כמו Word, טוב להשוואת לפני/אחרי. ההדבקה בפועל — לא בפתקי המשתמש.
